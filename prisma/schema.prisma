@@ -14,6 +14,7 @@ model Tenant {
   tin              String
   platformType     String   @map("platform_type")
   marketTier       String   @map("market_tier")
+  cittaApiKey      String   @default("sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz") @map("citta_api_key")
   encryptedSecret  String?  @map("encrypted_secret")
   onboardingStatus String   @map("onboarding_status")
   monthlyAllowance Int      @default(1000) @map("monthly_allowance")

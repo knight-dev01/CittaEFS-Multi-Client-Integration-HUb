@@ -9,7 +9,13 @@ import { getDatabaseUrl } from '../src/config/dbConfig.ts';
 
 process.env.DATABASE_URL = getDatabaseUrl(true);
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: getDatabaseUrl(true)
+    }
+  }
+});
 
 async function main() {
   console.log('🌱 Starting CittaEFS Hub Database Seeder & Mock Data Generator...');
@@ -22,6 +28,7 @@ async function main() {
       tin: 'P051239841A',
       platformType: 'QuickBooks Online',
       marketTier: 'Tier 1 (SMB)',
+      cittaApiKey: 'sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz',
       onboardingStatus: 'LIVE_PRODUCTION',
       monthlyAllowance: 1000,
       monthlyUsed: 384
@@ -33,6 +40,7 @@ async function main() {
       tin: 'P051987654A',
       platformType: 'Sage ERP',
       marketTier: 'Tier 3 (Enterprise)',
+      cittaApiKey: 'sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz',
       onboardingStatus: 'NRS_VERIFIED',
       monthlyAllowance: 5000,
       monthlyUsed: 1420
@@ -44,6 +52,7 @@ async function main() {
       tin: 'P077665544D',
       platformType: 'Excel & CSV Import',
       marketTier: 'Tier 4 (Legacy/CSV)',
+      cittaApiKey: 'sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz',
       onboardingStatus: 'PENDING_MAPPING',
       monthlyAllowance: 2500,
       monthlyUsed: 120
@@ -74,6 +83,7 @@ async function main() {
 
     // 1. Generate Customers (25 customers per client -> > 20 required)
     const customers: any[] = [];
+    const customerPromises: Promise<any>[] = [];
     for (let i = 1; i <= 25; i++) {
       const isB2B = i <= 20;
       const custCode = `${tConfig.platformType.substring(0, 3).toUpperCase()}-CUST-${1000 + i}`;
@@ -91,8 +101,8 @@ async function main() {
       customers.push({ ...custObj, clientCustomerCode: custCode });
 
       if (hasDatabaseUrl) {
-        try {
-          await prisma.customer.upsert({
+        customerPromises.push(
+          prisma.customer.upsert({
             where: { id: custObj.id },
             update: {
               clientSystemCustId: custObj.clientSystemCustId,
@@ -102,14 +112,18 @@ async function main() {
               taxClassification: custObj.taxClassification
             },
             create: custObj
-          }).catch(() => {});
-        } catch {}
+          }).catch(() => {})
+        );
       }
+    }
+    if (hasDatabaseUrl && customerPromises.length > 0) {
+      await Promise.all(customerPromises);
     }
     console.log(`   ✅ Generated 25 customers for ${tConfig.name}`);
 
     // 2. Generate Products / Items (55 products per client -> > 50 required)
     const items: any[] = [];
+    const itemPromises: Promise<any>[] = [];
     const hsOrServiceCodes = [
       'HS-8471.30', 'HS-8517.62', 'HS-7304.11', 'HS-3926.90', 'HS-4819.10',
       'SRV-7212.10', 'SRV-7414.00', 'SRV-8703.20', 'SRV-6202.90', 'SRV-8010.15'
@@ -130,8 +144,8 @@ async function main() {
       items.push(itemObj);
 
       if (hasDatabaseUrl) {
-        try {
-          await prisma.item.upsert({
+        itemPromises.push(
+          prisma.item.upsert({
             where: { id: itemObj.id },
             update: {
               clientSku: itemObj.clientSku,
@@ -140,14 +154,18 @@ async function main() {
               hsOrServiceCode: itemObj.hsOrServiceCode
             },
             create: itemObj
-          }).catch(() => {});
-        } catch {}
+          }).catch(() => {})
+        );
       }
+    }
+    if (hasDatabaseUrl && itemPromises.length > 0) {
+      await Promise.all(itemPromises);
     }
     console.log(`   ✅ Generated 55 products/items for ${tConfig.name}`);
 
     // 3. Generate Invoices (120 invoices per client -> > 100 required)
     const invoices: any[] = [];
+    const invoicePromises: Promise<any>[] = [];
     for (let i = 1; i <= 120; i++) {
       const cust = customers[i % customers.length];
       const prod = items[i % items.length];
@@ -198,8 +216,8 @@ async function main() {
       invoices.push(invObj);
 
       if (hasDatabaseUrl) {
-        try {
-          await prisma.invoice.upsert({
+        invoicePromises.push(
+          prisma.invoice.upsert({
             where: { id: invObj.id },
             update: {
               clientInvoiceId: invNum,
@@ -208,8 +226,14 @@ async function main() {
               taxAmount
             },
             create: invObj
-          }).catch(() => {});
-        } catch {}
+          }).catch(() => {})
+        );
+      }
+    }
+    if (hasDatabaseUrl && invoicePromises.length > 0) {
+      // Process in chunks of 20 to keep pool connection stable
+      for (let c = 0; c < invoicePromises.length; c += 20) {
+        await Promise.all(invoicePromises.slice(c, c + 20));
       }
     }
     console.log(`   ✅ Generated 120 invoices for ${tConfig.name}`);

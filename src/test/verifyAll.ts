@@ -2,6 +2,7 @@ import 'dotenv/config';
 import nock from 'nock';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { getDatabaseUrl } from '../config/dbConfig';
 import { packEncryptedString, unpackAndDecryptString } from '../config/encryption';
 import { invoiceIngestionSchema, invoiceLineItemSchema } from '../schemas/invoice.schema';
 import { CONNECTOR_ADAPTERS, QuickBooksAdapter, SapAdapter, NetsuiteAdapter, OdooAdapter, CsvAdapter, SqlAdapter } from '../adapters/connectorAdapters';
@@ -10,7 +11,7 @@ import { invoiceQueue } from '../queues/invoiceQueue';
 import { processInvoiceJob } from '../workers/invoiceWorker';
 import { runNrsReconciliationCron, runQbReconciliationCron } from '../crons/reconciliation';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
 interface TestResult {
   module: string;

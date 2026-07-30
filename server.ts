@@ -95,6 +95,14 @@ async function startServer() {
   }));
   app.use(cookieParser());
 
+  // Health check routes for Render & load balancers
+  app.get('/healthz', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   // SSE & WebSocket client tracking
   let sseClients: any[] = [];
   let wsClients: WebSocket[] = [];

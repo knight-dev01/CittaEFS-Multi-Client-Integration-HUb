@@ -1,10 +1,11 @@
 import { PrismaClient } from '@prisma/client';
+import { getDatabaseUrl } from '../config/dbConfig';
 import { unpackAndDecryptString, packEncryptedString } from '../config/encryption';
 import { QuickBooksAdapter } from '../adapters/connectorAdapters';
 import { invoiceQueue } from '../queues/invoiceQueue';
 import { invoiceIngestionSchema } from '../schemas/invoice.schema';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 const qboAdapter = new QuickBooksAdapter();
 
 /**
