@@ -1,3 +1,17 @@
+export function getApiBaseUrl(): string {
+  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL as string | undefined;
+  if (envUrl) {
+    return envUrl.replace(/\/$/, '');
+  }
+  
+  // When running on Vercel frontend pointing to external Render API
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return 'https://cittaefs-multi-client-integration-hub.onrender.com';
+  }
+  
+  return '';
+}
+
 export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let url = '';
   if (typeof input === 'string') {
@@ -8,7 +22,13 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
     url = (input as any).href;
   }
 
-  if (url.includes('/api/')) {
+  const baseUrl = getApiBaseUrl();
+  let finalInput: RequestInfo | URL = input;
+
+  if (url.startsWith('/api/') || url.includes('/api/')) {
+    if (baseUrl && url.startsWith('/api/')) {
+      finalInput = `${baseUrl}${url}`;
+    }
     const token = localStorage.getItem('citta_jwt_token');
     if (token) {
       init = init || {};
@@ -19,37 +39,40 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
       }
     }
   }
-  return fetch(input, init);
+
+  return fetch(finalInput, init);
 }
 
 export async function parseJsonResponse<T = any>(res: Response): Promise<T> {
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) {
-    const text = await res.text().catch(() => '');
+  const text = await res.text().catch(() => '');
+
+  if (!res.ok) {
     let errorMessage = `HTTP ${res.status} ${res.statusText || 'Error'}`;
     try {
       const parsed = JSON.parse(text);
-      if (parsed && parsed.error) errorMessage = parsed.error;
-      else if (parsed && parsed.message) errorMessage = parsed.message;
+      if (parsed && (parsed.error || parsed.message)) {
+        errorMessage = parsed.error || parsed.message;
+      }
     } catch {
       if (text) {
         const cleanText = text.replace(/<[^>]*>/g, '').trim();
-        errorMessage = cleanText.slice(0, 150) || errorMessage;
+        if (cleanText) errorMessage = cleanText.slice(0, 150);
       }
     }
     throw new Error(errorMessage);
   }
-  
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    const errorMessage = data?.error || data?.message || `HTTP ${res.status} ${res.statusText || 'Error'}`;
-    throw new Error(errorMessage);
-  }
 
-  return res.json();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const cleanText = text.replace(/<[^>]*>/g, '').trim();
+    const snippet = cleanText.slice(0, 100) || text.slice(0, 100);
+    throw new Error(`Invalid JSON response from server (${res.status}): ${snippet}`);
+  }
 }
 
 export async function safeFetchJson<T = any>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const res = await fetchWithAuth(input, init);
   return parseJsonResponse<T>(res);
 }
+

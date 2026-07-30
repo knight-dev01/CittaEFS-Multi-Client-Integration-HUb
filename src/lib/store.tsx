@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { fetchWithAuth, parseJsonResponse, safeFetchJson } from './api';
+import { fetchWithAuth, parseJsonResponse, safeFetchJson, getApiBaseUrl } from './api';
 import { 
   Tenant, 
   Invoice, 
@@ -174,8 +174,16 @@ export function HubProvider({ children }: { children: ReactNode }) {
     const connectWS = () => {
       try {
         console.log('[WS] Attempting to connect to real-time events...');
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/api/ws-events`;
+        const baseUrl = getApiBaseUrl();
+        let wsUrl = '';
+        if (baseUrl) {
+          const wsProto = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
+          const host = baseUrl.replace(/^https?:\/\//, '');
+          wsUrl = `${wsProto}//${host}/api/ws-events`;
+        } else {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          wsUrl = `${protocol}//${window.location.host}/api/ws-events`;
+        }
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
@@ -214,7 +222,9 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
     const connectSSE = () => {
       console.log('[SSE] Attempting to connect to real-time events...');
-      eventSource = new EventSource('/api/events');
+      const baseUrl = getApiBaseUrl();
+      const sseUrl = baseUrl ? `${baseUrl}/api/events` : '/api/events';
+      eventSource = new EventSource(sseUrl);
 
       eventSource.onmessage = (event) => {
         try {
