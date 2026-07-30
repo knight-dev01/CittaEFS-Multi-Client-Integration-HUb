@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fetchWithAuth } from '../lib/api';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { useHub } from '../lib/store';
 import { 
   Plug, 
@@ -150,7 +150,7 @@ export function ConnectorsTab() {
           endpointUrl: isSage ? 'https://api.sage.com/v3/company/91238' : 'https://sandbox-quickbooks.api.intuit.com/v3/company/9130351112'
         })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       setTestingId(null);
 
       if (data.success) {

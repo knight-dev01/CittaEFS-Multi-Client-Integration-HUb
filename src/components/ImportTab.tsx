@@ -1,5 +1,5 @@
 import { useState, ChangeEvent } from 'react';
-import { fetchWithAuth } from '../lib/api';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import * as XLSX from 'xlsx';
 import { useHub } from '../lib/store';
 import { 
@@ -73,7 +73,7 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ environment: 'PRODUCTION', endpointUrl })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
       if (data.success) {
         addLog(`✅ Connected successfully to ${data.platform}! Status: HTTP 200 OK (${data.latencyMs}ms)`);

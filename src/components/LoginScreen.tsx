@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { fetchWithAuth } from '../lib/api';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { 
   ShieldCheck, 
   Lock, 
@@ -44,8 +44,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
+      const data = await parseJsonResponse(res);
+      if (!data.success) {
         throw new Error(data.error || 'Authentication failed');
       }
 

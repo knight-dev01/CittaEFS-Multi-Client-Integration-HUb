@@ -1,5 +1,5 @@
 import { useState, ChangeEvent } from 'react';
-import { fetchWithAuth } from '../lib/api';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import * as XLSX from 'xlsx';
 import { useHub } from '../lib/store';
 import { SystemToEfsExcelMapper } from './SystemToEfsExcelMapper';
@@ -239,7 +239,7 @@ CSV-BATCH-102,B2C,2026-07-27,CUST-B2C-GENERIC,Over-The-Counter Cash Sale,N/A,SKU
             ]
           })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         setQboStatus('SUCCESS');
         setConnectorLog(prev => [
           `[${new Date().toLocaleTimeString()}] NRS Stamp IRN generated: ${data.cittaResponse?.irn || 'IRN-QBO-SUCCESS'}`,
@@ -278,7 +278,7 @@ CSV-BATCH-102,B2C,2026-07-27,CUST-B2C-GENERIC,Over-The-Counter Cash Sale,N/A,SKU
             timestamp: new Date().toISOString()
           })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         setEfsStatus('SUCCESS');
         setConnectorLog(prev => [
           `[${new Date().toLocaleTimeString()}] Reconciliation Engine: Match confirmed. Status set to APPROVED`,

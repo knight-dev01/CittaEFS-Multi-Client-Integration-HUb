@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fetchWithAuth } from '../lib/api';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { 
   Plug, 
   CheckCircle2, 
@@ -174,7 +174,7 @@ export function NewConnectorModal({ isOpen, onClose, tenantId, tenantName, onAdd
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
       setTestLogs(prev => [
         ...prev,

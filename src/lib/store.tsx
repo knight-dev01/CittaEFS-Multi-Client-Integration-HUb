@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { fetchWithAuth } from './api';
+import { fetchWithAuth, parseJsonResponse, safeFetchJson } from './api';
 import { 
   Tenant, 
   Invoice, 
@@ -66,12 +66,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('citta_jwt_token');
     if (token) {
-      fetchWithAuth('/api/auth/me', {
+      safeFetchJson('/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-        .then(res => res.json())
         .then(data => {
-          if (data.success && data.user) {
+          if (data && data.success && data.user) {
             const session: UserSession = {
               id: data.user.id,
               name: data.user.name,
@@ -138,14 +137,16 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const refreshAll = async () => {
     return withLoading(async () => {
       try {
+        const fetchOrNull = (url: string) => safeFetchJson(url).catch(() => null);
+
         const [tenRes, invRes, custRes, itemRes, errRes, auditRes, metRes] = await Promise.all([
-          fetchWithAuth('/api/tenants').then(r => r.json()),
-          fetchWithAuth('/api/invoices').then(r => r.json()),
-          fetchWithAuth('/api/customers').then(r => r.json()),
-          fetchWithAuth('/api/items/mappings').then(r => r.json()),
-          fetchWithAuth('/api/validation-errors').then(r => r.json()),
-          fetchWithAuth('/api/audit-logs').then(r => r.json()),
-          fetchWithAuth('/api/metrics').then(r => r.json())
+          fetchOrNull('/api/tenants'),
+          fetchOrNull('/api/invoices'),
+          fetchOrNull('/api/customers'),
+          fetchOrNull('/api/items/mappings'),
+          fetchOrNull('/api/validation-errors'),
+          fetchOrNull('/api/audit-logs'),
+          fetchOrNull('/api/metrics')
         ]);
 
         if (Array.isArray(tenRes)) setTenants(tenRes);
@@ -262,7 +263,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...payload, tenantId: activeTenantId })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
@@ -280,7 +281,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ invoiceId, reason })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
@@ -298,7 +299,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ errorId, hsOrServiceCode, correctedTin })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
@@ -312,7 +313,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
     return withLoading(async () => {
       try {
         const res = await fetchWithAuth('/api/cron/reconcile', { method: 'POST' });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
@@ -330,7 +331,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tenantId: activeTenantId })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
@@ -348,7 +349,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...cust, tenantId: activeTenantId })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
@@ -366,7 +367,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...mapping, tenantId: activeTenantId })
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
@@ -390,7 +391,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tenantData)
         });
-        const data: Tenant = await res.json();
+        const data: Tenant = await parseJsonResponse(res);
         await refreshAll();
         if (data && data.id) {
           setActiveTenantId(data.id);
@@ -407,7 +408,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
     return withLoading(async () => {
       try {
         const res = await fetchWithAuth('/api/system/purge-demo-data', { method: 'POST' });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         await refreshAll();
         return data;
       } catch (e) {
