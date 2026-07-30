@@ -1,0 +1,8 @@
+{
+  "name": "CittaEFS Integration Hub",
+  "description": "Multi-Client Compliance \u0026 Integration Hub (The Bridge) connecting Client ERPs, QuickBooks, SQL, and CSV drops to the CittaEFS E-Invoicing System and NRS Portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,98 @@
+import { invoiceQueue, QueueJob } from '../queues/invoiceQueue';
+import { ValidatedInvoiceIngestion } from '../schemas/invoice.schema';
+import { cittaEfsClient, CittaEfsResponse } from '../services/cittaEfsClient';
+
+export interface ProcessingResult {
+  jobId: string;
+  success: boolean;
+  irn?: string;
+  error?: string;
+  movedToDLQ?: boolean;
+}
+
+/**
+ * Async Queue Worker processing incoming invoice signing jobs.
+ * Enforces exponential backoff retry strategy (5s, 30s, 2m, 10m) for network/gateway timeouts.
+ * Routes permanently failing jobs to Dead Letter Queue (DLQ).
+ */
+export async function processInvoiceJob(
+  job: QueueJob<ValidatedInvoiceIngestion>
+): Promise<ProcessingResult> {
+  job.status = 'PROCESSING';
+  job.attempts += 1;
+  job.updatedAt = new Date().toISOString();
+
+  try {
+    // 1. Dispatch payload to CittaEFS Gateway C# REST API
+    const response: CittaEfsResponse = await cittaEfsClient.signAndStampInvoice({
+      tenantId: job.data.tenantId,
+      clientInvoiceNumber: job.data.clientInvoiceNumber,
+      invoiceType: job.data.invoiceType,
+      invoiceKind: job.data.invoiceKind,
+      customerName: job.data.customerName,
+      customerTin: job.data.customerTin || undefined,
+      lineItems: job.data.lineItems,
+      issueDate: job.data.issueDate,
+      originalIrn: job.data.originalIrn
+    });
+
+    if (response.success && response.irn) {
+      job.status = 'COMPLETED';
+      job.updatedAt = new Date().toISOString();
+      
+      // Perform Inbound Writeback to Client System (e.g. QuickBooks / NetSuite)
+      await cittaEfsClient.executeClientLedgerWriteback(
+        job.tenantId,
+        job.data.clientInvoiceNumber,
+        response.irn,
+        response.qrCodeUrl || ''
+      );
+
+      invoiceQueue.removeJob(job.id);
+      return { jobId: job.id, success: true, irn: response.irn };
+    } else {
+      throw new Error(response.message || 'Gateway returned non-success status');
+    }
+  } catch (err: any) {
+    const errorMsg = err.message || 'Unknown network gateway error';
+    job.lastError = errorMsg;
+
+    // Check if max retries exceeded
+    if (job.attempts >= job.maxRetries) {
+      invoiceQueue.moveToDLQ(job, `Exceeded max retries (${job.maxRetries}). Error: ${errorMsg}`);
+      return {
+        jobId: job.id,
+        success: false,
+        error: errorMsg,
+        movedToDLQ: true
+      };
+    }
+
+    // Schedule next attempt with exponential backoff delay
+    job.status = 'QUEUED';
+    const backoffDelay = job.backoffMs[Math.min(job.attempts - 1, job.backoffMs.length - 1)];
+    console.warn(`[Worker] Job ${job.id} failed attempt ${job.attempts}/${job.maxRetries}. Retrying in ${backoffDelay}ms. Error: ${errorMsg}`);
+    
+    return {
+      jobId: job.id,
+      success: false,
+      error: errorMsg,
+      movedToDLQ: false
+    };
+  }
+}
+
+/**
+ * Worker Loop: Process all pending items in queue
+ */
+export async function runWorkerBatch(): Promise<ProcessingResult[]> {
+  const pendingJobs = invoiceQueue.getPendingJobs();
+  const results: ProcessingResult[] = [];
+
+  for (const job of pendingJobs) {
+    const res = await processInvoiceJob(job);
+    results.push(res);
+  }
+
+  return results;
+}

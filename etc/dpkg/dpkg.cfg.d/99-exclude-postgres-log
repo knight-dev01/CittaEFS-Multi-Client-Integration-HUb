@@ -1,0 +1,2 @@
+path-exclude=/var/log/postgresql*
+path-exclude=./var/log/postgresql*

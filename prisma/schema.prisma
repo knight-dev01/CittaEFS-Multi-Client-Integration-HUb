@@ -1,0 +1,179 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Tenant {
+  id               String   @id @default(uuid())
+  name             String
+  companyName      String   @map("company_name")
+  tin              String
+  platformType     String   @map("platform_type")
+  marketTier       String   @map("market_tier")
+  encryptedSecret  String?  @map("encrypted_secret")
+  onboardingStatus String   @map("onboarding_status")
+  monthlyAllowance Int      @default(1000) @map("monthly_allowance")
+  monthlyUsed      Int      @default(0) @map("monthly_used")
+  lastSyncAt       DateTime @default(now()) @map("last_sync_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  customers        Customer[]
+  items            Item[]
+  invoices         Invoice[]
+  auditLogs        AuditLog[]
+  validationErrors ValidationError[]
+  users            User[]
+
+  @@map("tenants")
+}
+
+model Customer {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  clientSystemCustId String   @map("client_system_cust_id")
+  companyName        String   @map("company_name")
+  email              String?
+  taxId              String?  @map("tax_id")
+  taxClassification  String   @default("B2B") @map("tax_classification")
+  address            String?
+  city               String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, clientSystemCustId])
+  @@map("customers")
+}
+
+model Item {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  clientSku        String   @map("client_sku")
+  description      String
+  unitPrice        Float    @map("unit_price")
+  hsOrServiceCode  String   @map("hs_or_service_code")
+  categoryType     String   @default("GOODS") @map("category_type")
+  defaultVatRate   Float    @default(16.00) @map("default_vat_rate")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, clientSku])
+  @@map("items")
+}
+
+model Invoice {
+  id                   String        @id @default(uuid())
+  tenantId             String        @map("tenant_id")
+  clientInvoiceId      String        @map("client_invoice_id")
+  invoiceType          String        @default("STANDARD") @map("invoice_type")
+  invoiceKind          String        @default("B2B") @map("invoice_kind")
+  issueDate            DateTime      @map("issue_date")
+  dueDate              DateTime?     @map("due_date")
+  customerCode         String        @map("customer_code")
+  customerName         String        @map("customer_name")
+  customerTin          String?       @map("customer_tin")
+  currency             String        @default("KES")
+  subtotal             Float
+  taxAmount            Float         @map("tax_amount")
+  totalAmount          Float         @map("total_amount")
+  status               String        @default("PENDING_NRS_STAMP")
+  irn                  String?       @unique
+  csid                 String?
+  qrCodeUrl            String?       @map("qr_code_url")
+  pdfSignedUrl         String?       @map("pdf_signed_url")
+  rawPayloadHash       String?       @map("raw_payload_hash")
+  ledgerWritebackStatus String       @default("PENDING") @map("ledger_writeback_status")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lineItems            InvoiceLineItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, clientInvoiceId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id              String   @id @default(uuid())
+  invoiceId       String   @map("invoice_id")
+  itemCode        String   @map("item_code")
+  description     String
+  quantity        Float
+  unitPrice       Float    @map("unit_price")
+  taxableAmount   Float    @map("taxable_amount")
+  vatRate         Float    @map("vat_rate")
+  vatAmount       Float    @map("vat_amount")
+  totalAmount     Float    @map("total_amount")
+  hsOrServiceCode String   @map("hs_or_service_code")
+
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_line_items")
+}
+
+model ValidationError {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  clientInvoiceNumber String   @map("client_invoice_number")
+  errorCategory       String   @map("error_category")
+  fieldAffected       String   @map("field_affected")
+  errorMessage        String   @map("error_message")
+  rawPayloadSample    String   @map("raw_payload_sample")
+  status              String   @default("OPEN")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("validation_errors")
+}
+
+model AuditLog {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  action            String
+  entityType        String   @map("entity_type")
+  entityRef         String   @map("entity_ref")
+  details           String
+  sha256PayloadHash String   @map("sha256_payload_hash")
+  performedBy       String   @map("performed_by")
+  rawJson           String?  @map("raw_json")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([sha256PayloadHash])
+  @@map("audit_logs")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  role         String   @default("OPERATOR")
+  organization String   @default("CittaEFS Enterprise")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("users")
+}
+
