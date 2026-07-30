@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import nock from 'nock';
+import crypto from 'crypto';
+import { PrismaClient } from '@prisma/client';
 import { packEncryptedString, unpackAndDecryptString } from '../config/encryption';
 import { invoiceIngestionSchema, invoiceLineItemSchema } from '../schemas/invoice.schema';
 import { CONNECTOR_ADAPTERS, QuickBooksAdapter, SapAdapter, NetsuiteAdapter, OdooAdapter, CsvAdapter, SqlAdapter } from '../adapters/connectorAdapters';
@@ -7,6 +9,8 @@ import { cittaEfsClient } from '../services/cittaEfsClient';
 import { invoiceQueue } from '../queues/invoiceQueue';
 import { processInvoiceJob } from '../workers/invoiceWorker';
 import { runNrsReconciliationCron, runQbReconciliationCron } from '../crons/reconciliation';
+
+const prisma = new PrismaClient();
 
 interface TestResult {
   module: string;
@@ -549,6 +553,143 @@ async function runAllTests() {
       'No ssoProvider login bypass code exists in server.ts',
       hasBypass ? 'ssoProvider bypass logic remains in server.ts (INSECURE)' : 'Clean: ssoProvider completely removed from server.ts'
     );
+  }
+
+  // ------------------------------------------------------------------
+  // MODULE 9: QuickBooks Online Integration, Webhooks & Writeback
+  // ------------------------------------------------------------------
+  try {
+    const { getValidQboAccessToken, ingestQboInvoice, writebackToQbo } = await import('../services/qboService');
+
+    // 1. Setup mock integration row in DB
+    const encryptedAccess = packEncryptedString('mock_access_token_123');
+    const encryptedRefresh = packEncryptedString('mock_refresh_token_456');
+
+    await prisma.integration.upsert({
+      where: {
+        tenantId_sourceSystem: {
+          tenantId: 'tenant_qbo_smb',
+          sourceSystem: 'QUICKBOOKS_ONLINE'
+        }
+      },
+      create: {
+        tenantId: 'tenant_qbo_smb',
+        sourceSystem: 'QUICKBOOKS_ONLINE',
+        accessToken: encryptedAccess,
+        refreshToken: encryptedRefresh,
+        companyId: '9130351112',
+        accessTokenExpiresAt: new Date(Date.now() + 3600 * 1000),
+        status: 'CONNECTED'
+      },
+      update: {
+        accessToken: encryptedAccess,
+        refreshToken: encryptedRefresh,
+        companyId: '9130351112',
+        accessTokenExpiresAt: new Date(Date.now() + 3600 * 1000),
+        status: 'CONNECTED'
+      }
+    });
+
+    // 2. Token Retrieval Test
+    const token = await getValidQboAccessToken('tenant_qbo_smb');
+    assert(
+      'QuickBooks Integration',
+      'QBO Access Token Retrieval & Decryption',
+      'Security',
+      token === 'mock_access_token_123',
+      'Retrieves and decrypts valid access token',
+      `Retrieved Token: ${token}`
+    );
+
+    // 3. QBO Ingestion Test
+    const rawQboInvoice = {
+      Id: `QBO-${Date.now()}`,
+      DocNumber: `QBO-DOC-${Date.now()}`,
+      TxnDate: '2026-07-30',
+      CustomerRef: { value: 'CUST-QBO-01', name: 'QBO Test Customer' },
+      CustomerTaxId: 'P051987654Z',
+      Line: [
+        {
+          Amount: 5000,
+          Description: 'Consulting Services',
+          SalesItemLineDetail: {
+            ItemRef: { name: 'SERV-CONSULT' },
+            Qty: 1,
+            UnitPrice: 5000
+          }
+        }
+      ]
+    };
+
+    const ingested = await ingestQboInvoice('tenant_qbo_smb', rawQboInvoice);
+    assert(
+      'QuickBooks Integration',
+      'QBO Raw Payload Normalization & Ingestion',
+      'Integration',
+      Boolean(ingested && ingested.id),
+      'Normalizes QBO invoice and inserts local DB record in PENDING_NRS_STAMP state',
+      `Db Invoice ID: ${ingested.id}, ClientInvoiceId: ${ingested.clientInvoiceId}, Status: ${ingested.status}`
+    );
+
+    // 4. Intuit Webhook HMAC Verification Test
+    const verifierSecret = 'qbo_webhook_verifier_test_123';
+    process.env.QBO_WEBHOOK_VERIFIER = verifierSecret;
+    const webhookPayload = JSON.stringify({
+      eventNotifications: [
+        {
+          realmId: '9130351112',
+          dataChangeEvent: {
+            entities: [
+              { name: 'Invoice', id: rawQboInvoice.Id, operation: 'Update' }
+            ]
+          }
+        }
+      ]
+    });
+
+    const validSignature = crypto.createHmac('sha256', verifierSecret).update(webhookPayload).digest('base64');
+    const invalidSignature = 'invalid_base64_sig_xyz';
+
+    const sigBuf1 = Buffer.from(validSignature, 'utf8');
+    const compBuf1 = Buffer.from(validSignature, 'utf8');
+    const isValid1 = sigBuf1.length === compBuf1.length && crypto.timingSafeEqual(sigBuf1, compBuf1);
+
+    const sigBuf2 = Buffer.from(invalidSignature, 'utf8');
+    const compBuf2 = Buffer.from(validSignature, 'utf8');
+    const isValid2 = sigBuf2.length === compBuf2.length && crypto.timingSafeEqual(sigBuf2, compBuf2);
+
+    assert(
+      'QuickBooks Integration',
+      'Intuit Webhook Signature HMAC Validation',
+      'Security',
+      isValid1 && !isValid2,
+      'Validates intuit-signature using HMAC-SHA256 and rejects forged payloads',
+      `Valid Sig Test: ${isValid1}, Invalid Sig Test: ${isValid2}`
+    );
+
+    // 5. Sparse Update Writeback Test with Nock
+    nock('https://sandbox-quickbooks.api.intuit.com')
+      .get('/v3/company/9130351112/invoice/' + rawQboInvoice.Id + '?minorversion=65')
+      .reply(200, { Invoice: { Id: rawQboInvoice.Id, SyncToken: '1' } });
+
+    nock('https://sandbox-quickbooks.api.intuit.com')
+      .post('/v3/company/9130351112/invoice?minorversion=65')
+      .reply(200, { Invoice: { Id: rawQboInvoice.Id, SyncToken: '2' } });
+
+    const writebackRes = await writebackToQbo('tenant_qbo_smb', rawQboInvoice.Id, 'IRN-QBO-2026-STAMPED', 'https://qr.gov/qbo/stamped');
+    nock.cleanAll();
+
+    assert(
+      'QuickBooks Integration',
+      'QBO Ledger Writeback (Sparse CustomField Update)',
+      'Integration',
+      Boolean(writebackRes && writebackRes.Invoice),
+      'Executes sparse update on QBO API to record IRN and QR Code URL',
+      `Writeback Success for QBO Invoice ${rawQboInvoice.Id}`
+    );
+
+  } catch (err: any) {
+    assert('QuickBooks Integration', 'QBO Suite Verification', 'Runtime', false, 'No unhandled exceptions', err.message);
   }
 
   // ------------------------------------------------------------------

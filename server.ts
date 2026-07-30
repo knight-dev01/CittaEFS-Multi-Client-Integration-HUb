@@ -23,6 +23,13 @@ import { cittaEfsClient } from './src/services/cittaEfsClient';
 import { runNrsReconciliationCron, runQbReconciliationCron } from './src/crons/reconciliation';
 import { packEncryptedString } from './src/config/encryption';
 import { CONNECTOR_ADAPTERS, QuickBooksAdapter } from './src/adapters/connectorAdapters';
+import {
+  getValidQboAccessToken,
+  fetchQboInvoices,
+  fetchAndIngestSpecificQboInvoice,
+  ingestQboInvoice,
+  writebackToQbo
+} from './src/services/qboService';
 
 // Helper to calculate SHA256 simulation hash
 function generateSha256(data: string): string {
@@ -80,7 +87,12 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({
+    limit: '10mb',
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf;
+    }
+  }));
   app.use(cookieParser());
 
   // SSE & WebSocket client tracking
@@ -143,7 +155,7 @@ async function startServer() {
   // JWT Authentication & Tenant Scoping Middleware for /api/*
   app.use('/api/*', (req, res, next) => {
     const p = req.baseUrl || req.path;
-    if (p.startsWith('/api/auth/login') || p.startsWith('/api/webhooks') || p.startsWith('/api/events')) {
+    if (p.startsWith('/api/auth/login') || p.startsWith('/api/webhooks') || p.startsWith('/api/events') || p.startsWith('/api/integrations/qbo/callback')) {
       return next();
     }
 
@@ -585,6 +597,229 @@ async function startServer() {
       }
 
       res.json({ status: 'ACCEPTED', eventProcessed: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // QuickBooks Online HMAC-SHA256 Signed Webhook Endpoint
+  app.post('/api/webhooks/qbo', async (req, res) => {
+    try {
+      const signature = req.headers['intuit-signature'] as string;
+      if (!signature) {
+        return res.status(401).json({ success: false, error: 'intuit-signature header missing' });
+      }
+
+      const verifierToken = process.env.QBO_WEBHOOK_VERIFIER || process.env.QBO_CLIENT_SECRET || 'verifier_token_test';
+      const rawBody = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
+      const computedBase64 = crypto.createHmac('sha256', verifierToken).update(rawBody).digest('base64');
+
+      const sigBuf = Buffer.from(signature, 'utf8');
+      const compBuf = Buffer.from(computedBase64, 'utf8');
+      const isValid = sigBuf.length === compBuf.length && crypto.timingSafeEqual(sigBuf, compBuf);
+
+      if (!isValid) {
+        console.warn(`[QBO Webhook] Invalid signature. Received: ${signature}`);
+        return res.status(401).json({ success: false, error: 'Invalid intuit-signature' });
+      }
+
+      const notifications = req.body?.eventNotifications || [];
+      for (const notification of notifications) {
+        const realmId = notification.realmId;
+        const integration = await prisma.integration.findFirst({
+          where: { companyId: realmId, sourceSystem: 'QUICKBOOKS_ONLINE' }
+        });
+
+        if (integration) {
+          const entities = notification.dataChangeEvent?.entities || [];
+          for (const entity of entities) {
+            if (entity.name === 'Invoice' && (entity.operation === 'Create' || entity.operation === 'Update')) {
+              try {
+                await fetchAndIngestSpecificQboInvoice(integration.tenantId, entity.id);
+              } catch (err: any) {
+                console.error(`[QBO Webhook] Ingest error for invoice ${entity.id}:`, err.message);
+              }
+            }
+          }
+        }
+      }
+
+      res.status(200).json({ status: 'ACCEPTED' });
+    } catch (e: any) {
+      console.error('[QBO Webhook Error]:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ==========================================
+  // QUICKBOOKS ONLINE OAUTH2 ENDPOINTS
+  // ==========================================
+  app.get('/api/integrations/qbo/connect', async (req: any, res) => {
+    try {
+      const userRole = req.user?.role;
+      if (userRole && !['ADMIN', 'INTEGRATION_MANAGER'].includes(userRole)) {
+        return res.status(403).json({ error: 'Forbidden: Requires ADMIN or INTEGRATION_MANAGER role' });
+      }
+
+      const tenantId = req.user?.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
+      const clientId = process.env.QBO_CLIENT_ID;
+      const redirectUri = process.env.QBO_REDIRECT_URI || 'https://ais-dev-glz3xamqzqbl4vhejrmgnr-909140343248.europe-west2.run.app/api/integrations/qbo/callback';
+
+      if (!clientId) {
+        return res.status(400).json({ error: 'QBO_CLIENT_ID missing in environment configuration' });
+      }
+
+      const stateToken = jwt.sign({ tenantId, timestamp: Date.now() }, JWT_SECRET, { expiresIn: '15m' });
+      const qboAuthUrl = `https://appcenter.intuit.com/connect/oauth2?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=com.intuit.quickbooks.accounting&state=${encodeURIComponent(stateToken)}`;
+
+      if (req.headers.accept?.includes('application/json')) {
+        return res.json({ url: qboAuthUrl });
+      }
+
+      res.redirect(qboAuthUrl);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/integrations/qbo/callback', async (req, res) => {
+    try {
+      const { code, state, realmId } = req.query;
+      if (!code || !state) {
+        return res.status(400).send('Missing code or state parameter in callback');
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(state as string, JWT_SECRET);
+      } catch (e) {
+        return res.status(401).send('Invalid or expired state parameter');
+      }
+
+      const tenantId = decoded.tenantId;
+      const clientId = process.env.QBO_CLIENT_ID;
+      const clientSecret = process.env.QBO_CLIENT_SECRET;
+      const redirectUri = process.env.QBO_REDIRECT_URI || 'https://ais-dev-glz3xamqzqbl4vhejrmgnr-909140343248.europe-west2.run.app/api/integrations/qbo/callback';
+
+      if (!clientId || !clientSecret) {
+        return res.status(500).send('QBO_CLIENT_ID or QBO_CLIENT_SECRET missing in server config');
+      }
+
+      const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+      const tokenRes = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${basicAuth}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: code as string,
+          redirect_uri: redirectUri
+        }).toString()
+      });
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.error('QBO Token Exchange Error:', errText);
+        return res.status(400).send(`QBO OAuth token exchange failed: ${errText}`);
+      }
+
+      const tokenData = await tokenRes.json() as any;
+      const { access_token, refresh_token, expires_in } = tokenData;
+      const encryptedAccess = packEncryptedString(access_token);
+      const encryptedRefresh = packEncryptedString(refresh_token);
+      const expiresAt = new Date(Date.now() + (expires_in || 3600) * 1000);
+
+      await prisma.integration.upsert({
+        where: {
+          tenantId_sourceSystem: {
+            tenantId,
+            sourceSystem: 'QUICKBOOKS_ONLINE'
+          }
+        },
+        create: {
+          tenantId,
+          sourceSystem: 'QUICKBOOKS_ONLINE',
+          accessToken: encryptedAccess,
+          refreshToken: encryptedRefresh,
+          companyId: (realmId as string) || 'UNKNOWN_REALM',
+          accessTokenExpiresAt: expiresAt,
+          status: 'CONNECTED'
+        },
+        update: {
+          accessToken: encryptedAccess,
+          refreshToken: encryptedRefresh,
+          companyId: (realmId as string) || 'UNKNOWN_REALM',
+          accessTokenExpiresAt: expiresAt,
+          status: 'CONNECTED'
+        }
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId,
+          action: 'CONNECTOR_AUTHENTICATED',
+          entityType: 'INTEGRATION',
+          entityRef: (realmId as string) || 'QUICKBOOKS_ONLINE',
+          details: `QuickBooks Online OAuth authenticated successfully for realm ${realmId}`,
+          sha256PayloadHash: generateSha256(String(realmId || 'QBO')),
+          performedBy: 'QBO OAuth Callback',
+          rawJson: JSON.stringify({ sourceSystem: 'QUICKBOOKS_ONLINE', realmId })
+        }
+      });
+
+      res.redirect(`/?tab=connectors&qbo=success&realmId=${realmId || ''}`);
+    } catch (e: any) {
+      console.error('QBO Callback Error:', e);
+      res.status(500).send(`Server error during QBO callback: ${e.message}`);
+    }
+  });
+
+  app.get('/api/integrations/qbo/status', async (req: any, res) => {
+    try {
+      const tenantId = req.user?.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
+      const integration = await prisma.integration.findUnique({
+        where: {
+          tenantId_sourceSystem: {
+            tenantId,
+            sourceSystem: 'QUICKBOOKS_ONLINE'
+          }
+        }
+      });
+
+      if (!integration) {
+        return res.json({ connected: false, status: 'DISCONNECTED', companyId: null });
+      }
+
+      res.json({
+        connected: integration.status === 'CONNECTED',
+        status: integration.status,
+        companyId: integration.companyId,
+        lastSyncAt: integration.lastSyncAt
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/integrations/qbo/sync', async (req: any, res) => {
+    try {
+      const tenantId = req.user?.tenantId || req.body?.tenantId || 'tenant_qbo_smb';
+      const rawInvoices = await fetchQboInvoices(tenantId);
+      const ingested = [];
+
+      for (const rawInv of rawInvoices) {
+        try {
+          const dbInv = await ingestQboInvoice(tenantId, rawInv);
+          ingested.push(dbInv);
+        } catch (err: any) {
+          console.warn(`[QBO Sync Warning] Skipped invoice: ${err.message}`);
+        }
+      }
+
+      res.json({ success: true, count: ingested.length, invoices: ingested });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

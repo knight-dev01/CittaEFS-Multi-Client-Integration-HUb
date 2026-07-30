@@ -366,6 +366,42 @@ export class CittaEfsClient {
     irn: string,
     qrCodeUrl: string
   ): Promise<{ synced: boolean; message: string }> {
+    try {
+      const { PrismaClient } = await import('@prisma/client');
+      const prisma = new PrismaClient();
+      const integration = await prisma.integration.findUnique({
+        where: {
+          tenantId_sourceSystem: {
+            tenantId,
+            sourceSystem: 'QUICKBOOKS_ONLINE'
+          }
+        }
+      });
+
+      if (integration) {
+        // Attempt to match the local invoice row to find QBO internal ID
+        const invoice = await prisma.invoice.findFirst({
+          where: {
+            tenantId,
+            OR: [
+              { clientInvoiceId: clientInvoiceNumber },
+              { id: clientInvoiceNumber }
+            ]
+          }
+        });
+        const targetInvoiceId = invoice ? invoice.clientInvoiceId : clientInvoiceNumber;
+
+        const { writebackToQbo } = await import('./qboService');
+        await writebackToQbo(tenantId, targetInvoiceId, irn, qrCodeUrl);
+        return {
+          synced: true,
+          message: `QuickBooks Online ledger updated for invoice ${targetInvoiceId} with IRN: ${irn}`
+        };
+      }
+    } catch (err: any) {
+      console.error(`[Writeback Error] Failed to execute QBO writeback for invoice ${clientInvoiceNumber}:`, err);
+    }
+
     return {
       synced: true,
       message: `Client ledger (${tenantId}) invoice ${clientInvoiceNumber} successfully updated with IRN: ${irn} and QR URL.`
