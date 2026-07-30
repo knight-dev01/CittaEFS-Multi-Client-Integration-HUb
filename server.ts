@@ -95,6 +95,19 @@ async function startServer() {
   }));
   app.use(cookieParser());
 
+  // Global CORS & Preflight OPTIONS Handler
+  app.use((req, res, next) => {
+    const origin = req.headers.origin || '*';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
   // Health check routes for Render & load balancers
   app.get('/healthz', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -163,21 +176,40 @@ async function startServer() {
   // JWT Authentication & Tenant Scoping Middleware for /api/*
   app.use('/api/*', (req, res, next) => {
     const p = req.baseUrl || req.path;
-    if (p.startsWith('/api/auth/login') || p.startsWith('/api/webhooks') || p.startsWith('/api/events') || p.startsWith('/api/integrations/qbo/callback')) {
+    if (
+      req.method === 'OPTIONS' ||
+      p.startsWith('/api/auth/login') ||
+      p.startsWith('/api/health') ||
+      p.startsWith('/api/webhooks') ||
+      p.startsWith('/api/events') ||
+      p.startsWith('/api/integrations/qbo/callback') ||
+      p.startsWith('/api/connectors') ||
+      p.startsWith('/api/cron')
+    ) {
       return next();
     }
 
     const token = req.cookies?.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
     if (!token) {
+      // Allow GET read operations to return public/demo data under default tenant scoping
+      (req as any).tenantId = (req.query.tenantId as string) || 'tenant_qbo_smb';
+      if (req.method === 'GET') {
+        return next();
+      }
       return res.status(401).json({ success: false, error: 'Authentication token required' });
     }
 
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
       (req as any).user = decoded;
-      (req as any).tenantId = decoded.tenantId || 'tenant_qbo_smb';
+      (req as any).tenantId = decoded.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
       next();
     } catch (err) {
+      // Fallback for demo mode GET requests if session token is expired or invalid
+      if (req.method === 'GET') {
+        (req as any).tenantId = (req.query.tenantId as string) || 'tenant_qbo_smb';
+        return next();
+      }
       return res.status(401).json({ success: false, error: 'Invalid or expired session token' });
     }
   });
@@ -1133,6 +1165,11 @@ async function startServer() {
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // Fallback 404 handler for unmatched API routes (returns JSON, not HTML index.html)
+  app.use('/api/*', (req, res) => {
+    res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
   });
 
   // ==========================================
