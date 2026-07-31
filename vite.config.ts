@@ -6,6 +6,24 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: { 
+      chunkSizeWarningLimit: 2000, 
+      rollupOptions: { 
+        output: { 
+          manualChunks(id) { 
+            if (id.includes("node_modules")) { 
+              if (id.includes('lucide-react') || id.includes('recharts') || id.includes('motion')) {
+                return 'vendor-ui';
+              }
+              if (id.includes('xlsx')) {
+                return 'vendor-xlsx';
+              }
+              return "vendor"; 
+            } 
+          } 
+        } 
+      } 
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

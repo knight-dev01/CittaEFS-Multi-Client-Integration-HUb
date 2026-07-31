@@ -62,6 +62,19 @@ The application runs on `http://localhost:3000`.
 
 ---
 
+## ☁️ Deployment on Render.com
+When deploying this full-stack application on Render.com, ensure that the build step installs dependencies and builds correctly:
+
+1. **Build Command:** `npm install && npm run build`
+2. **Start Command:** `npm run start`
+
+**Important Fixes Implemented for Render:**
+* **Vite Chunking:** Increased `chunkSizeWarningLimit` and added `manualChunks` in `vite.config.ts` to properly split the vendor code (UI, React, Excel parsers).
+* **Missing Module (intuit-oauth):** The build process now uses `--packages=external` in the `esbuild` configuration to ensure all Node modules (including `intuit-oauth`) are kept external and properly loaded from `node_modules`. 
+* **If you still get "Cannot find module 'intuit-oauth'":** Clear your Render build cache (Settings -> Clear build cache) and trigger a manual redeploy. The `npm install` command will now successfully fetch `intuit-oauth` from the updated `dependencies`.
+
+---
+
 ## 🛠️ Tech Stack & Dependencies
 
 * **Frontend Framework**: React 18 with Vite

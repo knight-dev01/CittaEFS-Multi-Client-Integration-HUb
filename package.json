@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node scripts/checkNoFallbacks.js && prisma generate && vite build && esbuild server.ts --bundle --platform=node --format=cjs --external:@prisma/client --external:.prisma/client --external:vite --external:esbuild --external:intuit-oauth --sourcemap --outfile=dist/server.cjs",
+    "build": "node scripts/checkNoFallbacks.js && prisma generate && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node start.cjs",
     "test": "node scripts/checkNoFallbacks.js && tsx src/test/verifyAll.ts",
     "seed": "tsx prisma/seed.ts",
