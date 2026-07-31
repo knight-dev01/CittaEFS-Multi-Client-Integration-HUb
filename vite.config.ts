@@ -9,6 +9,7 @@ export default defineConfig(() => {
     build: { 
       chunkSizeWarningLimit: 2000, 
       rollupOptions: { 
+        external: ['intuit-oauth'],
         output: { 
           manualChunks(id) { 
             if (id.includes("node_modules")) { 
