@@ -27,7 +27,7 @@ interface UserMember {
   id: string;
   name: string;
   email: string;
-  role: 'ADMIN' | 'INTEGRATION_MANAGER' | 'OPERATOR' | 'AUDITOR';
+  role: 'ADMIN' | 'OPERATOR';
   mfaStatus: 'ENFORCED' | 'OPTIONAL' | 'DISABLED';
   lastActive: string;
   status: 'ACTIVE' | 'SUSPENDED' | 'INVITED';
@@ -36,7 +36,7 @@ interface UserMember {
 export function SettingsTab() {
   const { activeTenant } = useHub();
 
-  const [currentRole, setCurrentRole] = useState<'ADMIN' | 'INTEGRATION_MANAGER' | 'OPERATOR' | 'AUDITOR'>('ADMIN');
+  const [currentRole, setCurrentRole] = useState<'ADMIN' | 'OPERATOR'>('ADMIN');
   const [retryMax, setRetryMax] = useState(5);
   const [cittaEndpoint, setCittaEndpoint] = useState('https://gateway.cittaefs.com/api/v1');
   const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
@@ -46,9 +46,7 @@ export function SettingsTab() {
   // Users State
   const [users, setUsers] = useState<UserMember[]>([
     { id: 'usr-1', name: 'Alexander Vance', email: 'a.vance@enterprise.com', role: 'ADMIN', mfaStatus: 'ENFORCED', lastActive: '2 mins ago', status: 'ACTIVE' },
-    { id: 'usr-2', name: 'Elena Rostova', email: 'e.rostova@enterprise.com', role: 'INTEGRATION_MANAGER', mfaStatus: 'ENFORCED', lastActive: '14 mins ago', status: 'ACTIVE' },
-    { id: 'usr-3', name: 'Kwame Osei', email: 'k.osei@enterprise.com', role: 'OPERATOR', mfaStatus: 'OPTIONAL', lastActive: '1 hour ago', status: 'ACTIVE' },
-    { id: 'usr-4', name: 'Sarah Jenkins', email: 's.jenkins@auditfirm.com', role: 'AUDITOR', mfaStatus: 'ENFORCED', lastActive: 'Yesterday', status: 'ACTIVE' }
+    { id: 'usr-3', name: 'Kwame Osei', email: 'k.osei@enterprise.com', role: 'OPERATOR', mfaStatus: 'OPTIONAL', lastActive: '1 hour ago', status: 'ACTIVE' }
   ]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,7 +54,7 @@ export function SettingsTab() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('SecurePass123!');
-  const [newUserRole, setNewUserRole] = useState<'ADMIN' | 'INTEGRATION_MANAGER' | 'OPERATOR' | 'AUDITOR'>('OPERATOR');
+  const [newUserRole, setNewUserRole] = useState<'ADMIN' | 'OPERATOR'>('OPERATOR');
 
   useEffect(() => {
     fetchUsers();
@@ -94,10 +92,6 @@ export function SettingsTab() {
   };
 
   const handleSaveSettings = () => {
-    if (currentRole === 'AUDITOR') {
-      alert('Access Restricted: Auditor role is read-only. Security policy updates require Admin or Integration Manager privileges.');
-      return;
-    }
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
@@ -160,14 +154,14 @@ export function SettingsTab() {
   );
 
   const permissionsMatrix = [
-    { capability: 'Tenant Credentials & API Key Rotation', admin: true, manager: false, operator: false, auditor: false },
-    { capability: 'ERP Connectors & Custom Endpoint Config', admin: true, manager: true, operator: false, auditor: false },
-    { capability: 'Field Mapping & JSON Transformation Rules', admin: true, manager: true, operator: false, auditor: false },
-    { capability: 'Manual Invoice Ingestion & Retry Queue', admin: true, manager: true, operator: true, auditor: false },
-    { capability: 'Dead-Letter Queue Replay & Purge', admin: true, manager: true, operator: true, auditor: false },
-    { capability: 'Customer Sync & Tax Rule Management', admin: true, manager: true, operator: true, auditor: false },
-    { capability: 'Audit Trail Inspection & Legal Hash Export', admin: true, manager: true, operator: true, auditor: true },
-    { capability: 'User Management & Role Assignment', admin: true, manager: false, operator: false, auditor: false },
+    { capability: 'Tenant Credentials & API Key Rotation', admin: true, operator: false },
+    { capability: 'ERP Connectors & Custom Endpoint Config', admin: true, operator: false },
+    { capability: 'Field Mapping & JSON Transformation Rules', admin: true, operator: false },
+    { capability: 'Manual Invoice Ingestion & Retry Queue', admin: true, operator: true },
+    { capability: 'Dead-Letter Queue Replay & Purge', admin: true, operator: true },
+    { capability: 'Customer Sync & Tax Rule Management', admin: true, operator: true },
+    { capability: 'Audit Trail Inspection & Legal Hash Export', admin: true, operator: true },
+    { capability: 'User Management & Role Assignment', admin: true, operator: false },
   ];
 
   return (
@@ -198,12 +192,10 @@ export function SettingsTab() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
           {[
             { role: 'ADMIN', label: 'Platform Admin', desc: 'Full write, API key rotation, tenant onboarding & RBAC user control' },
-            { role: 'INTEGRATION_MANAGER', label: 'Integration Mgr', desc: 'Connector setup, field mapping, rules & queue retries' },
-            { role: 'OPERATOR', label: 'Operations Tech', desc: 'Invoice ingestion, manual error recovery & job retries' },
-            { role: 'AUDITOR', label: 'Regulatory Auditor', desc: 'Read-only compliance audit trail inspection & SHA-256 hash verify' }
+            { role: 'OPERATOR', label: 'Operations Tech', desc: 'Invoice ingestion, manual error recovery & job retries' }
           ].map((r) => (
             <button
               key={r.role}
@@ -333,9 +325,7 @@ export function SettingsTab() {
               <tr className="bg-slate-900 text-amber-400 font-black uppercase text-[10px] border-b-2 border-slate-900">
                 <th className="p-3">Functional Capability</th>
                 <th className="p-3 text-center">Admin</th>
-                <th className="p-3 text-center">Integration Manager</th>
                 <th className="p-3 text-center">Operations Tech</th>
-                <th className="p-3 text-center">Auditor</th>
               </tr>
             </thead>
             <tbody className="divide-y-2 divide-slate-100 font-mono text-slate-900">
@@ -346,13 +336,7 @@ export function SettingsTab() {
                     {item.admin ? <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 mx-auto" />}
                   </td>
                   <td className="p-3 text-center">
-                    {item.manager ? <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="p-3 text-center">
                     {item.operator ? <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="p-3 text-center">
-                    {item.auditor ? <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 mx-auto" />}
                   </td>
                 </tr>
               ))}
@@ -374,7 +358,7 @@ export function SettingsTab() {
             <input
               type="text"
               value={cittaEndpoint}
-              disabled={currentRole === 'AUDITOR'}
+              disabled={currentRole === 'OPERATOR'}
               onChange={(e) => setCittaEndpoint(e.target.value)}
               className="w-full px-3 py-2 border-2 border-slate-900 font-mono text-slate-900 font-bold focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
             />
@@ -408,7 +392,7 @@ export function SettingsTab() {
             <label className="block font-black text-slate-900 uppercase mb-1">BullMQ Exponential Backoff Retries</label>
             <select
               value={retryMax}
-              disabled={currentRole === 'AUDITOR'}
+              disabled={currentRole === 'OPERATOR'}
               onChange={(e) => setRetryMax(Number(e.target.value))}
               className="w-full px-3 py-2 border-2 border-slate-900 font-bold bg-white focus:outline-none disabled:bg-slate-100"
             >
@@ -422,7 +406,7 @@ export function SettingsTab() {
             <label className="block font-black text-slate-900 uppercase mb-1">Timestamp Serialization Format</label>
             <select
               value={timeZone}
-              disabled={currentRole === 'AUDITOR'}
+              disabled={currentRole === 'OPERATOR'}
               onChange={(e) => setTimeZone(e.target.value)}
               className="w-full px-3 py-2 border-2 border-slate-900 font-bold bg-white focus:outline-none disabled:bg-slate-100"
             >
@@ -435,7 +419,7 @@ export function SettingsTab() {
         <div className="pt-3 border-t-2 border-slate-900 flex justify-end">
           <button
             onClick={handleSaveSettings}
-            disabled={currentRole === 'AUDITOR'}
+            disabled={currentRole === 'OPERATOR'}
             className="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black uppercase border-2 border-slate-900 cursor-pointer flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="w-4 h-4 text-amber-400" />
@@ -506,9 +490,7 @@ export function SettingsTab() {
                   className="w-full px-3 py-2 border-2 border-slate-900 font-bold bg-white focus:outline-none"
                 >
                   <option value="ADMIN">Platform Admin</option>
-                  <option value="INTEGRATION_MANAGER">Integration Manager</option>
                   <option value="OPERATOR">Operations Tech</option>
-                  <option value="AUDITOR">Regulatory Auditor</option>
                 </select>
               </div>
 

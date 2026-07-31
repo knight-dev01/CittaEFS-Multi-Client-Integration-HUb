@@ -11,47 +11,8 @@ export const INITIAL_TENANTS: Tenant[] = [
     cittaApiKey: 'citta_live_ak9832_acme_prod',
     onboardingStatus: 'LIVE_PRODUCTION',
     monthlyAllowance: 1000,
-    monthlyUsed: 384,
-    lastSyncAt: '2026-07-27 09:42:10'
-  },
-  {
-    id: 'tenant_sap_ent',
-    name: 'Global Tech Corp',
-    companyName: 'Global Technology Enterprise Inc',
-    tin: 'P098877112B',
-    platformType: 'SAP S/4HANA',
-    marketTier: 'Tier 3 (Enterprise)',
-    cittaApiKey: 'citta_live_gt8810_global_prod',
-    onboardingStatus: 'NRS_VERIFIED',
-    monthlyAllowance: 50000,
-    monthlyUsed: 14200,
-    lastSyncAt: '2026-07-27 10:01:05'
-  },
-  {
-    id: 'tenant_sql_legacy',
-    name: 'Apex Logistics & Freight',
-    companyName: 'Apex Heavy Logistics Ltd',
-    tin: 'P011223344C',
-    platformType: 'Legacy SQL DB',
-    marketTier: 'Tier 3 (Enterprise)',
-    cittaApiKey: 'citta_sand_px1102_apex_stg',
-    onboardingStatus: 'SANDBOX_TESTING',
-    monthlyAllowance: 10000,
-    monthlyUsed: 1250,
-    lastSyncAt: '2026-07-27 08:15:30'
-  },
-  {
-    id: 'tenant_csv_drop',
-    name: 'Metro Wholesale Traders',
-    companyName: 'Metro Wholesale Trading Co',
-    tin: 'P077665544D',
-    platformType: 'CSV / Excel Drop',
-    marketTier: 'Tier 4 (Legacy/CSV)',
-    cittaApiKey: 'citta_stg_mw3399_metro_demo',
-    onboardingStatus: 'PENDING_MAPPING',
-    monthlyAllowance: 2500,
-    monthlyUsed: 120,
-    lastSyncAt: '2026-07-26 18:30:00'
+    monthlyUsed: 0,
+    lastSyncAt: '2026-07-31 08:00:00'
   }
 ];
 

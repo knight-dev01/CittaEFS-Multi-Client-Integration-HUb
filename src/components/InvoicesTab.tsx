@@ -24,7 +24,7 @@ import {
 export function InvoicesTab() {
   const { invoices, activeTenant, cancelInvoice, transmitInvoice, currentUser } = useHub();
 
-  const isAuditor = currentUser?.role === 'AUDITOR';
+  // Both Admin and Operator have access here.
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -289,7 +289,7 @@ export function InvoicesTab() {
                           </button>
 
                           {/* Issue Credit Note Button */}
-                          {!isAuditor && inv.status === 'SIGNED' && inv.invoiceType === 'STANDARD' && (
+                          {true && inv.status === 'SIGNED' && inv.invoiceType === 'STANDARD' && (
                             <button
                               onClick={() => setCreditNoteModalInvoice(inv)}
                               className="p-1 bg-amber-400 border border-slate-900 text-slate-950 hover:bg-amber-300 transition cursor-pointer"
@@ -300,7 +300,7 @@ export function InvoicesTab() {
                           )}
 
                           {/* Cancel Invoice */}
-                          {!isAuditor && inv.status !== 'CANCELLED' && (
+                          {true && inv.status !== 'CANCELLED' && (
                             <button
                               onClick={() => handleCancelInvoice(inv)}
                               className="p-1 bg-red-100 border border-slate-900 text-red-700 hover:bg-red-600 hover:text-white transition cursor-pointer"

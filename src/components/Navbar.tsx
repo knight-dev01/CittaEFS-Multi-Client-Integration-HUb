@@ -54,34 +54,43 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  const categories = [
-    { id: 'core', label: 'Core Operations' },
+  const userRole = currentUser?.role || 'OPERATOR';
+
+  const categories = userRole === 'ADMIN' ? [
+    { id: 'core', label: 'Overall Control & Hub' },
     { id: 'integration', label: 'Integrations & Mapping' },
     { id: 'engine', label: 'Queue & Processing' },
     { id: 'security', label: 'Security & Governance' }
+  ] : [
+    { id: 'actions', label: 'Operator Action Points' }
   ];
 
   const allTabs = [
-    { id: 'client_portal', label: 'Client ERP & Gateway', icon: Building2, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
-    { id: 'clients', label: 'Overview Center', icon: Layers, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
-    { id: 'invoices', label: 'Invoices', icon: FileText, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
-    { id: 'customers', label: 'Customers', icon: Users, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
-    { id: 'items', label: 'Items & Rules', icon: Tag, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
+    // Admin Overall Views
+    { id: 'clients', label: 'Overview Center', icon: Layers, category: 'core', requiredRoles: ['ADMIN'] },
+    { id: 'client_portal', label: 'Client ERP & Gateway', icon: Building2, category: 'core', requiredRoles: ['ADMIN'] },
 
-    { id: 'connectors', label: 'Connectors', icon: Plug, category: 'integration', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'import', label: 'Import', icon: Download, category: 'integration', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'field_mapping', label: 'Field Mapping', icon: Sliders, category: 'integration', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'webhooks', label: 'Webhooks', icon: Radio, category: 'integration', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    // Action Points (Available to Operator & Admin)
+    { id: 'invoices', label: 'Invoices Ledger', icon: FileText, category: userRole === 'ADMIN' ? 'core' : 'actions', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'validation', label: 'Validation Errors', icon: AlertCircle, count: openErrorCount, category: userRole === 'ADMIN' ? 'engine' : 'actions', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'items', label: 'Items & HS Mapping', icon: Tag, category: userRole === 'ADMIN' ? 'core' : 'actions', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'import', label: 'Import & Ingest', icon: Download, category: userRole === 'ADMIN' ? 'integration' : 'actions', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'customers', label: 'Customers', icon: Users, category: userRole === 'ADMIN' ? 'core' : 'actions', requiredRoles: ['ADMIN', 'OPERATOR'] },
 
-    { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'engine', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
-    { id: 'queues', label: 'Queue', icon: Layers, category: 'engine', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
-    { id: 'gateway', label: 'Gateway', icon: RotateCcw, category: 'engine', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    // Admin System Infrastructure & Connectors
+    { id: 'connectors', label: 'Connectors', icon: Plug, category: 'integration', requiredRoles: ['ADMIN'] },
+    { id: 'field_mapping', label: 'Field Mapping', icon: Sliders, category: 'integration', requiredRoles: ['ADMIN'] },
+    { id: 'webhooks', label: 'Webhooks', icon: Radio, category: 'integration', requiredRoles: ['ADMIN'] },
 
-    { id: 'audit', label: 'Audit', icon: ShieldCheck, category: 'security', requiredRoles: ['ADMIN', 'AUDITOR'] },
-    { id: 'settings', label: 'Settings', icon: Settings, category: 'security', requiredRoles: ['ADMIN'] }
+    // Admin Queue & Engine
+    { id: 'queues', label: 'Queue Monitor', icon: Layers, category: 'engine', requiredRoles: ['ADMIN'] },
+    { id: 'gateway', label: 'Gateway & Rec Engine', icon: RotateCcw, category: 'engine', requiredRoles: ['ADMIN'] },
+
+    // Admin Security & Governance
+    { id: 'audit', label: 'Audit Trail', icon: ShieldCheck, category: 'security', requiredRoles: ['ADMIN'] },
+    { id: 'settings', label: 'System Settings', icon: Settings, category: 'security', requiredRoles: ['ADMIN'] }
   ];
 
-  const userRole = currentUser?.role || 'OPERATOR';
   const visibleTabs = allTabs.filter(tab => tab.requiredRoles.includes(userRole));
 
   const canOnboard = userRole === 'ADMIN';

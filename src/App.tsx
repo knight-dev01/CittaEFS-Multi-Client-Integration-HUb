@@ -47,17 +47,16 @@ function HubMainContent() {
     return <LoginScreen onLogin={login} />;
   }
 
-  // Enforce role-based tab routing restrictions on active tabs
-  const userRole = currentUser.role || 'OPERATOR';
-  const allowedTabs = [
-    'clients', 'client_portal', 'invoices', 'customers', 'items', 'validation', 'queues',
-    ...(userRole === 'ADMIN' || userRole === 'OPERATOR' ? ['connectors', 'import', 'field_mapping', 'webhooks', 'gateway', 'reconciliation'] : []),
-    ...(userRole === 'ADMIN' || userRole === 'AUDITOR' ? ['audit'] : []),
-    ...(userRole === 'ADMIN' ? ['settings'] : [])
-  ];
+  // Enforce role-based tab routing restrictions:
+  // Admin: Overall system view across all configuration, management, security & engine tabs.
+  // Operator: Action Points view only (Invoices, Validation Errors, Item HS Mapping, Import Ingestion, Customers).
+  const userRole = currentUser?.role || 'OPERATOR';
+  const allowedTabs = userRole === 'ADMIN'
+    ? ['clients', 'client_portal', 'invoices', 'customers', 'items', 'import', 'connectors', 'field_mapping', 'webhooks', 'validation', 'queues', 'gateway', 'reconciliation', 'audit', 'settings']
+    : ['invoices', 'validation', 'items', 'import', 'customers'];
 
   if (!allowedTabs.includes(activeTab)) {
-    setActiveTab(userRole === 'OPERATOR' ? 'client_portal' : 'clients');
+    setActiveTab(userRole === 'ADMIN' ? 'clients' : 'invoices');
   }
 
   return (

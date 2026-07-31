@@ -68,12 +68,23 @@ async function main() {
 
   const defaultUsers = [
     { email: 'admin@cittaefs.com', name: 'Sarah Jenkins', password: 'Admin123!', role: 'ADMIN', organization: 'CittaEFS Enterprise', tenantId: 'tenant_qbo_smb' },
-    { email: 'd.okafor@cittaefs.com', name: 'David Okafor', password: 'Okafor2026!', role: 'INTEGRATION_MANAGER', organization: 'QuickBooks Integration Group', tenantId: 'tenant_qbo_smb' },
     { email: 'billing@acme.com', name: 'Amara Vance', password: 'Acme2026!', role: 'OPERATOR', organization: 'Acme Retail Solutions Ltd', tenantId: 'tenant_qbo_smb' }
   ];
 
   if (hasDatabaseUrl) {
-    console.log('\n🔐 Seeding Default Users...');
+    console.log('\n🔐 Seeding Default Users (Admin & Operator only)...');
+    try {
+      await prisma.user.deleteMany({
+        where: {
+          NOT: {
+            email: { in: ['admin@cittaefs.com', 'billing@acme.com'] }
+          }
+        }
+      });
+      console.log('🧹 Purged obsolete user accounts.');
+    } catch (e) {
+      console.warn('Warning purging obsolete users:', e);
+    }
     for (const u of defaultUsers) {
       const passwordHash = bcrypt.hashSync(u.password, 10);
       try {

@@ -1,12 +1,12 @@
-export type TenantId = 'tenant_qbo_smb' | 'tenant_sap_ent' | 'tenant_sql_legacy' | 'tenant_csv_drop';
+export type TenantId = 'tenant_qbo_smb';
 
 export interface Tenant {
   id: TenantId;
   name: string;
   companyName: string;
   tin: string;
-  platformType: 'QuickBooks Online' | 'SAP S/4HANA' | 'Legacy SQL DB' | 'CSV / Excel Drop' | string;
-  marketTier: 'Tier 1 (SMB)' | 'Tier 2 (Mid-Market)' | 'Tier 3 (Enterprise)' | 'Tier 4 (Legacy/CSV)' | string;
+  platformType: 'QuickBooks Online' | string;
+  marketTier: 'Tier 1 (SMB)' | string;
   cittaApiKey?: string;
   cittaApiSecretEncrypted?: string;
   onboardingStatus: 'SANDBOX_TESTING' | 'NRS_VERIFIED' | 'LIVE_PRODUCTION' | 'PENDING_MAPPING' | 'VERIFIED_READY';
@@ -154,7 +154,7 @@ export interface SystemMetrics {
   cittaGatewayStatus: 'ONLINE' | 'DEGRADED';
 }
 
-export type UserRole = 'ADMIN' | 'INTEGRATION_MANAGER' | 'OPERATOR' | 'AUDITOR';
+export type UserRole = 'ADMIN' | 'OPERATOR';
 
 export interface UserSession {
   id: string;

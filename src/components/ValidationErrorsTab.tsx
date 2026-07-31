@@ -15,7 +15,8 @@ import {
 export function ValidationErrorsTab() {
   const { validationErrors, activeTenant, resolveValidationError, currentUser } = useHub();
 
-  const isAuditor = currentUser?.role === 'AUDITOR';
+  // Operator and Admin can both resolve errors
+  // (Assuming full access since auditor check is removed)
 
   const [selectedError, setSelectedError] = useState<ValidationErrorItem | null>(null);
   const [selectedHsCode, setSelectedHsCode] = useState<string>('HS-3926.90');
@@ -133,7 +134,7 @@ export function ValidationErrorsTab() {
 
                     <td className="py-3 px-3 text-right">
                       {err.status === 'OPEN' ? (
-                        !isAuditor ? (
+                        true ? (
                           <button
                             onClick={() => {
                               setSelectedError(err);
