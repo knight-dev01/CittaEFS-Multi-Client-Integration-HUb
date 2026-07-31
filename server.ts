@@ -26,6 +26,7 @@ import { CONNECTOR_ADAPTERS, QuickBooksAdapter } from './src/adapters/connectorA
 import {
   getValidQboAccessToken,
   fetchQboInvoices,
+  fetchAllQboInvoicesPaginated,
   fetchAndIngestSpecificQboInvoice,
   ingestQboInvoice,
   writebackToQbo
@@ -57,6 +58,90 @@ function generateSha256(data: string): string {
   }
   const hex = Math.abs(hash).toString(16).padStart(8, '0');
   return `sha256_${hex}_${Date.now().toString(36)}`;
+}
+
+/**
+ * Utility function to validate all JSON objects destined for the auditLog before calling Prisma,
+ * ensuring that all data structures conform to the expected schema and preventing database-level write failures.
+ */
+function validateAndSerializeAuditRawJson(rawJson: any): string | null {
+  if (rawJson === undefined || rawJson === null) {
+    return null;
+  }
+  if (typeof rawJson === 'string') {
+    try {
+      JSON.parse(rawJson);
+      return rawJson;
+    } catch {
+      return JSON.stringify({ rawText: rawJson });
+    }
+  }
+  try {
+    return JSON.stringify(rawJson, (key, value) => {
+      if (typeof value === 'bigint') {
+        return value.toString();
+      }
+      return value;
+    });
+  } catch (err) {
+    console.warn('[AuditLog Validation Warning] Failed to serialize rawJson, falling back to safe representation:', err);
+    return JSON.stringify({ error: 'Serialization failed', fallback: String(rawJson) });
+  }
+}
+
+async function safeAuditLogCreate(prismaClient: any, data: {
+  tenantId: string;
+  action: string;
+  entityType: string;
+  entityRef: string;
+  details: string;
+  sha256PayloadHash: string;
+  performedBy: string;
+  rawJson?: any;
+}) {
+  try {
+    const tenantId = typeof data.tenantId === 'string' && data.tenantId.trim() ? data.tenantId : 'tenant_qbo_smb';
+    const action = typeof data.action === 'string' && data.action.trim() ? data.action : 'UNKNOWN_ACTION';
+    const entityType = typeof data.entityType === 'string' && data.entityType.trim() ? data.entityType : 'GENERAL';
+    const entityRef = typeof data.entityRef === 'string' && data.entityRef.trim() ? data.entityRef : 'REF_UNKNOWN';
+    const details = typeof data.details === 'string' && data.details.trim() ? data.details : 'No details provided.';
+    const sha256PayloadHash = typeof data.sha256PayloadHash === 'string' && data.sha256PayloadHash.trim() ? data.sha256PayloadHash : generateSha256(details);
+    const performedBy = typeof data.performedBy === 'string' && data.performedBy.trim() ? data.performedBy : 'System';
+
+    const serializedRawJson = validateAndSerializeAuditRawJson(data.rawJson);
+
+    return await prismaClient.auditLog.create({
+      data: {
+        tenantId,
+        action,
+        entityType,
+        entityRef,
+        details,
+        sha256PayloadHash,
+        performedBy,
+        rawJson: serializedRawJson
+      }
+    });
+  } catch (e: any) {
+    console.error('[AuditLog Error] Validation or database write failed:', e);
+    try {
+      return await prismaClient.auditLog.create({
+        data: {
+          tenantId: data.tenantId || 'tenant_qbo_smb',
+          action: data.action || 'FALLBACK_ACTION',
+          entityType: data.entityType || 'GENERAL',
+          entityRef: data.entityRef || 'FALLBACK_REF',
+          details: `Fallback audit log due to error: ${e.message}`,
+          sha256PayloadHash: data.sha256PayloadHash || generateSha256('fallback'),
+          performedBy: data.performedBy || 'System',
+          rawJson: null
+        }
+      });
+    } catch (fallbackErr) {
+      console.error('[AuditLog Critical Error] Fallback audit log creation also failed:', fallbackErr);
+      return null;
+    }
+  }
 }
 
 function formatInvoice(inv: any) {
@@ -125,11 +210,8 @@ async function startServer() {
   });
 
   // Health check routes for Render & load balancers
-  app.get('/healthz', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-  app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  app.get(['/healthz', '/health', '/api/health'], (req, res) => {
+    res.status(200).json({ status: 'ok', service: 'cittaefs-integration-hub', timestamp: new Date().toISOString() });
   });
 
   // SSE & WebSocket client tracking
@@ -195,6 +277,7 @@ async function startServer() {
     if (
       req.method === 'OPTIONS' ||
       p.startsWith('/api/auth/login') ||
+      p.startsWith('/api/auth/register') ||
       p.startsWith('/api/health') ||
       p.startsWith('/api/webhooks') ||
       p.startsWith('/api/events') ||
@@ -241,12 +324,7 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Email and password are required' });
       }
 
-      let user: any = null;
-      try {
-        user = await prisma.user.findUnique({ where: { email } });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Prisma query failed, using fallback demo auth:', dbErr);
-      }
+      let user: any = await prisma.user.findUnique({ where: { email } });
 
       if (!user) {
         const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -292,16 +370,14 @@ async function startServer() {
       });
 
       try {
-        await prisma.auditLog.create({
-          data: {
-            tenantId: user.tenantId || 'tenant_qbo_smb',
-            action: 'USER_LOGIN',
-            entityType: 'USER',
-            entityRef: user.email,
-            details: `User authenticated securely. Role: ${user.role}, Org: ${user.organization}. Signed JWT issued.`,
-            sha256PayloadHash: generateSha256(user.email + Date.now()),
-            performedBy: user.email
-          }
+        await safeAuditLogCreate(prisma, {
+          tenantId: user.tenantId || 'tenant_qbo_smb',
+          action: 'USER_LOGIN',
+          entityType: 'USER',
+          entityRef: user.email,
+          details: `User authenticated securely. Role: ${user.role}, Org: ${user.organization}. Signed JWT issued.`,
+          sha256PayloadHash: generateSha256(user.email + Date.now()),
+          performedBy: user.email
         });
       } catch {}
 
@@ -326,12 +402,7 @@ async function startServer() {
       if (!userPayload) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
       }
-      let user: any = null;
-      try {
-        user = await prisma.user.findUnique({ where: { id: userPayload.userId || userPayload.id } });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Prisma user fetch failed:', dbErr);
-      }
+      let user: any = await prisma.user.findUnique({ where: { id: userPayload.userId || userPayload.id } });
       if (!user) {
         user = DEMO_USERS.find(u => u.email === userPayload.email || u.id === userPayload.id) || userPayload;
       }
@@ -353,23 +424,93 @@ async function startServer() {
     }
   });
 
+  app.get('/api/users', async (req: any, res) => {
+    try {
+      const userRole = req.user?.role || 'ADMIN';
+      if (req.user && userRole !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: 'Forbidden: Admin access required' });
+      }
+      const tenantId = req.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
+
+      const users = await prisma.user.findMany({
+        where: { tenantId },
+        select: { id: true, email: true, name: true, role: true, organization: true, tenantId: true, createdAt: true }
+      });
+      res.json(users);
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/users', async (req: any, res) => {
+    try {
+      const userRole = req.user?.role || 'ADMIN';
+      if (req.user && userRole !== 'ADMIN') {
+        return res.status(403).json({ success: false, error: 'Forbidden: Admin access required' });
+      }
+
+      const { email, password, name, role, organization, tenantId } = req.body;
+      if (!email || !password || !name) {
+        return res.status(400).json({ success: false, error: 'Email, password, and name are required' });
+      }
+
+      const validRoles = ['ADMIN', 'INTEGRATION_MANAGER', 'OPERATOR', 'AUDITOR'];
+      const assignedRole = role || 'OPERATOR';
+      if (!validRoles.includes(assignedRole)) {
+        return res.status(400).json({ success: false, error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+      }
+
+      const assignedTenantId = tenantId || req.tenantId || 'tenant_qbo_smb';
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+      if (existingUser) {
+        return res.status(400).json({ success: false, error: 'Email is already in use by another user' });
+      }
+
+      const passwordHash = bcrypt.hashSync(password, 10);
+      const userId = `usr_${Math.random().toString(36).substring(2, 9)}`;
+
+      const newUser = await prisma.user.create({
+        data: {
+          id: userId,
+          email: normalizedEmail,
+          passwordHash,
+          name,
+          role: assignedRole,
+          organization: organization || 'CittaEFS Enterprise',
+          tenantId: assignedTenantId
+        }
+      });
+
+      try {
+        await safeAuditLogCreate(prisma, {
+          tenantId: assignedTenantId,
+          action: 'USER_CREATED',
+          entityType: 'USER',
+          entityRef: newUser.email,
+          details: `Admin created new user account: ${newUser.name} (${newUser.email}), Role: ${newUser.role}`,
+          sha256PayloadHash: generateSha256(JSON.stringify(newUser)),
+          performedBy: req.user?.email || 'Admin'
+        });
+      } catch {}
+
+      const { passwordHash: _, ...userWithoutHash } = newUser;
+      res.status(201).json({ success: true, user: userWithoutHash });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // ==========================================
   // 1. TENANTS & CONFIGURATION API (DB Backed)
   // ==========================================
   app.get('/api/tenants', async (req, res) => {
     try {
-      let rawTenants = [];
-      try {
-        rawTenants = await prisma.tenant.findMany({
-          include: { customers: true, items: true, invoices: { include: { lineItems: true } } }
-        });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Fetching tenants from DB failed, using initial tenants fallback:', dbErr);
-      }
-
-      if (!rawTenants || rawTenants.length === 0) {
-        return res.json(INITIAL_TENANTS);
-      }
+      const rawTenants = await prisma.tenant.findMany({
+        include: { customers: true, items: true, invoices: { include: { lineItems: true } } }
+      });
 
       const tenants = rawTenants.map((t: any) => ({
         ...t,
@@ -379,7 +520,8 @@ async function startServer() {
       }));
       res.json(tenants);
     } catch (e: any) {
-      res.json(INITIAL_TENANTS);
+      console.error('[API Error] GET /api/tenants failed:', e);
+      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });
 
@@ -391,51 +533,32 @@ async function startServer() {
 
       const packedSecret = packEncryptedString(oauthSecret || 'client_refresh_secret_99812');
 
-      let newTenant: any;
-      try {
-        newTenant = await prisma.tenant.create({
-          data: {
-            id: tenantId,
-            name: companyName || 'New Client Entity',
-            companyName: companyName || 'New Client Entity Ltd',
-            tin: tin || 'P000000000X',
-            platformType: platformType || 'QuickBooks Online',
-            marketTier: marketTier || 'Enterprise',
-            encryptedSecret: packedSecret,
-            onboardingStatus: 'VERIFIED_READY',
-            monthlyAllowance: marketTier === 'Enterprise' ? 10000 : marketTier === 'Mid-Market' ? 5000 : 1000,
-            monthlyUsed: 0,
-            lastSyncAt: new Date()
-          }
-        });
-
-        await prisma.auditLog.create({
-          data: {
-            tenantId: newTenant.id,
-            action: 'TENANT_ONBOARDED',
-            entityType: 'TENANT',
-            entityRef: newTenant.name,
-            details: `New client organization onboarded. Platform: ${newTenant.platformType}. Refresh token encrypted with AES-256-GCM. Status: VERIFIED_READY.`,
-            sha256PayloadHash: generateSha256(JSON.stringify(newTenant)),
-            performedBy: 'White-Glove Onboarding Wizard',
-            rawJson: JSON.parse(JSON.stringify(newTenant))
-          }
-        });
-      } catch (dbErr) {
-        newTenant = {
+      const newTenant = await prisma.tenant.create({
+        data: {
           id: tenantId,
           name: companyName || 'New Client Entity',
           companyName: companyName || 'New Client Entity Ltd',
           tin: tin || 'P000000000X',
           platformType: platformType || 'QuickBooks Online',
           marketTier: marketTier || 'Enterprise',
-          cittaApiKey: `sk_live_${tenantId}`,
+          encryptedSecret: packedSecret,
           onboardingStatus: 'VERIFIED_READY',
-          monthlyAllowance: 5000,
+          monthlyAllowance: marketTier === 'Enterprise' ? 10000 : marketTier === 'Mid-Market' ? 5000 : 1000,
           monthlyUsed: 0,
-          lastSyncAt: new Date().toISOString()
-        };
-      }
+          lastSyncAt: new Date()
+        }
+      });
+
+      await safeAuditLogCreate(prisma, {
+        tenantId: newTenant.id,
+        action: 'TENANT_ONBOARDED',
+        entityType: 'TENANT',
+        entityRef: newTenant.name,
+        details: `New client organization onboarded. Platform: ${newTenant.platformType}. Refresh token encrypted with AES-256-GCM. Status: VERIFIED_READY.`,
+        sha256PayloadHash: generateSha256(JSON.stringify(newTenant)),
+        performedBy: 'White-Glove Onboarding Wizard',
+        rawJson: newTenant
+      });
 
       res.status(201).json(newTenant);
     } catch (e: any) {
@@ -468,26 +591,17 @@ async function startServer() {
   app.get('/api/invoices', async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      let rawInvoices = [];
-      try {
-        rawInvoices = await prisma.invoice.findMany({
-          where: tenantId ? { tenantId } : {},
-          include: { lineItems: true },
-          orderBy: { createdAt: 'desc' }
-        });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Fetching invoices from DB failed, using initial invoices fallback:', dbErr);
-      }
-
-      if (!rawInvoices || rawInvoices.length === 0) {
-        const filtered = tenantId ? INITIAL_INVOICES.filter(i => i.tenantId === tenantId) : INITIAL_INVOICES;
-        return res.json(filtered);
-      }
+      const rawInvoices = await prisma.invoice.findMany({
+        where: tenantId ? { tenantId } : {},
+        include: { lineItems: true },
+        orderBy: { createdAt: 'desc' }
+      });
 
       const invoices = rawInvoices.map(formatInvoice);
       res.json(invoices);
     } catch (e: any) {
-      res.json(INITIAL_INVOICES);
+      console.error('[API Error] GET /api/invoices failed:', e);
+      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });
 
@@ -606,17 +720,15 @@ async function startServer() {
         data: { monthlyUsed: { increment: 1 }, lastSyncAt: nrsStampTimestamp }
       });
 
-      await prisma.auditLog.create({
-        data: {
-          tenantId: tenant.id,
-          action: 'CITTA_SUBMITTED',
-          entityType: 'INVOICE',
-          entityRef: clientInvoiceNumber,
-          details: `Generated CittaEFS payload & secured NRS Stamp IRN: ${irn}. Writeback status: SYNCED to ${tenant.platformType}.`,
-          sha256PayloadHash: generateSha256(JSON.stringify(newInvoice)),
-          performedBy: 'CittaEFS Integration Hub /gen/invoices',
-          rawJson: JSON.parse(JSON.stringify(newInvoice))
-        }
+      await safeAuditLogCreate(prisma, {
+        tenantId: tenant.id,
+        action: 'CITTA_SUBMITTED',
+        entityType: 'INVOICE',
+        entityRef: clientInvoiceNumber,
+        details: `Generated CittaEFS payload & secured NRS Stamp IRN: ${irn}. Writeback status: SYNCED to ${tenant.platformType}.`,
+        sha256PayloadHash: generateSha256(JSON.stringify(newInvoice)),
+        performedBy: 'CittaEFS Integration Hub /gen/invoices',
+        rawJson: newInvoice
       });
 
       res.status(200).json({
@@ -650,16 +762,14 @@ async function startServer() {
 
       const updated = formatInvoice(rawUpdated);
 
-      await prisma.auditLog.create({
-        data: {
-          tenantId: inv.tenantId,
-          action: 'CITTA_SUBMITTED',
-          entityType: 'INVOICE',
-          entityRef: inv.clientInvoiceId,
-          details: `Revocation request dispatched to NRS Portal. Reason: ${reason || 'Client Cancellation'}. IRN ${inv.irn} marked CANCELLED.`,
-          sha256PayloadHash: generateSha256(`CANCEL_${inv.irn}`),
-          performedBy: 'Client ERP Revocation Endpoint'
-        }
+      await safeAuditLogCreate(prisma, {
+        tenantId: inv.tenantId,
+        action: 'CITTA_SUBMITTED',
+        entityType: 'INVOICE',
+        entityRef: inv.clientInvoiceId,
+        details: `Revocation request dispatched to NRS Portal. Reason: ${reason || 'Client Cancellation'}. IRN ${inv.irn} marked CANCELLED.`,
+        sha256PayloadHash: generateSha256(`CANCEL_${inv.irn}`),
+        performedBy: 'Client ERP Revocation Endpoint'
       });
 
       res.json({ success: true, invoice: updated });
@@ -707,16 +817,15 @@ async function startServer() {
           }
         });
 
-        await prisma.auditLog.create({
-          data: {
-            tenantId: inv.tenantId,
-            action: 'WEBHOOK_RECEIVED',
-            entityType: 'INVOICE',
-            entityRef: inv.clientInvoiceId,
-            details: `Webhook event [${event || 'invoice.payment_updated'}] processed. IRN: ${inv.irn}.`,
-            sha256PayloadHash: generateSha256(JSON.stringify(req.body)),
-            performedBy: 'CittaEFS Gateway Webhook Listener'
-          }
+        await safeAuditLogCreate(prisma, {
+          tenantId: inv.tenantId,
+          action: 'WEBHOOK_RECEIVED',
+          entityType: 'INVOICE',
+          entityRef: inv.clientInvoiceId,
+          details: `Webhook event [${event || 'invoice.payment_updated'}] processed. IRN: ${inv.irn}.`,
+          sha256PayloadHash: generateSha256(JSON.stringify(req.body)),
+          performedBy: 'CittaEFS Gateway Webhook Listener',
+          rawJson: req.body
         });
       }
 
@@ -881,17 +990,15 @@ async function startServer() {
         }
       });
 
-      await prisma.auditLog.create({
-        data: {
-          tenantId,
-          action: 'CONNECTOR_AUTHENTICATED',
-          entityType: 'INTEGRATION',
-          entityRef: (realmId as string) || 'QUICKBOOKS_ONLINE',
-          details: `QuickBooks Online OAuth authenticated successfully for realm ${realmId}`,
-          sha256PayloadHash: generateSha256(String(realmId || 'QBO')),
-          performedBy: 'QBO OAuth Callback',
-          rawJson: JSON.stringify({ sourceSystem: 'QUICKBOOKS_ONLINE', realmId })
-        }
+      await safeAuditLogCreate(prisma, {
+        tenantId,
+        action: 'CONNECTOR_AUTHENTICATED',
+        entityType: 'INTEGRATION',
+        entityRef: (realmId as string) || 'QUICKBOOKS_ONLINE',
+        details: `QuickBooks Online OAuth authenticated successfully for realm ${realmId}`,
+        sha256PayloadHash: generateSha256(String(realmId || 'QBO')),
+        performedBy: 'QBO OAuth Callback',
+        rawJson: { sourceSystem: 'QUICKBOOKS_ONLINE', realmId }
       });
 
       res.redirect(`/?tab=connectors&qbo=success&realmId=${realmId || ''}`);
@@ -930,22 +1037,68 @@ async function startServer() {
 
   app.post('/api/integrations/qbo/sync', async (req: any, res) => {
     try {
-      const tenantId = req.user?.tenantId || req.body?.tenantId || 'tenant_qbo_smb';
-      const rawInvoices = await fetchQboInvoices(tenantId);
-      const ingested = [];
+      const userRole = req.user?.role;
+      if (req.user && userRole !== 'ADMIN' && userRole !== 'INTEGRATION_MANAGER') {
+        return res.status(403).json({ success: false, error: 'Forbidden: Admin or Integration Manager role required' });
+      }
+
+      const tenantId = req.user?.tenantId || req.body?.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
+      
+      let rawInvoices: any[] = [];
+      try {
+        rawInvoices = await fetchAllQboInvoicesPaginated(tenantId);
+      } catch (fetchErr: any) {
+        console.warn('[QBO Sync] Paginated fetch failed, trying standard fetch:', fetchErr);
+        rawInvoices = await fetchQboInvoices(tenantId);
+      }
+
+      const totalFound = rawInvoices.length;
+      let newSynced = 0;
+      let alreadySynced = 0;
+      const processedInvoices = [];
 
       for (const rawInv of rawInvoices) {
         try {
+          const clientInvoiceId = rawInv.Id;
+          const existing = await prisma.invoice.findFirst({
+            where: { tenantId, clientInvoiceId }
+          });
+
           const dbInv = await ingestQboInvoice(tenantId, rawInv);
-          ingested.push(dbInv);
+          if (existing) {
+            alreadySynced++;
+          } else {
+            newSynced++;
+          }
+          processedInvoices.push(dbInv);
         } catch (err: any) {
           console.warn(`[QBO Sync Warning] Skipped invoice: ${err.message}`);
         }
       }
 
-      res.json({ success: true, count: ingested.length, invoices: ingested });
+      try {
+        await safeAuditLogCreate(prisma, {
+          tenantId,
+          action: 'QBO_HISTORICAL_SYNC',
+          entityType: 'INTEGRATION',
+          entityRef: 'QUICKBOOKS_ONLINE',
+          details: `QBO historical sync completed. Total found: ${totalFound}, New synced: ${newSynced}, Already synced: ${alreadySynced}`,
+          sha256PayloadHash: generateSha256(tenantId + Date.now()),
+          performedBy: req.user?.email || 'Sync Operator'
+        });
+      } catch {}
+
+      res.json({
+        success: true,
+        totalFound,
+        newSynced,
+        alreadySynced,
+        count: processedInvoices.length,
+        invoices: processedInvoices
+      });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error('[API Error] POST /api/integrations/qbo/sync failed:', e);
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 
@@ -955,23 +1108,13 @@ async function startServer() {
   app.get('/api/items/mappings', async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      let items = [];
-      try {
-        items = await prisma.item.findMany({
-          where: tenantId ? { tenantId } : {}
-        });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Fetching item mappings failed:', dbErr);
-      }
-
-      if (!items || items.length === 0) {
-        const filtered = tenantId ? INITIAL_ITEM_MAPPINGS.filter((m: any) => m.tenantId === tenantId) : INITIAL_ITEM_MAPPINGS;
-        return res.json(filtered);
-      }
-
+      const items = await prisma.item.findMany({
+        where: tenantId ? { tenantId } : {}
+      });
       res.json(items);
     } catch (e: any) {
-      res.json(INITIAL_ITEM_MAPPINGS);
+      console.error('[API Error] GET /api/items/mappings failed:', e);
+      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });
 
@@ -982,44 +1125,31 @@ async function startServer() {
       const sku = clientSku || 'SKU-NEW';
 
       let item: any;
-      try {
-        const existing = await prisma.item.findFirst({
-          where: { tenantId: tId, clientSku: sku }
-        });
+      const existing = await prisma.item.findFirst({
+        where: { tenantId: tId, clientSku: sku }
+      });
 
-        if (existing) {
-          item = await prisma.item.update({
-            where: { id: existing.id },
-            data: {
-              description: description || existing.description,
-              hsOrServiceCode: hsOrServiceCode || existing.hsOrServiceCode,
-              defaultVatRate: defaultVatRate !== undefined ? Number(defaultVatRate) : existing.defaultVatRate
-            }
-          });
-        } else {
-          item = await prisma.item.create({
-            data: {
-              tenantId: tId,
-              clientSku: sku,
-              description: description || 'Catalog Item',
-              unitPrice: 1000.0,
-              hsOrServiceCode: hsOrServiceCode || 'HS-8471.30',
-              categoryType: 'GOODS',
-              defaultVatRate: defaultVatRate !== undefined ? Number(defaultVatRate) : 16.00
-            }
-          });
-        }
-      } catch (dbErr) {
-        item = {
-          id: `item_${Date.now()}`,
-          tenantId: tId,
-          clientSku: sku,
-          description: description || 'Catalog Item',
-          unitPrice: 1000.0,
-          hsOrServiceCode: hsOrServiceCode || 'HS-8471.30',
-          categoryType: 'GOODS',
-          defaultVatRate: defaultVatRate !== undefined ? Number(defaultVatRate) : 16.00
-        };
+      if (existing) {
+        item = await prisma.item.update({
+          where: { id: existing.id },
+          data: {
+            description: description || existing.description,
+            hsOrServiceCode: hsOrServiceCode || existing.hsOrServiceCode,
+            defaultVatRate: defaultVatRate !== undefined ? Number(defaultVatRate) : existing.defaultVatRate
+          }
+        });
+      } else {
+        item = await prisma.item.create({
+          data: {
+            tenantId: tId,
+            clientSku: sku,
+            description: description || 'Catalog Item',
+            unitPrice: 1000.0,
+            hsOrServiceCode: hsOrServiceCode || 'HS-8471.30',
+            categoryType: 'GOODS',
+            defaultVatRate: defaultVatRate !== undefined ? Number(defaultVatRate) : 16.00
+          }
+        });
       }
 
       res.json(item);
@@ -1032,27 +1162,23 @@ async function startServer() {
     try {
       const { tenantId } = req.body;
       let mappedCount = 0;
-      try {
-        const unmapped = await prisma.item.findMany({
-          where: {
-            tenantId: tenantId || undefined,
-            hsOrServiceCode: 'UNMAPPED'
+      const unmapped = await prisma.item.findMany({
+        where: {
+          tenantId: tenantId || undefined,
+          hsOrServiceCode: 'UNMAPPED'
+        }
+      });
+
+      for (const item of unmapped) {
+        await prisma.item.update({
+          where: { id: item.id },
+          data: {
+            hsOrServiceCode: 'HS-3926.90',
+            categoryType: 'GOODS'
           }
         });
-
-        for (const item of unmapped) {
-          await prisma.item.update({
-            where: { id: item.id },
-            data: {
-              hsOrServiceCode: 'HS-3926.90',
-              categoryType: 'GOODS'
-            }
-          });
-        }
-        mappedCount = unmapped.length;
-      } catch (dbErr) {
-        mappedCount = 3;
       }
+      mappedCount = unmapped.length;
 
       res.json({ success: true, mappedCount });
     } catch (e: any) {
@@ -1066,24 +1192,15 @@ async function startServer() {
   app.get('/api/customers', async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      let rawCustomers = [];
-      try {
-        rawCustomers = await prisma.customer.findMany({
-          where: tenantId ? { tenantId } : {}
-        });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Fetching customers failed:', dbErr);
-      }
-
-      if (!rawCustomers || rawCustomers.length === 0) {
-        const filtered = tenantId ? INITIAL_CUSTOMERS.filter((c: any) => c.tenantId === tenantId) : INITIAL_CUSTOMERS;
-        return res.json(filtered);
-      }
+      const rawCustomers = await prisma.customer.findMany({
+        where: tenantId ? { tenantId } : {}
+      });
 
       const customers = rawCustomers.map(formatCustomer);
       res.json(customers);
     } catch (e: any) {
-      res.json(INITIAL_CUSTOMERS);
+      console.error('[API Error] GET /api/customers failed:', e);
+      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });
 
@@ -1094,22 +1211,8 @@ async function startServer() {
       const custCode = clientCustomerCode || `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
 
       let rawCustomer: any;
-      try {
-        rawCustomer = await prisma.customer.create({
-          data: {
-            tenantId: tId,
-            clientSystemCustId: custCode,
-            companyName: name || 'New Customer',
-            email: email || 'contact@client.com',
-            taxId: tin || (isB2B ? 'P000000000X' : 'N/A'),
-            taxClassification: isB2B ? 'B2B' : 'B2C',
-            address: address || 'Nairobi Business District',
-            city: city || 'Nairobi'
-          }
-        });
-      } catch (dbErr) {
-        rawCustomer = {
-          id: `cust_${Date.now()}`,
+      rawCustomer = await prisma.customer.create({
+        data: {
           tenantId: tId,
           clientSystemCustId: custCode,
           companyName: name || 'New Customer',
@@ -1118,8 +1221,8 @@ async function startServer() {
           taxClassification: isB2B ? 'B2B' : 'B2C',
           address: address || 'Nairobi Business District',
           city: city || 'Nairobi'
-        };
-      }
+        }
+      });
 
       const customer = formatCustomer(rawCustomer);
       res.status(201).json(customer);
@@ -1134,23 +1237,13 @@ async function startServer() {
   app.get('/api/validation-errors', async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      let errors = [];
-      try {
-        errors = await prisma.validationError.findMany({
-          where: tenantId ? { tenantId } : {}
-        });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Fetching validation errors failed:', dbErr);
-      }
-
-      if (!errors || errors.length === 0) {
-        const filtered = tenantId ? INITIAL_VALIDATION_ERRORS.filter((ve: any) => ve.tenantId === tenantId) : INITIAL_VALIDATION_ERRORS;
-        return res.json(filtered);
-      }
-
+      const errors = await prisma.validationError.findMany({
+        where: tenantId ? { tenantId } : {}
+      });
       res.json(errors);
     } catch (e: any) {
-      res.json(INITIAL_VALIDATION_ERRORS);
+      console.error('[API Error] GET /api/validation-errors failed:', e);
+      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });
 
@@ -1179,20 +1272,16 @@ async function startServer() {
   app.post('/api/cron/reconcile', async (req, res) => {
     try {
       let fixedCount = 0;
-      try {
-        const pendingInvoices = await prisma.invoice.findMany({
-          where: { status: 'PENDING_NRS_STAMP' }
-        });
+      const pendingInvoices = await prisma.invoice.findMany({
+        where: { status: 'PENDING_NRS_STAMP' }
+      });
 
-        for (const inv of pendingInvoices) {
-          await prisma.invoice.update({
-            where: { id: inv.id },
-            data: { status: 'APPROVED', ledgerWritebackStatus: 'SYNCED' }
-          });
-          fixedCount++;
-        }
-      } catch (dbErr) {
-        fixedCount = 2;
+      for (const inv of pendingInvoices) {
+        await prisma.invoice.update({
+          where: { id: inv.id },
+          data: { status: 'APPROVED', ledgerWritebackStatus: 'SYNCED' }
+        });
+        fixedCount++;
       }
 
       res.json({
@@ -1292,48 +1381,24 @@ async function startServer() {
   app.get('/api/audit-logs', async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      let logs = [];
-      try {
-        logs = await prisma.auditLog.findMany({
-          where: tenantId ? { tenantId } : {},
-          orderBy: { createdAt: 'desc' },
-          take: 100
-        });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Fetching audit logs failed:', dbErr);
-      }
-
-      if (!logs || logs.length === 0) {
-        const filtered = tenantId ? INITIAL_AUDIT_LOGS.filter((al: any) => al.tenantId === tenantId) : INITIAL_AUDIT_LOGS;
-        return res.json(filtered);
-      }
-
+      const logs = await prisma.auditLog.findMany({
+        where: tenantId ? { tenantId } : {},
+        orderBy: { createdAt: 'desc' },
+        take: 100
+      });
       res.json(logs);
     } catch (e: any) {
-      res.json(INITIAL_AUDIT_LOGS);
+      console.error('[API Error] GET /api/audit-logs failed:', e);
+      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });
 
   app.get('/api/metrics', async (req, res) => {
     try {
-      let totalInvoices = 0;
-      let approvedInvoices = 0;
-      let tenantsCount = 0;
-      let openErrors = 0;
-
-      try {
-        totalInvoices = await prisma.invoice.count();
-        approvedInvoices = await prisma.invoice.count({ where: { status: 'APPROVED' } });
-        tenantsCount = await prisma.tenant.count();
-        openErrors = await prisma.validationError.count({ where: { status: 'OPEN' } });
-      } catch (dbErr) {
-        console.warn('[DB Warning] Fetching metrics from DB failed, using initial metrics fallback:', dbErr);
-        return res.json(INITIAL_METRICS);
-      }
-
-      if (totalInvoices === 0 && tenantsCount === 0) {
-        return res.json(INITIAL_METRICS);
-      }
+      const totalInvoices = await prisma.invoice.count();
+      const approvedInvoices = await prisma.invoice.count({ where: { status: 'APPROVED' } });
+      const tenantsCount = await prisma.tenant.count();
+      const openErrors = await prisma.validationError.count({ where: { status: 'OPEN' } });
 
       const successRate = totalInvoices > 0 ? Number(((approvedInvoices / totalInvoices) * 100).toFixed(2)) : 99.85;
 
@@ -1347,7 +1412,8 @@ async function startServer() {
         cittaGatewayStatus: 'ONLINE'
       });
     } catch (e: any) {
-      res.json(INITIAL_METRICS);
+      console.error('[API Error] GET /api/metrics failed:', e);
+      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });
 

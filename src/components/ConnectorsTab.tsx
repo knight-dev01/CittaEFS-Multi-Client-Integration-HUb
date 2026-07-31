@@ -24,6 +24,28 @@ export function ConnectorsTab() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [syncingQbo, setSyncingQbo] = useState(false);
+
+  const handleSyncQbo = async () => {
+    setSyncingQbo(true);
+    try {
+      const res = await fetchWithAuth('/api/integrations/qbo/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: activeTenant.id })
+      });
+      const data = await parseJsonResponse(res);
+      setSyncingQbo(false);
+      if (data.success) {
+        alert(`✅ QuickBooks Historical Sync Complete!\n\n• Total Invoices Found: ${data.totalFound}\n• New Invoices Synced: ${data.newSynced}\n• Already Synced (Idempotent): ${data.alreadySynced}`);
+      } else {
+        alert(`❌ Sync Failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      setSyncingQbo(false);
+      alert(`❌ Sync Error: ${err.message}`);
+    }
+  };
 
   const [connectors, setConnectors] = useState<(Connector & { isComingSoon?: boolean })[]>([
     {
@@ -246,16 +268,28 @@ export function ConnectorsTab() {
 
             <div className="pt-2 border-t-2 border-slate-100 flex items-center justify-between text-[10px]">
               <span className="text-slate-500 font-bold">Last Sync: {conn.lastSync}</span>
-              <button 
-                onClick={() => handleTestExistingConnector(conn.id, conn.platform, conn.isComingSoon)}
-                disabled={testingId === conn.id}
-                className={`font-black hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 ${
-                  conn.isComingSoon ? 'text-slate-500 hover:text-slate-800' : 'text-indigo-700'
-                }`}
-              >
-                <RefreshCw className={`w-3 h-3 ${testingId === conn.id ? 'animate-spin' : ''}`} />
-                <span>{testingId === conn.id ? 'Testing...' : conn.isComingSoon ? 'Test Adapter (Soon)' : 'Test Adapter (Live)'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {conn.platform.includes('QuickBooks') && (
+                  <button
+                    onClick={handleSyncQbo}
+                    disabled={syncingQbo}
+                    className="px-2 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase text-[10px] border border-slate-900 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${syncingQbo ? 'animate-spin' : ''}`} />
+                    <span>{syncingQbo ? 'Syncing...' : 'Sync Now'}</span>
+                  </button>
+                )}
+                <button 
+                  onClick={() => handleTestExistingConnector(conn.id, conn.platform, conn.isComingSoon)}
+                  disabled={testingId === conn.id}
+                  className={`font-black hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 ${
+                    conn.isComingSoon ? 'text-slate-500 hover:text-slate-800' : 'text-indigo-700'
+                  }`}
+                >
+                  <RefreshCw className={`w-3 h-3 ${testingId === conn.id ? 'animate-spin' : ''}`} />
+                  <span>{testingId === conn.id ? 'Testing...' : conn.isComingSoon ? 'Test Adapter (Soon)' : 'Test (Live)'}</span>
+                </button>
+              </div>
             </div>
           </div>
         ))}

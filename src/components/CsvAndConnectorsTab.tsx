@@ -431,7 +431,7 @@ CSV-BATCH-102,B2C,2026-07-27,CUST-B2C-GENERIC,Over-The-Counter Cash Sale,N/A,SKU
               </div>
               <div className="p-3 bg-slate-950 border-2 border-slate-800 font-mono text-[11px] text-emerald-400 max-h-40 overflow-y-auto space-y-1">
                 {connectorLog.length === 0 ? (
-                  <span className="text-slate-500 uppercase">Click a connector simulator above to execute live transaction events...</span>
+                  <span className="text-slate-500 uppercase">Select a connector above to execute live synchronization events...</span>
                 ) : (
                   connectorLog.map((log, idx) => (
                     <div key={idx} className="leading-snug">{log}</div>

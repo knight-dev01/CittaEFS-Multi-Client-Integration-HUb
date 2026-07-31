@@ -1,5 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useHub } from '../lib/store';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { 
   Settings, 
   ShieldCheck, 
@@ -54,7 +55,33 @@ export function SettingsTab() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('SecurePass123!');
   const [newUserRole, setNewUserRole] = useState<'ADMIN' | 'INTEGRATION_MANAGER' | 'OPERATOR' | 'AUDITOR'>('OPERATOR');
+
+  useEffect(() => {
+    fetchUsers();
+  }, [activeTenant.id]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetchWithAuth(`/api/users?tenantId=${activeTenant.id}`);
+      const data = await parseJsonResponse(res);
+      if (Array.isArray(data)) {
+        const mapped: UserMember[] = data.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          mfaStatus: 'ENFORCED',
+          lastActive: 'Recently',
+          status: 'ACTIVE'
+        }));
+        setUsers(mapped);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch users from API:', err);
+    }
+  };
 
   const handleRotateKey = () => {
     if (currentRole !== 'ADMIN') {
@@ -75,25 +102,45 @@ export function SettingsTab() {
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  const handleAddUser = (e: FormEvent) => {
+  const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newUserName || !newUserEmail) return;
+    if (!newUserName || !newUserEmail || !newUserPassword) return;
 
-    const newUser: UserMember = {
-      id: `usr-${Date.now().toString().slice(-4)}`,
-      name: newUserName,
-      email: newUserEmail,
-      role: newUserRole,
-      mfaStatus: 'ENFORCED',
-      lastActive: 'Just invited',
-      status: 'INVITED'
-    };
-
-    setUsers([newUser, ...users]);
-    setNewUserName('');
-    setNewUserEmail('');
-    setIsAddUserOpen(false);
-    alert(`Invitation sent to ${newUserEmail} with ${newUserRole} permissions.`);
+    try {
+      const res = await fetchWithAuth('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newUserName,
+          email: newUserEmail,
+          password: newUserPassword,
+          role: newUserRole,
+          tenantId: activeTenant.id
+        })
+      });
+      const data = await parseJsonResponse(res);
+      if (data.success) {
+        const createdUser: UserMember = {
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          role: data.user.role,
+          mfaStatus: 'ENFORCED',
+          lastActive: 'Just now',
+          status: 'ACTIVE'
+        };
+        setUsers([createdUser, ...users]);
+        setNewUserName('');
+        setNewUserEmail('');
+        setNewUserPassword('SecurePass123!');
+        setIsAddUserOpen(false);
+        alert(`✅ User ${createdUser.name} (${createdUser.email}) successfully created with ${createdUser.role} role for tenant ${activeTenant.name}!`);
+      } else {
+        alert(`❌ Failed to create user: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Error creating user: ${err.message}`);
+    }
   };
 
   const handleToggleUserStatus = (id: string) => {
@@ -435,6 +482,18 @@ export function SettingsTab() {
                   placeholder="e.g. d.miller@company.com"
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="w-full px-3 py-2 border-2 border-slate-900 font-bold focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-900 uppercase mb-1">Temporary Password</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. SecurePass123!"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
                   className="w-full px-3 py-2 border-2 border-slate-900 font-bold focus:outline-none"
                 />
               </div>

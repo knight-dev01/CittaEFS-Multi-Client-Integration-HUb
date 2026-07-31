@@ -689,6 +689,32 @@ async function runAllTests() {
       `Writeback Success for QBO Invoice ${rawQboInvoice.Id}`
     );
 
+    // 6. Failed Intuit API Call Failure Recovery Test
+    const { fetchAllQboInvoicesPaginated } = await import('../services/qboService');
+    nock('https://sandbox-quickbooks.api.intuit.com')
+      .get('/v3/company/9130351112/query')
+      .query(true)
+      .reply(502, 'Bad Gateway from Intuit');
+
+    let syncFailedCorrectly = false;
+    let syncErrorMsg = '';
+    try {
+      await fetchAllQboInvoicesPaginated('tenant_qbo_smb');
+    } catch (err: any) {
+      syncFailedCorrectly = true;
+      syncErrorMsg = err.message;
+    }
+    nock.cleanAll();
+
+    assert(
+      'QuickBooks Integration',
+      'Failed Intuit API Call Error Propagation',
+      'FailureRecovery',
+      syncFailedCorrectly && syncErrorMsg.includes('Could not reach QuickBooks'),
+      'Throws real error on QBO API failure instead of returning fake fallback data',
+      syncFailedCorrectly ? `Caught real error: ${syncErrorMsg}` : 'Failed to throw error'
+    );
+
   } catch (err: any) {
     assert('QuickBooks Integration', 'QBO Suite Verification', 'Runtime', false, 'No unhandled exceptions', err.message);
   }
