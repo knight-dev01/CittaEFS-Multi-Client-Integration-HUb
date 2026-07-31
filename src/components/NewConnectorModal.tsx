@@ -63,8 +63,8 @@ const PLATFORM_OPTIONS = [
     defaultEndpoint: 'https://api.sage.com/v3/company/91238',
     icon: Server,
     desc: 'Direct Sage 50 / Intacct API integration for automated invoice, product, and customer sync.',
-    badge: 'ACTIVE / LIVE',
-    isActive: true
+    badge: 'COMING SOON',
+    isActive: false
   },
   {
     id: 'CittaEFS Gateway (CSL)',

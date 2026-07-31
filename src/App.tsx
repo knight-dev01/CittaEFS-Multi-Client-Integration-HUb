@@ -3,6 +3,7 @@ import { HubProvider, useHub } from './lib/store';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
 import { OverviewTab } from './components/OverviewTab';
+import { ClientPortalTab } from './components/ClientPortalTab';
 import { ConnectorsTab } from './components/ConnectorsTab';
 import { ImportTab } from './components/ImportTab';
 import { FieldMappingTab } from './components/FieldMappingTab';
@@ -49,14 +50,14 @@ function HubMainContent() {
   // Enforce role-based tab routing restrictions on active tabs
   const userRole = currentUser.role || 'OPERATOR';
   const allowedTabs = [
-    'clients', 'invoices', 'customers', 'items', 'validation', 'queues',
+    'clients', 'client_portal', 'invoices', 'customers', 'items', 'validation', 'queues',
     ...(userRole === 'ADMIN' || userRole === 'OPERATOR' ? ['connectors', 'import', 'field_mapping', 'webhooks', 'gateway', 'reconciliation'] : []),
     ...(userRole === 'ADMIN' || userRole === 'AUDITOR' ? ['audit'] : []),
     ...(userRole === 'ADMIN' ? ['settings'] : [])
   ];
 
   if (!allowedTabs.includes(activeTab)) {
-    setActiveTab('clients');
+    setActiveTab(userRole === 'OPERATOR' ? 'client_portal' : 'clients');
   }
 
   return (
@@ -96,6 +97,7 @@ function HubMainContent() {
             {(activeTab === 'clients' || activeTab === 'overview') && (
               <OverviewTab onOpenOnboardModal={() => setIsOnboardModalOpen(true)} />
             )}
+            {activeTab === 'client_portal' && <ClientPortalTab />}
             {activeTab === 'connectors' && <ConnectorsTab />}
             {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
             {activeTab === 'invoices' && <InvoicesTab />}

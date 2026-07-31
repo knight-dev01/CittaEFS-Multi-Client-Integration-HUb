@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import OAuthClient from 'intuit-oauth';
 import { getDatabaseUrl } from '../config/dbConfig';
 import { unpackAndDecryptString, packEncryptedString } from '../config/encryption';
 import { QuickBooksAdapter } from '../adapters/connectorAdapters';
@@ -7,6 +8,31 @@ import { invoiceIngestionSchema } from '../schemas/invoice.schema';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 const qboAdapter = new QuickBooksAdapter();
+
+/**
+ * Creates and returns an Intuit OAuth2 client instance using intuit-oauth SDK.
+ * Throws explicit error if QBO_CLIENT_ID, QBO_CLIENT_SECRET, or QBO_REDIRECT_URI is missing.
+ */
+export function getIntuitOAuthClient() {
+  if (!process.env.QBO_CLIENT_ID || !process.env.QBO_CLIENT_SECRET) {
+    throw new Error('QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables are required.');
+  }
+  if (!process.env.QBO_REDIRECT_URI) {
+    throw new Error('QBO_REDIRECT_URI environment variable is required.');
+  }
+
+  const clientId = process.env.QBO_CLIENT_ID;
+  const clientSecret = process.env.QBO_CLIENT_SECRET;
+  const redirectUri = process.env.QBO_REDIRECT_URI;
+  const environment = (process.env.QBO_ENVIRONMENT || 'sandbox').toLowerCase() === 'production' ? 'production' : 'sandbox';
+
+  return new OAuthClient({
+    clientId,
+    clientSecret,
+    environment,
+    redirectUri,
+  });
+}
 
 /**
  * Returns the base URL for QBO API calls depending on the environment.
@@ -57,6 +83,10 @@ export async function getValidQboAccessToken(tenantId: string): Promise<string> 
   try {
     decryptedRefreshToken = unpackAndDecryptString(integration.refreshToken);
   } catch (e: any) {
+    await prisma.integration.update({
+      where: { id: integration.id },
+      data: { status: 'DISCONNECTED' }
+    }).catch(() => {});
     throw new Error(`Failed to decrypt refresh token: ${e.message}`);
   }
 
@@ -77,6 +107,12 @@ export async function getValidQboAccessToken(tenantId: string): Promise<string> 
 
     if (!response.ok) {
       const errText = await response.text();
+      // Update integration status to DISCONNECTED so UI prompts user to re-authenticate
+      await prisma.integration.update({
+        where: { id: integration.id },
+        data: { status: 'DISCONNECTED' }
+      }).catch(() => {});
+
       throw new Error(`QuickBooks connection needs reauthorization (token exchange failed ${response.status}): ${errText}`);
     }
 
@@ -97,6 +133,10 @@ export async function getValidQboAccessToken(tenantId: string): Promise<string> 
 
     return data.access_token;
   } catch (error: any) {
+    await prisma.integration.update({
+      where: { id: integration.id },
+      data: { status: 'DISCONNECTED' }
+    }).catch(() => {});
     throw new Error(`Error refreshing QBO token for tenant ${tenantId}: ${error.message}`);
   }
 }

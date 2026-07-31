@@ -42,6 +42,11 @@ export function ConnectorsTab() {
       setSyncingQbo(false);
       if (data.success) {
         alert(`✅ QuickBooks Historical Sync Complete!\n\n• Total Invoices Found: ${data.totalFound}\n• New Invoices Synced: ${data.newSynced}\n• Already Synced (Idempotent): ${data.alreadySynced}`);
+      } else if (data.reauthRequired || data.error?.toLowerCase().includes('reauthorization')) {
+        const doReauth = confirm(`⚠️ QuickBooks Connection Needs Reauthorization!\n\n${data.error || 'Your QuickBooks Online OAuth session has expired or requires user re-authorization.'}\n\nWould you like to re-authorize QuickBooks Online now?`);
+        if (doReauth) {
+          window.location.href = `/api/integrations/qbo/connect?tenantId=${activeTenant.id}`;
+        }
       } else {
         alert(`❌ Sync Failed: ${data.error || 'Unknown error'}`);
       }
@@ -77,20 +82,6 @@ export function ConnectorsTab() {
       latencyMs: 42,
       lastSync: '10 mins ago',
       syncedInvoices: 5210,
-      environment: 'PRODUCTION',
-      isComingSoon: false
-    },
-    {
-      id: 'conn_sage_03',
-      tenantId: activeTenant.id,
-      platform: 'Sage ERP (Sage 50 / Sage Intacct)',
-      type: 'REST API / Webhook',
-      auth: 'API Key & Session Token',
-      status: 'HEALTHY',
-      endpoint: 'https://api.sage.com/v3/company/91238',
-      latencyMs: 88,
-      lastSync: '5 mins ago',
-      syncedInvoices: 3410,
       environment: 'PRODUCTION',
       isComingSoon: false
     },
@@ -159,7 +150,7 @@ export function ConnectorsTab() {
 
   const handleTestExistingConnector = async (id: string, platformName: string, isComingSoon?: boolean) => {
     if (isComingSoon) {
-      alert(`ℹ️ ${platformName} Adapter is COMING SOON in the upcoming release!\n\nNote: QuickBooks Online, Sage ERP, and Excel & CSV Import are currently ACTIVE and ready for live API testing and transmission to CittaEFS.`);
+      alert(`ℹ️ ${platformName} Adapter is COMING SOON in the upcoming release!\n\nNote: QuickBooks Online, Excel & CSV Import, and CittaEFS Gateway are currently ACTIVE and ready for live API testing and transmission to CittaEFS.`);
       return;
     }
 

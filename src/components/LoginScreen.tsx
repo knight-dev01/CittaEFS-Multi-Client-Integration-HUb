@@ -29,10 +29,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const isQboConnectRedirect = (typeof window !== 'undefined' && window.location.pathname === '/connect-quickbooks') || queryParams.get('connect') === 'qbo';
 
   const quickTestAccounts = [
-    { label: 'Sarah (Admin - Full Access)', email: 'admin@cittaefs.com', pass: 'Admin123!' },
-    { label: 'David (Integration Mgr)', email: 'd.okafor@cittaefs.com', pass: 'Okafor2026!' },
-    { label: 'Amara (Operator - Acme)', email: 'billing@acme.com', pass: 'Acme2026!' },
-    { label: 'Michael (Auditor - KRA)', email: 'auditor@kra.gov.ke', pass: 'Kra2026!' }
+    { label: 'Admin Access (Technical Control Center)', email: 'admin@cittaefs.com', pass: 'Admin123!' },
+    { label: 'Non-Technical User (Client ERP & Push to CittaEFS)', email: 'billing@acme.com', pass: 'Acme2026!' },
+    { label: 'Integration Manager (Technical Operations)', email: 'd.okafor@cittaefs.com', pass: 'Okafor2026!' },
+    { label: 'Regulatory Auditor (KRA Audit View)', email: 'auditor@kra.gov.ke', pass: 'Kra2026!' }
   ];
 
   const handleSubmit = async (e: FormEvent) => {

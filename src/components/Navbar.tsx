@@ -62,7 +62,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   ];
 
   const allTabs = [
-    { id: 'clients', label: 'Clients', icon: Building2, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
+    { id: 'client_portal', label: 'Client ERP & Gateway', icon: Building2, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
+    { id: 'clients', label: 'Overview Center', icon: Layers, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
     { id: 'invoices', label: 'Invoices', icon: FileText, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
     { id: 'customers', label: 'Customers', icon: Users, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },
     { id: 'items', label: 'Items & Rules', icon: Tag, category: 'core', requiredRoles: ['ADMIN', 'OPERATOR', 'AUDITOR'] },

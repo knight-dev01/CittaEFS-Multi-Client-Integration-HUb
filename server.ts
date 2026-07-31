@@ -23,6 +23,7 @@ import { runNrsReconciliationCron, runQbReconciliationCron } from './src/crons/r
 import { packEncryptedString } from './src/config/encryption';
 import { CONNECTOR_ADAPTERS, QuickBooksAdapter } from './src/adapters/connectorAdapters';
 import {
+  getIntuitOAuthClient,
   getValidQboAccessToken,
   fetchQboInvoices,
   fetchAllQboInvoicesPaginated,
@@ -866,10 +867,10 @@ async function startServer() {
 
       const tenantId = req.user?.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
       const clientId = process.env.QBO_CLIENT_ID;
-      const redirectUri = process.env.QBO_REDIRECT_URI || 'https://ais-dev-glz3xamqzqbl4vhejrmgnr-909140343248.europe-west2.run.app/api/integrations/qbo/callback';
+      const redirectUri = process.env.QBO_REDIRECT_URI;
 
-      if (!clientId) {
-        return res.status(400).json({ error: 'QBO_CLIENT_ID missing in environment configuration' });
+      if (!clientId || !redirectUri) {
+        return res.status(400).json({ error: 'QBO_CLIENT_ID and QBO_REDIRECT_URI environment variables are required' });
       }
 
       const stateToken = jwt.sign({ tenantId, timestamp: Date.now() }, JWT_SECRET, { expiresIn: '15m' });
@@ -902,10 +903,10 @@ async function startServer() {
       const tenantId = decoded.tenantId;
       const clientId = process.env.QBO_CLIENT_ID;
       const clientSecret = process.env.QBO_CLIENT_SECRET;
-      const redirectUri = process.env.QBO_REDIRECT_URI || 'https://ais-dev-glz3xamqzqbl4vhejrmgnr-909140343248.europe-west2.run.app/api/integrations/qbo/callback';
+      const redirectUri = process.env.QBO_REDIRECT_URI;
 
-      if (!clientId || !clientSecret) {
-        return res.status(500).send('QBO_CLIENT_ID or QBO_CLIENT_SECRET missing in server config');
+      if (!clientId || !clientSecret || !redirectUri) {
+        return res.status(500).send('QBO_CLIENT_ID, QBO_CLIENT_SECRET, or QBO_REDIRECT_URI missing in server config');
       }
 
       const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
@@ -1067,7 +1068,24 @@ async function startServer() {
         invoices: processedInvoices
       });
     } catch (e: any) {
-      console.error('[API Error] POST /api/integrations/qbo/sync failed:', e);
+      console.error('[API Error] POST /api/integrations/qbo/sync failed:', e.message);
+      
+      const isReauthNeeded = e.message?.toLowerCase().includes('reauthorization') || e.message?.includes('401');
+      if (isReauthNeeded) {
+        const tenantId = req.user?.tenantId || req.body?.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
+        await prisma.integration.updateMany({
+          where: { tenantId, sourceSystem: 'QUICKBOOKS_ONLINE' },
+          data: { status: 'DISCONNECTED' }
+        }).catch(() => {});
+
+        return res.status(401).json({
+          success: false,
+          reauthRequired: true,
+          error: 'QuickBooks connection needs reauthorization. Please reconnect QuickBooks Online.',
+          connectUrl: `/api/integrations/qbo/connect?tenantId=${tenantId}`
+        });
+      }
+
       res.status(500).json({ success: false, error: e.message });
     }
   });

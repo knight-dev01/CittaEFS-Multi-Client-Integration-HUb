@@ -3,6 +3,7 @@ import nock from 'nock';
 
 process.env.QBO_CLIENT_ID = process.env.QBO_CLIENT_ID || 'test_qbo_client_id_123';
 process.env.QBO_CLIENT_SECRET = process.env.QBO_CLIENT_SECRET || 'test_qbo_client_secret_456';
+process.env.QBO_REDIRECT_URI = process.env.QBO_REDIRECT_URI || 'https://cittaefs-multi-client-integration-hub.onrender.com/api/integrations/qbo/callback';
 process.env.CITTAEFS_API_KEY = process.env.CITTAEFS_API_KEY || 'sk_live_test_api_key_789';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
@@ -564,7 +565,64 @@ async function runAllTests() {
   // MODULE 9: QuickBooks Online Integration, Webhooks & Writeback
   // ------------------------------------------------------------------
   try {
-    const { getValidQboAccessToken, ingestQboInvoice, writebackToQbo } = await import('../services/qboService');
+    const { getIntuitOAuthClient, getValidQboAccessToken, ingestQboInvoice, writebackToQbo } = await import('../services/qboService');
+
+    // 0. Intuit OAuth Client Initialization & Missing Environment Error Validation
+    const clientOk = Boolean(getIntuitOAuthClient());
+    assert(
+      'QuickBooks Integration',
+      'getIntuitOAuthClient Initialization with Valid Environment',
+      'Implementation',
+      clientOk,
+      'Instantiates Intuit OAuth client when env vars are present',
+      clientOk ? 'OAuth client initialized successfully' : 'Failed to initialize'
+    );
+
+    // Test missing QBO_CLIENT_ID / QBO_CLIENT_SECRET
+    const origClientId = process.env.QBO_CLIENT_ID;
+    const origClientSecret = process.env.QBO_CLIENT_SECRET;
+    const origRedirectUri = process.env.QBO_REDIRECT_URI;
+
+    delete process.env.QBO_CLIENT_ID;
+    let missingCredsCaught = false;
+    let missingCredsErr = '';
+    try {
+      getIntuitOAuthClient();
+    } catch (err: any) {
+      missingCredsCaught = true;
+      missingCredsErr = err.message;
+    }
+    process.env.QBO_CLIENT_ID = origClientId;
+
+    assert(
+      'QuickBooks Integration',
+      'getIntuitOAuthClient Throws On Missing Client Credentials',
+      'FailureRecovery',
+      missingCredsCaught && missingCredsErr.includes('QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables are required'),
+      'Throws clear error when QBO_CLIENT_ID or QBO_CLIENT_SECRET is missing',
+      missingCredsCaught ? `Caught error: ${missingCredsErr}` : 'Did not throw error'
+    );
+
+    // Test missing QBO_REDIRECT_URI
+    delete process.env.QBO_REDIRECT_URI;
+    let missingRedirectCaught = false;
+    let missingRedirectErr = '';
+    try {
+      getIntuitOAuthClient();
+    } catch (err: any) {
+      missingRedirectCaught = true;
+      missingRedirectErr = err.message;
+    }
+    process.env.QBO_REDIRECT_URI = origRedirectUri;
+
+    assert(
+      'QuickBooks Integration',
+      'getIntuitOAuthClient Throws On Missing Redirect URI',
+      'FailureRecovery',
+      missingRedirectCaught && missingRedirectErr.includes('QBO_REDIRECT_URI environment variable is required'),
+      'Throws clear error when QBO_REDIRECT_URI is missing',
+      missingRedirectCaught ? `Caught error: ${missingRedirectErr}` : 'Did not throw error'
+    );
 
     // 1. Setup mock integration row in DB
     const encryptedAccess = packEncryptedString('mock_access_token_123');
