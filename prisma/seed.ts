@@ -5,6 +5,7 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 
 import { getDatabaseUrl } from '../src/config/dbConfig.ts';
+import { INITIAL_TENANTS } from '../src/data/referenceData.ts';
 
 process.env.DATABASE_URL = getDatabaseUrl(true);
 
@@ -19,20 +20,18 @@ const prisma = new PrismaClient({
 async function main() {
   console.log('🌱 Starting CittaEFS Hub Clean Initializer...');
 
-  const tenantsConfig = [
-    {
-      id: 'tenant_qbo_smb',
-      name: 'Acme Retail & Distro (QuickBooks Online)',
-      companyName: 'Acme Retail Solutions Ltd',
-      tin: 'P051239841A',
-      platformType: 'QuickBooks Online',
-      marketTier: 'Tier 1 (SMB)',
-      cittaApiKey: 'sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz',
-      onboardingStatus: 'LIVE_PRODUCTION',
-      monthlyAllowance: 1000,
-      monthlyUsed: 0
-    }
-  ];
+  const tenantsConfig = INITIAL_TENANTS.map(t => ({
+    id: t.id,
+    name: t.name,
+    companyName: t.companyName,
+    tin: t.tin,
+    platformType: t.platformType,
+    marketTier: t.marketTier,
+    cittaApiKey: t.cittaApiKey,
+    onboardingStatus: t.onboardingStatus,
+    monthlyAllowance: t.monthlyAllowance,
+    monthlyUsed: t.monthlyUsed
+  }));
 
   const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 
@@ -67,8 +66,8 @@ async function main() {
   }
 
   const defaultUsers = [
-    { email: 'admin@cittaefs.com', name: 'Sarah Jenkins', password: 'Admin123!', role: 'ADMIN', organization: 'CittaEFS Enterprise', tenantId: 'tenant_qbo_smb' },
-    { email: 'billing@acme.com', name: 'Amara Vance', password: 'Acme2026!', role: 'OPERATOR', organization: 'Acme Retail Solutions Ltd', tenantId: 'tenant_qbo_smb' }
+    { email: 'admin@cittaefs.com', name: 'James Carter', password: 'Admin123!', role: 'ADMIN', organization: 'CittaEFS Enterprise', tenantId: 'tenant_qbo' },
+    { email: 'billing@technova.com', name: 'Amara Vance', password: 'TechNova2026!', role: 'OPERATOR', organization: 'TechNova Solutions Group', tenantId: 'tenant_qbo' }
   ];
 
   if (hasDatabaseUrl) {
@@ -77,7 +76,7 @@ async function main() {
       await prisma.user.deleteMany({
         where: {
           NOT: {
-            email: { in: ['admin@cittaefs.com', 'billing@acme.com'] }
+            email: { in: ['admin@cittaefs.com', 'billing@technova.com'] }
           }
         }
       });

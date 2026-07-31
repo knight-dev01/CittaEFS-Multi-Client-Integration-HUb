@@ -1,12 +1,12 @@
-export type TenantId = 'tenant_qbo_smb';
+export type TenantId = 'tenant_qbo' | 'tenant_sap' | 'tenant_d365' | 'tenant_xero';
 
 export interface Tenant {
   id: TenantId;
   name: string;
   companyName: string;
   tin: string;
-  platformType: 'QuickBooks Online' | string;
-  marketTier: 'Tier 1 (SMB)' | string;
+  platformType: 'QuickBooks Online' | 'SAP S/4HANA' | 'Microsoft Dynamics 365' | 'Xero' | string;
+  marketTier: 'Tier 1 (SMB)' | 'Tier 2 (Mid-Market)' | 'Tier 3 (Enterprise)' | string;
   cittaApiKey?: string;
   cittaApiSecretEncrypted?: string;
   onboardingStatus: 'SANDBOX_TESTING' | 'NRS_VERIFIED' | 'LIVE_PRODUCTION' | 'PENDING_MAPPING' | 'VERIFIED_READY';

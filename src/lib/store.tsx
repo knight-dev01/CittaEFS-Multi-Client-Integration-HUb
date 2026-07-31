@@ -110,7 +110,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const [activeTenantId, setActiveTenantId] = useState<TenantId>('tenant_qbo_smb');
+  const [activeTenantId, setActiveTenantId] = useState<TenantId>('tenant_qbo');
   const [tenants, setTenants] = useState<Tenant[]>(INITIAL_TENANTS);
   const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
   const [customers, setCustomers] = useState<CustomerProfile[]>(INITIAL_CUSTOMERS);

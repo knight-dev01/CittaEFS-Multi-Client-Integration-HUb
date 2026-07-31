@@ -2,15 +2,41 @@ import { Tenant, Invoice, CustomerProfile, ItemCodeMapping, ValidationErrorItem,
 
 export const INITIAL_TENANTS: Tenant[] = [
   {
-    id: 'tenant_qbo_smb',
-    name: 'Acme Retail & Distro',
-    companyName: 'Acme Retail Solutions Ltd',
+    id: 'tenant_qbo',
+    name: 'TechNova Solutions',
+    companyName: 'TechNova Solutions Group',
     tin: 'P051239841A',
     platformType: 'QuickBooks Online',
     marketTier: 'Tier 1 (SMB)',
-    cittaApiKey: 'citta_live_ak9832_acme_prod',
+    cittaApiKey: 'citta_live_ak9832_technova_prod',
     onboardingStatus: 'LIVE_PRODUCTION',
-    monthlyAllowance: 1000,
+    monthlyAllowance: 5000,
+    monthlyUsed: 0,
+    lastSyncAt: '2026-07-31 08:00:00'
+  },
+  {
+    id: 'tenant_sap',
+    name: 'Global Industries',
+    companyName: 'Global Industries Enterprise',
+    tin: 'P098877112B',
+    platformType: 'SAP S/4HANA',
+    marketTier: 'Tier 3 (Enterprise)',
+    cittaApiKey: 'citta_live_gt8810_global_prod',
+    onboardingStatus: 'NRS_VERIFIED',
+    monthlyAllowance: 50000,
+    monthlyUsed: 0,
+    lastSyncAt: '2026-07-31 08:00:00'
+  },
+  {
+    id: 'tenant_xero',
+    name: 'Retail Innovations',
+    companyName: 'Retail Innovations Ltd',
+    tin: 'P011223344C',
+    platformType: 'Xero',
+    marketTier: 'Tier 2 (Mid-Market)',
+    cittaApiKey: 'citta_sand_px1102_retail_stg',
+    onboardingStatus: 'LIVE_PRODUCTION',
+    monthlyAllowance: 10000,
     monthlyUsed: 0,
     lastSyncAt: '2026-07-31 08:00:00'
   }
@@ -48,7 +74,7 @@ export const INITIAL_METRICS: SystemMetrics = {
   totalInvoicesProcessed: 0,
   nrsStampSuccessRate: 100.0,
   averageLatencyMs: 0,
-  activeTenantsCount: 1,
+  activeTenantsCount: 3,
   pendingValidationCount: 0,
   reconciliationCronStatus: 'HEALTHY',
   cittaGatewayStatus: 'ONLINE'

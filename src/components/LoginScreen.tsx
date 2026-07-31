@@ -30,7 +30,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
   const quickTestAccounts = [
     { label: 'Admin Access (Overall System Control & Governance)', email: 'admin@cittaefs.com', pass: 'Admin123!' },
-    { label: 'Operator Access (Daily Action Points & Billing)', email: 'billing@acme.com', pass: 'Acme2026!' }
+    { label: 'Operator Access (Daily Action Points & Billing)', email: 'billing@technova.com', pass: 'TechNova2026!' }
   ];
 
   const handleSubmit = async (e: FormEvent) => {

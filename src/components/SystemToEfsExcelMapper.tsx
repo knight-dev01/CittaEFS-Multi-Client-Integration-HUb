@@ -310,7 +310,7 @@ export function SystemToEfsExcelMapper() {
 
     setTimeout(() => {
       const transformedSampleJson = {
-        tenantId: 'tenant_qbo_smb',
+        tenantId: 'tenant_qbo',
         sourceAdapter: selectedSystem.name,
         ingestionProtocol: selectedSystem.badge,
         efsExcelStandardRow: {

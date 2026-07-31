@@ -120,12 +120,12 @@ async function runAllTests() {
   // ------------------------------------------------------------------
   try {
     const validInvoice = {
-      tenantId: 'tenant_qbo_smb',
+      tenantId: 'tenant_qbo',
       clientInvoiceNumber: 'INV-2026-999',
       issueDate: '2026-07-29',
       dueDate: '2026-08-29',
       currency: 'KES',
-      customerName: 'Acme Kenya Ltd',
+      customerName: 'Vertex Kenya Ltd',
       customerTin: 'P051123456Z',
       lineItems: [
         {
@@ -184,7 +184,7 @@ async function runAllTests() {
     const rawQbo = {
       DocNumber: 'QBO-8899',
       TxnDate: '2026-07-29',
-      CustomerRef: { name: 'Acme Kenya Corp' },
+      CustomerRef: { name: 'Vertex Kenya Corp' },
       CustomerTaxId: 'A009876543W',
       Line: [
         {
@@ -235,7 +235,7 @@ async function runAllTests() {
   // ------------------------------------------------------------------
   try {
     const testInvoice = {
-      tenantId: 'tenant_qbo_smb',
+      tenantId: 'tenant_qbo',
       clientInvoiceNumber: 'INV-HMAC-TEST-01',
       invoiceType: 'STANDARD' as const,
       invoiceKind: 'B2B' as const,
@@ -317,7 +317,7 @@ async function runAllTests() {
       .query(true)
       .reply(200, [{ invoiceNumber: 'INV-HMAC-TEST-01', irn: 'IRN-NRS-2026-NOCK9988' }]);
 
-    const archiveData = await cittaEfsClient.getArchive('tenant_qbo_smb', '2026-07-01', '2026-07-31');
+    const archiveData = await cittaEfsClient.getArchive('tenant_qbo', '2026-07-01', '2026-07-31');
     assert(
       'CittaEFS Gateway Client',
       'Gateway Archive Retrieval method',
@@ -332,7 +332,7 @@ async function runAllTests() {
       .query(true)
       .reply(200, [{ invoiceNumber: 'INV-FAIL-01', error: 'Invalid TIN format' }]);
 
-    const errorsData = await cittaEfsClient.getValidationErrors('tenant_qbo_smb');
+    const errorsData = await cittaEfsClient.getValidationErrors('tenant_qbo');
     assert(
       'CittaEFS Gateway Client',
       'Gateway Validation Errors method',
@@ -346,7 +346,7 @@ async function runAllTests() {
       .patch('/api/einvoice/update/IRN-NRS-2026-NOCK9988')
       .reply(200, { success: true, payment_status: 'PAID' });
 
-    const patchRes = await cittaEfsClient.updatePaymentStatus('tenant_qbo_smb', 'IRN-NRS-2026-NOCK9988', 'PAID', 'REF-123');
+    const patchRes = await cittaEfsClient.updatePaymentStatus('tenant_qbo', 'IRN-NRS-2026-NOCK9988', 'PAID', 'REF-123');
     assert(
       'CittaEFS Gateway Client',
       'Gateway Update Payment Status method',
@@ -379,7 +379,7 @@ async function runAllTests() {
     nock.cleanAll();
 
     // Inbound Writeback test
-    const wb = await cittaEfsClient.executeClientLedgerWriteback('tenant_qbo_smb', testInvoice.clientInvoiceNumber, 'IRN-NRS-2026-NOCK9988', 'https://nrs.portal.gov/verify?irn=IRN-NRS-2026-NOCK9988');
+    const wb = await cittaEfsClient.executeClientLedgerWriteback('tenant_qbo', testInvoice.clientInvoiceNumber, 'IRN-NRS-2026-NOCK9988', 'https://nrs.portal.gov/verify?irn=IRN-NRS-2026-NOCK9988');
     assert(
       'CittaEFS Gateway Client',
       'Inbound Client Ledger Writeback Contract',
@@ -397,7 +397,7 @@ async function runAllTests() {
   // ------------------------------------------------------------------
   try {
     const testPayload = invoiceIngestionSchema.parse({
-      tenantId: 'tenant_qbo_smb',
+      tenantId: 'tenant_qbo',
       clientInvoiceNumber: `INV-Q-${Date.now()}`,
       issueDate: '2026-07-29',
       dueDate: '2026-08-29',
@@ -447,7 +447,7 @@ async function runAllTests() {
   // ------------------------------------------------------------------
   try {
     const workerPayload = invoiceIngestionSchema.parse({
-      tenantId: 'tenant_qbo_smb',
+      tenantId: 'tenant_qbo',
       clientInvoiceNumber: `INV-WORKER-${Date.now()}`,
       issueDate: '2026-07-29',
       dueDate: '2026-08-29',
@@ -504,7 +504,7 @@ async function runAllTests() {
   // MODULE 7: Automated Reconciliation Engine (NRS & QB Sync Auditing)
   // ------------------------------------------------------------------
   try {
-    const nrsResult = await runNrsReconciliationCron('tenant_qbo_smb');
+    const nrsResult = await runNrsReconciliationCron('tenant_qbo');
     assert(
       'Reconciliation Engine',
       'NRS / CittaEFS Regulatory Discrepancy Reconciliation',
@@ -514,7 +514,7 @@ async function runAllTests() {
       `Cron: ${nrsResult.cronName}, Scanned: ${nrsResult.scannedCount}, Recovered: ${nrsResult.recoveredCount}, Orphans Fixed: ${nrsResult.orphansFixedCount}`
     );
 
-    const qbResult = await runQbReconciliationCron('tenant_qbo_smb');
+    const qbResult = await runQbReconciliationCron('tenant_qbo');
     assert(
       'Reconciliation Engine',
       'ERP (QuickBooks) Automated Data Audit',
@@ -631,12 +631,12 @@ async function runAllTests() {
     await prisma.integration.upsert({
       where: {
         tenantId_sourceSystem: {
-          tenantId: 'tenant_qbo_smb',
+          tenantId: 'tenant_qbo',
           sourceSystem: 'QUICKBOOKS_ONLINE'
         }
       },
       create: {
-        tenantId: 'tenant_qbo_smb',
+        tenantId: 'tenant_qbo',
         sourceSystem: 'QUICKBOOKS_ONLINE',
         accessToken: encryptedAccess,
         refreshToken: encryptedRefresh,
@@ -654,7 +654,7 @@ async function runAllTests() {
     });
 
     // 2. Token Retrieval Test (Cached)
-    const token = await getValidQboAccessToken('tenant_qbo_smb');
+    const token = await getValidQboAccessToken('tenant_qbo');
     assert(
       'QuickBooks Integration',
       'QBO Access Token Retrieval & Decryption',
@@ -668,7 +668,7 @@ async function runAllTests() {
     await prisma.integration.update({
       where: {
         tenantId_sourceSystem: {
-          tenantId: 'tenant_qbo_smb',
+          tenantId: 'tenant_qbo',
           sourceSystem: 'QUICKBOOKS_ONLINE'
         }
       },
@@ -685,7 +685,7 @@ async function runAllTests() {
         expires_in: 3600
       });
 
-    const refreshedToken = await getValidQboAccessToken('tenant_qbo_smb');
+    const refreshedToken = await getValidQboAccessToken('tenant_qbo');
     nock.cleanAll();
 
     assert(
@@ -701,7 +701,7 @@ async function runAllTests() {
     await prisma.integration.update({
       where: {
         tenantId_sourceSystem: {
-          tenantId: 'tenant_qbo_smb',
+          tenantId: 'tenant_qbo',
           sourceSystem: 'QUICKBOOKS_ONLINE'
         }
       },
@@ -717,7 +717,7 @@ async function runAllTests() {
     let refreshFailed = false;
     let refreshErr = '';
     try {
-      await getValidQboAccessToken('tenant_qbo_smb');
+      await getValidQboAccessToken('tenant_qbo');
     } catch (e: any) {
       refreshFailed = true;
       refreshErr = e.message;
@@ -737,7 +737,7 @@ async function runAllTests() {
     await prisma.integration.update({
       where: {
         tenantId_sourceSystem: {
-          tenantId: 'tenant_qbo_smb',
+          tenantId: 'tenant_qbo',
           sourceSystem: 'QUICKBOOKS_ONLINE'
         }
       },
@@ -767,7 +767,7 @@ async function runAllTests() {
       ]
     };
 
-    const ingested = await ingestQboInvoice('tenant_qbo_smb', rawQboInvoice);
+    const ingested = await ingestQboInvoice('tenant_qbo', rawQboInvoice);
     assert(
       'QuickBooks Integration',
       'QBO Raw Payload Normalization & Ingestion',
@@ -822,7 +822,7 @@ async function runAllTests() {
       .post('/v3/company/9130351112/invoice?minorversion=65')
       .reply(200, { Invoice: { Id: rawQboInvoice.Id, SyncToken: '2' } });
 
-    const writebackRes = await writebackToQbo('tenant_qbo_smb', rawQboInvoice.Id, 'IRN-QBO-2026-STAMPED', 'https://qr.gov/qbo/stamped');
+    const writebackRes = await writebackToQbo('tenant_qbo', rawQboInvoice.Id, 'IRN-QBO-2026-STAMPED', 'https://qr.gov/qbo/stamped');
     nock.cleanAll();
 
     assert(
@@ -844,7 +844,7 @@ async function runAllTests() {
     let syncFailedCorrectly = false;
     let syncErrorMsg = '';
     try {
-      await fetchAllQboInvoicesPaginated('tenant_qbo_smb');
+      await fetchAllQboInvoicesPaginated('tenant_qbo');
     } catch (err: any) {
       syncFailedCorrectly = true;
       syncErrorMsg = err.message;

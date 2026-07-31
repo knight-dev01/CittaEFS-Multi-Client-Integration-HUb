@@ -1,20 +1,60 @@
 {
   "tenants": [
     {
-      "id": "tenant_qbo_smb",
-      "name": "Acme Retail & Distro (QuickBooks Online)",
-      "companyName": "Acme Retail Solutions Ltd",
+      "id": "tenant_qbo",
+      "name": "TechNova Solutions",
+      "companyName": "TechNova Solutions Group",
       "tin": "P051239841A",
       "platformType": "QuickBooks Online",
       "marketTier": "Tier 1 (SMB)",
       "cittaApiKey": "sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz",
       "onboardingStatus": "LIVE_PRODUCTION",
-      "monthlyAllowance": 1000,
+      "monthlyAllowance": 5000,
+      "monthlyUsed": 0
+    },
+    {
+      "id": "tenant_sap",
+      "name": "Global Industries",
+      "companyName": "Global Industries Enterprise",
+      "tin": "P098877112B",
+      "platformType": "SAP S/4HANA",
+      "marketTier": "Tier 3 (Enterprise)",
+      "cittaApiKey": "sk_live_qweQWE123asdzxc",
+      "onboardingStatus": "NRS_VERIFIED",
+      "monthlyAllowance": 50000,
+      "monthlyUsed": 0
+    },
+    {
+      "id": "tenant_xero",
+      "name": "Retail Innovations",
+      "companyName": "Retail Innovations Ltd",
+      "tin": "P011223344C",
+      "platformType": "Xero",
+      "marketTier": "Tier 2 (Mid-Market)",
+      "cittaApiKey": "sk_live_vbnVBN456fghrty",
+      "onboardingStatus": "LIVE_PRODUCTION",
+      "monthlyAllowance": 10000,
       "monthlyUsed": 0
     }
   ],
   "datasets": {
-    "tenant_qbo_smb": {
+    "tenant_qbo": {
+      "customersCount": 0,
+      "productsCount": 0,
+      "invoicesCount": 0,
+      "customers": [],
+      "items": [],
+      "invoices": []
+    },
+    "tenant_sap": {
+      "customersCount": 0,
+      "productsCount": 0,
+      "invoicesCount": 0,
+      "customers": [],
+      "items": [],
+      "invoices": []
+    },
+    "tenant_xero": {
       "customersCount": 0,
       "productsCount": 0,
       "invoicesCount": 0,
