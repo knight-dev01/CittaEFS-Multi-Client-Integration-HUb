@@ -25,6 +25,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const queryParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const isQboConnectRedirect = (typeof window !== 'undefined' && window.location.pathname === '/connect-quickbooks') || queryParams.get('connect') === 'qbo';
+
   const quickTestAccounts = [
     { label: 'Sarah (Admin - Full Access)', email: 'admin@cittaefs.com', pass: 'Admin123!' },
     { label: 'David (Integration Mgr)', email: 'd.okafor@cittaefs.com', pass: 'Okafor2026!' },
@@ -93,6 +96,13 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </p>
           </div>
         </div>
+
+        {isQboConnectRedirect && (
+          <div className="bg-amber-950/90 border-2 border-amber-500 text-amber-200 p-3 text-xs flex items-center space-x-2">
+            <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <span>QuickBooks Authorization Request: Please sign in with an Administrator or Integration Manager account to manage Intuit OAuth integration.</span>
+          </div>
+        )}
 
         {errorMsg && (
           <div className="bg-red-950/80 border-2 border-red-600 text-red-200 p-3 text-xs flex items-center space-x-2">

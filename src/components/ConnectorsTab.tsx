@@ -26,6 +26,10 @@ export function ConnectorsTab() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [syncingQbo, setSyncingQbo] = useState(false);
 
+  const queryParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const isQboDisconnectedNotice = queryParams.get('qbo') === 'disconnected';
+  const isQboConnectNotice = queryParams.get('connect') === 'qbo' || (typeof window !== 'undefined' && window.location.pathname === '/connect-quickbooks');
+
   const handleSyncQbo = async () => {
     setSyncingQbo(true);
     try {
@@ -214,6 +218,38 @@ export function ConnectorsTab() {
           <span>+ Add New Connector Adapter</span>
         </button>
       </div>
+
+      {/* Intuit Disconnect Route Banner */}
+      {isQboDisconnectedNotice && (
+        <div className="bg-amber-100 border-2 border-amber-600 text-amber-950 p-4 font-mono text-xs flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0" />
+            <div>
+              <strong className="font-black text-amber-950 uppercase">QuickBooks Disconnect Notice:</strong>
+              <p className="mt-0.5">Your QuickBooks Online app session was disconnected from Intuit. To restore automated CDC webhooks & IRN writebacks, please click "+ Add New Connector Adapter" to re-authenticate.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Intuit Connect / Reconnect Route Banner */}
+      {isQboConnectNotice && (
+        <div className="bg-emerald-100 border-2 border-emerald-700 text-emerald-950 p-4 font-mono text-xs flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Zap className="w-5 h-5 text-emerald-700 shrink-0" />
+            <div>
+              <strong className="font-black text-emerald-950 uppercase">Intuit Authorization Request:</strong>
+              <p className="mt-0.5">You arrived via QuickBooks App Store integration link. Click "+ Add New Connector Adapter" or select QuickBooks Online below to initiate OAuth 2.0 grant.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black uppercase border-2 border-slate-900 cursor-pointer text-[11px] shrink-0"
+          >
+            Authorize QBO Now
+          </button>
+        </div>
+      )}
 
       {/* Connector Health Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

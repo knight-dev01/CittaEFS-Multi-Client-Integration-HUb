@@ -23,7 +23,21 @@ import { Cpu } from 'lucide-react';
 function HubMainContent() {
   const { currentUser, login, isBgRefreshing } = useHub();
 
-  const [activeTab, setActiveTab] = useState<string>('clients');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const path = window.location.pathname;
+      if (
+        path === '/connect-quickbooks' || 
+        params.get('tab') === 'connectors' || 
+        params.get('qbo') === 'disconnected' || 
+        params.get('connect') === 'qbo'
+      ) {
+        return 'connectors';
+      }
+    }
+    return 'clients';
+  });
 
   const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
