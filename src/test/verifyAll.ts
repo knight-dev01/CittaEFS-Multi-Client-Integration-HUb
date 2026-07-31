@@ -568,7 +568,7 @@ async function runAllTests() {
     const { getIntuitOAuthClient, getValidQboAccessToken, ingestQboInvoice, writebackToQbo } = await import('../services/qboService');
 
     // 0. Intuit OAuth Client Initialization & Missing Environment Error Validation
-    const clientOk = Boolean(getIntuitOAuthClient());
+    const clientOk = Boolean(await getIntuitOAuthClient());
     assert(
       'QuickBooks Integration',
       'getIntuitOAuthClient Initialization with Valid Environment',
@@ -587,7 +587,7 @@ async function runAllTests() {
     let missingCredsCaught = false;
     let missingCredsErr = '';
     try {
-      getIntuitOAuthClient();
+      await getIntuitOAuthClient();
     } catch (err: any) {
       missingCredsCaught = true;
       missingCredsErr = err.message;
@@ -608,7 +608,7 @@ async function runAllTests() {
     let missingRedirectCaught = false;
     let missingRedirectErr = '';
     try {
-      getIntuitOAuthClient();
+      await getIntuitOAuthClient();
     } catch (err: any) {
       missingRedirectCaught = true;
       missingRedirectErr = err.message;

@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import OAuthClient from 'intuit-oauth';
 import { getDatabaseUrl } from '../config/dbConfig';
 import { unpackAndDecryptString, packEncryptedString } from '../config/encryption';
 import { QuickBooksAdapter } from '../adapters/connectorAdapters';
@@ -13,7 +12,7 @@ const qboAdapter = new QuickBooksAdapter();
  * Creates and returns an Intuit OAuth2 client instance using intuit-oauth SDK.
  * Throws explicit error if QBO_CLIENT_ID, QBO_CLIENT_SECRET, or QBO_REDIRECT_URI is missing.
  */
-export function getIntuitOAuthClient() {
+export async function getIntuitOAuthClient() {
   if (!process.env.QBO_CLIENT_ID || !process.env.QBO_CLIENT_SECRET) {
     throw new Error('QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables are required.');
   }
@@ -25,6 +24,8 @@ export function getIntuitOAuthClient() {
   const clientSecret = process.env.QBO_CLIENT_SECRET;
   const redirectUri = process.env.QBO_REDIRECT_URI;
   const environment = (process.env.QBO_ENVIRONMENT || 'sandbox').toLowerCase() === 'production' ? 'production' : 'sandbox';
+
+  const { default: OAuthClient } = await import('intuit-oauth');
 
   return new OAuthClient({
     clientId,
