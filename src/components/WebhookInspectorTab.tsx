@@ -18,7 +18,7 @@ export function WebhookInspectorTab() {
 
   const [selectedWebhook, setSelectedWebhook] = useState<any | null>(null);
 
-  const mockWebhooks = [
+  const incomingWebhooks = [
     {
       id: 'wh_evt_8011',
       tenantId: activeTenant.id,
@@ -119,12 +119,12 @@ export function WebhookInspectorTab() {
         {/* Left: Webhook Event Log List */}
         <div className="lg:col-span-6 bg-white border-2 border-slate-900 overflow-hidden">
           <div className="p-3 bg-slate-100 border-b-2 border-slate-900 font-black uppercase text-slate-900 flex justify-between items-center">
-            <span>Incoming Webhook Streams ({mockWebhooks.length})</span>
+            <span>Incoming Webhook Streams ({incomingWebhooks.length})</span>
             <span className="text-[10px] text-slate-600 font-normal">HTTP POST Listeners</span>
           </div>
 
           <div className="divide-y-2 divide-slate-100 font-mono">
-            {mockWebhooks.map((wh) => (
+            {incomingWebhooks.map((wh) => (
               <div 
                 key={wh.id}
                 onClick={() => setSelectedWebhook(wh)}

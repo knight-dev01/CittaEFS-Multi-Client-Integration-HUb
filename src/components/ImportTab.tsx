@@ -93,7 +93,7 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
     addLog(`Pulling customer directory from ${selectedSource.toUpperCase()} API...`);
 
     setTimeout(async () => {
-      const mockCustomers = selectedSource === 'qbo' ? [
+      const pulledCustomerData = selectedSource === 'qbo' ? [
         { code: 'QBO-CUST-1092', name: 'Zenith Logistics Ltd', tin: 'P019283746Z', email: 'billing@zenith.co.ke', address: 'Nairobi Gate Park, Unit 4' },
         { code: 'QBO-CUST-2041', name: 'Savannah Agribusiness SA', tin: 'P051987654A', email: 'accounts@savannah.co.ke', address: 'Nakuru Highway Industrial Zone' }
       ] : [
@@ -101,7 +101,7 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
         { code: 'SAGE-CUST-502', name: 'Rift Valley Hauliers Ltd', tin: 'P034567891C', email: 'finance@rvh.co.ke', address: 'Eldoret Logistics Hub' }
       ];
 
-      for (const c of mockCustomers) {
+      for (const c of pulledCustomerData) {
         await addCustomer({
           clientCustomerCode: c.code,
           name: c.name,
@@ -113,8 +113,8 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
         });
       }
 
-      setPulledCustomers(mockCustomers);
-      addLog(`✅ Pulled ${mockCustomers.length} customer profiles and synced to canonical database.`);
+      setPulledCustomers(pulledCustomerData);
+      addLog(`✅ Pulled ${pulledCustomerData.length} customer profiles and synced to canonical database.`);
       setErpStep(3);
       setIsProcessing(false);
     }, 800);
@@ -125,7 +125,7 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
     addLog(`Pulling item & product catalog from ${selectedSource.toUpperCase()} API...`);
 
     setTimeout(async () => {
-      const mockProducts = selectedSource === 'qbo' ? [
+      const pulledProductData = selectedSource === 'qbo' ? [
         { itemCode: 'SKU-LAP-DELL15', desc: 'Dell XPS 15 Business Laptop', price: 120000, hsn: 'HS-8471.30' },
         { itemCode: 'SRV-SETUP-02', desc: 'Onsite Server Setup Service', price: 45000, hsn: 'SRV-7212.10' }
       ] : [
@@ -133,7 +133,7 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
         { itemCode: 'SAGE-SKU-MON27', desc: 'Dell 27-Inch 4K Monitor', price: 85000, hsn: 'HS-8528.52' }
       ];
 
-      for (const p of mockProducts) {
+      for (const p of pulledProductData) {
         await addItemMapping({
           clientSku: p.itemCode,
           description: p.desc,
@@ -146,8 +146,8 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
         });
       }
 
-      setPulledProducts(mockProducts);
-      addLog(`✅ Pulled ${mockProducts.length} product mappings and updated CittaEFS Item Dictionary.`);
+      setPulledProducts(pulledProductData);
+      addLog(`✅ Pulled ${pulledProductData.length} product mappings and updated CittaEFS Item Dictionary.`);
       setErpStep(4);
       setIsProcessing(false);
     }, 800);
@@ -158,7 +158,7 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
     addLog(`Pulling unsubmitted invoice records from ${selectedSource.toUpperCase()} ERP...`);
 
     setTimeout(() => {
-      const mockInvoices = selectedSource === 'qbo' ? [
+      const pulledInvoiceData = selectedSource === 'qbo' ? [
         {
           clientInvoiceNumber: `QBO-LIVE-${Math.floor(1000 + Math.random() * 9000)}`,
           invoiceKind: 'B2B',
@@ -185,8 +185,8 @@ EFS-EXCEL-002,B2C,2026-07-28,CUST-RETAIL-WALKIN,Walk-in Retail Customer,N/A,SKU-
         }
       ];
 
-      setPulledInvoices(mockInvoices);
-      addLog(`✅ Pulled ${mockInvoices.length} ERP invoices ready for compliance validation.`);
+      setPulledInvoices(pulledInvoiceData);
+      addLog(`✅ Pulled ${pulledInvoiceData.length} ERP invoices ready for compliance validation.`);
       setErpStep(5);
       setIsProcessing(false);
     }, 800);

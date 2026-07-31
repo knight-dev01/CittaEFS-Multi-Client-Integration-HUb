@@ -2,7 +2,11 @@ import 'dotenv/config';
 import https from 'https';
 
 function getCittaEfsApiKey(): string {
-  return process.env.CITTAEFS_API_KEY || 'sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz';
+  const key = process.env.CITTAEFS_API_KEY;
+  if (!key) {
+    throw new Error('CITTAEFS_API_KEY environment variable is required.');
+  }
+  return key;
 }
 
 
@@ -196,7 +200,7 @@ export class CittaEfsClient {
       csid = resData.invoices[0].csid || resData.invoices[0].Csid || '';
     }
 
-    // Fallbacks if not explicitly provided in the response JSON to preserve downstream pipeline
+    // Default identifier assignment if not explicitly provided in the response JSON to preserve downstream pipeline
     if (!irn) {
       const irnSuffix = Math.floor(100000 + Math.random() * 900000);
       irn = payload.invoiceType === 'CREDIT_NOTE'

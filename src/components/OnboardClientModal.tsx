@@ -7,7 +7,7 @@ interface OnboardClientModalProps {
 }
 
 export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
-  const { onboardTenant, purgeDemoData } = useHub();
+  const { onboardTenant } = useHub();
 
   const [companyName, setCompanyName] = useState('');
   const [tin, setTin] = useState('');
@@ -28,7 +28,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
         tin,
         platformType,
         marketTier,
-        oauthSecret: oauthSecret || 'demo_secret_token_123'
+        oauthSecret: oauthSecret || `rt_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`
       });
       setCreatedResult(tenant);
       setIsSubmitting(false);

@@ -1,5 +1,9 @@
 import 'dotenv/config';
 import nock from 'nock';
+
+process.env.QBO_CLIENT_ID = process.env.QBO_CLIENT_ID || 'test_qbo_client_id_123';
+process.env.QBO_CLIENT_SECRET = process.env.QBO_CLIENT_SECRET || 'test_qbo_client_secret_456';
+process.env.CITTAEFS_API_KEY = process.env.CITTAEFS_API_KEY || 'sk_live_test_api_key_789';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { getDatabaseUrl } from '../config/dbConfig';
@@ -591,7 +595,7 @@ async function runAllTests() {
       }
     });
 
-    // 2. Token Retrieval Test
+    // 2. Token Retrieval Test (Cached)
     const token = await getValidQboAccessToken('tenant_qbo_smb');
     assert(
       'QuickBooks Integration',
@@ -601,6 +605,89 @@ async function runAllTests() {
       'Retrieves and decrypts valid access token',
       `Retrieved Token: ${token}`
     );
+
+    // 2b. Token Refresh Test with Nock (Expired Token)
+    await prisma.integration.update({
+      where: {
+        tenantId_sourceSystem: {
+          tenantId: 'tenant_qbo_smb',
+          sourceSystem: 'QUICKBOOKS_ONLINE'
+        }
+      },
+      data: {
+        accessTokenExpiresAt: new Date(Date.now() - 3600 * 1000)
+      }
+    });
+
+    nock('https://oauth.platform.intuit.com')
+      .post('/oauth2/v1/tokens/bearer')
+      .reply(200, {
+        access_token: 'refreshed_access_token_789',
+        refresh_token: 'new_refresh_token_789',
+        expires_in: 3600
+      });
+
+    const refreshedToken = await getValidQboAccessToken('tenant_qbo_smb');
+    nock.cleanAll();
+
+    assert(
+      'QuickBooks Integration',
+      'QBO Access Token Refresh via OAuth API',
+      'Security',
+      refreshedToken === 'refreshed_access_token_789',
+      'Refreshes access token via Intuit OAuth endpoint when expired',
+      `Refreshed Token: ${refreshedToken}`
+    );
+
+    // 2c. Token Refresh Error Propagation Test with Nock
+    await prisma.integration.update({
+      where: {
+        tenantId_sourceSystem: {
+          tenantId: 'tenant_qbo_smb',
+          sourceSystem: 'QUICKBOOKS_ONLINE'
+        }
+      },
+      data: {
+        accessTokenExpiresAt: new Date(Date.now() - 3600 * 1000)
+      }
+    });
+
+    nock('https://oauth.platform.intuit.com')
+      .post('/oauth2/v1/tokens/bearer')
+      .reply(401, 'Invalid Grant');
+
+    let refreshFailed = false;
+    let refreshErr = '';
+    try {
+      await getValidQboAccessToken('tenant_qbo_smb');
+    } catch (e: any) {
+      refreshFailed = true;
+      refreshErr = e.message;
+    }
+    nock.cleanAll();
+
+    assert(
+      'QuickBooks Integration',
+      'QBO Access Token Refresh Failure Propagation',
+      'FailureRecovery',
+      refreshFailed && refreshErr.includes('QuickBooks connection needs reauthorization'),
+      'Throws real error when OAuth token refresh fails',
+      refreshFailed ? `Caught real error: ${refreshErr}` : 'Failed to throw error'
+    );
+
+    // Reset valid cached token for remaining tests
+    await prisma.integration.update({
+      where: {
+        tenantId_sourceSystem: {
+          tenantId: 'tenant_qbo_smb',
+          sourceSystem: 'QUICKBOOKS_ONLINE'
+        }
+      },
+      data: {
+        accessToken: encryptedAccess,
+        accessTokenExpiresAt: new Date(Date.now() + 3600 * 1000)
+      }
+    });
 
     // 3. QBO Ingestion Test
     const rawQboInvoice = {

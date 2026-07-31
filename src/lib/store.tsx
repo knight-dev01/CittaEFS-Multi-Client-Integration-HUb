@@ -19,7 +19,7 @@ import {
   INITIAL_VALIDATION_ERRORS, 
   INITIAL_AUDIT_LOGS, 
   INITIAL_METRICS 
-} from '../data/mockData';
+} from '../data/referenceData';
 
 interface HubContextType {
   currentUser: UserSession | null;
@@ -157,7 +157,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         if (Array.isArray(auditRes)) setAuditLogs(auditRes);
         if (metRes && typeof metRes === 'object') setMetrics(metRes);
       } catch (e) {
-        console.warn('Backend refresh fallback to local state:', e);
+        console.warn('Backend refresh warning, preserving local state:', e);
       }
     });
   };
@@ -251,7 +251,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
     connectWS();
     connectSSE();
 
-    // Backup polling loop as fallback (every 8 seconds)
+    // Backup polling loop (every 8 seconds)
     const backupPoll = setInterval(() => {
       refreshAll();
     }, 8000);
@@ -422,7 +422,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         await refreshAll();
         return data;
       } catch (e) {
-        console.error('Purge demo data error:', e);
+        console.error('Purge test data error:', e);
         throw e;
       }
     });

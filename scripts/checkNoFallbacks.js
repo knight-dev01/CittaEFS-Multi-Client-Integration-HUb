@@ -1,29 +1,34 @@
 /**
  * Guardrail script: checkNoFallbacks.js
- * Scans server.ts and src/ for unauthorized runtime fallback/mock data patterns
- * that mask database or API failures.
- * Exits with non-zero code if violations are found.
+ * Scans server.ts and all .ts/.tsx files in src/ for runtime fallback/mock data patterns.
+ * Exits with non-zero code if unauthorized matches are found outside the allowlist.
  */
 
 import fs from 'fs';
 import path from 'path';
 
-const FORBIDDEN_PATTERNS = [
-  {
-    regex: /catch\s*\(\s*dbErr\s*\)[\s\S]*?DEMO_USERS/i,
-    description: 'Catch block falling back to DEMO_USERS on database failure'
-  },
-  {
-    regex: /catch\s*\(\s*dbErr\s*\)[\s\S]*?=\s*\{\s*id:/i,
-    description: 'Catch block returning mock object on database failure'
-  },
-  {
-    regex: /catch\s*\(\s*\w*\s*\)[\s\S]*?using mock token fallback/i,
-    description: 'Silently falling back to mock QBO token on token exchange failure'
-  }
+// Substrings to scan case-insensitively
+const FORBIDDEN_SUBSTRINGS = [
+  'fallback',
+  'demo data',
+  'demo mode',
+  'sample data',
+  'mock',
+  'dummy',
+  'placeholder'
 ];
 
-const EXCLUDED_FILES = ['verifyAll.ts', 'mockData.ts'];
+/**
+ * Explicit allowlist array of files permitted to contain these terms.
+ * Each entry includes an explanation for why the file is permitted.
+ */
+const ALLOWLIST = [
+  // Test suite containing mock data generators, nock mocks, and test assertions
+  'src/test/verifyAll.ts',
+
+  // Static reference data constants used for reference UI components
+  'src/data/referenceData.ts'
+];
 
 function walkDir(dir, fileList = []) {
   const files = fs.readdirSync(dir);
@@ -41,34 +46,70 @@ function walkDir(dir, fileList = []) {
   return fileList;
 }
 
-function runAudit() {
-  const allFiles = [...walkDir('src'), 'server.ts'];
-  let violationsFound = 0;
+function checkFile(filePath) {
+  const relativePath = filePath.replace(/^.\//, '');
+  if (ALLOWLIST.includes(relativePath)) {
+    return [];
+  }
 
-  for (const filePath of allFiles) {
-    if (EXCLUDED_FILES.some(ex => filePath.endsWith(ex))) {
-      continue;
-    }
-    if (!filePath.endsWith('.ts') && !filePath.endsWith('.js') && !filePath.endsWith('.tsx')) {
-      continue;
-    }
+  const content = fs.readFileSync(filePath, 'utf8');
+  const lines = content.split('\n');
+  const fileViolations = [];
 
-    const content = fs.readFileSync(filePath, 'utf8');
-    for (const pattern of FORBIDDEN_PATTERNS) {
-      if (pattern.regex.test(content)) {
-        console.error(`[Guardrail Violation] Found forbidden pattern in ${filePath}: ${pattern.description}`);
-        violationsFound++;
+  lines.forEach((lineText, index) => {
+    // Ignore literal HTML/JSX placeholder="..." or placeholder='...' attribute patterns
+    const cleanLine = lineText.replace(/placeholder\s*=\s*(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, '');
+
+    const lowerLine = cleanLine.toLowerCase();
+    for (const sub of FORBIDDEN_SUBSTRINGS) {
+      if (lowerLine.includes(sub)) {
+        fileViolations.push({
+          line: index + 1,
+          matchedTerm: sub,
+          snippet: lineText.trim()
+        });
+        break;
       }
+    }
+  });
+
+  return fileViolations;
+}
+
+function main() {
+  console.log('🔍 Running Full-Codebase Fallback & Mock Data Guardrail Scan...\n');
+  const targetFiles = [...walkDir('src'), 'server.ts'].filter(
+    f => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.includes('node_modules')
+  );
+
+  let totalViolations = 0;
+  const flaggedFiles = [];
+
+  for (const file of targetFiles) {
+    const violations = checkFile(file);
+    if (violations.length > 0) {
+      flaggedFiles.push({ file, violations });
+      totalViolations += violations.length;
     }
   }
 
-  if (violationsFound > 0) {
-    console.error(`\n❌ Found ${violationsFound} violation(s) of runtime fallback/mock data policies.`);
+  console.log(`Scanned ${targetFiles.length} source file(s).`);
+  console.log(`Allowlisted ${ALLOWLIST.length} legitimate reference file(s):\n  - ${ALLOWLIST.join('\n  - ')}\n`);
+
+  if (totalViolations > 0) {
+    console.error(`❌ GUARDRAIL VIOLATION: Found ${totalViolations} match(es) across ${flaggedFiles.length} file(s) outside allowlist:\n`);
+    for (const item of flaggedFiles) {
+      console.error(`FILE: ${item.file}`);
+      for (const v of item.violations) {
+        console.error(`  Line ${v.line} [matched "${v.matchedTerm}"]: ${v.snippet}`);
+      }
+      console.error('');
+    }
     process.exit(1);
   } else {
-    console.log('✅ No unauthorized runtime fallback or mock data patterns detected.');
+    console.log('✅ GUARDRAIL PASSED: 0 unauthorized runtime fallback or mock data patterns found across production source files.\n');
     process.exit(0);
   }
 }
 
-runAudit();
+main();

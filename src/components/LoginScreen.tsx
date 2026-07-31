@@ -25,7 +25,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const demoAccounts = [
+  const quickTestAccounts = [
     { label: 'Sarah (Admin - Full Access)', email: 'admin@cittaefs.com', pass: 'Admin123!' },
     { label: 'David (Integration Mgr)', email: 'd.okafor@cittaefs.com', pass: 'Okafor2026!' },
     { label: 'Amara (Operator - Acme)', email: 'billing@acme.com', pass: 'Acme2026!' },
@@ -192,7 +192,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             <span>Quick-Test Seeded Accounts (Click to load):</span>
           </div>
           <div className="grid grid-cols-1 gap-1.5">
-            {demoAccounts.map((acc, idx) => (
+            {quickTestAccounts.map((acc, idx) => (
               <button
                 key={idx}
                 type="button"

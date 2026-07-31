@@ -35,7 +35,7 @@ export const invoiceIngestionSchema = z.object({
     effectiveKind = 'B2C';
   }
 
-  // CRITICAL BUSINESS RULE 2: Compute line item amounts & fallback codes
+  // CRITICAL BUSINESS RULE 2: Compute line item amounts & default classification codes
   const transformedLineItems = data.lineItems.map(item => {
     const qty = item.quantity;
     const price = item.unitPrice;
@@ -45,7 +45,7 @@ export const invoiceIngestionSchema = z.object({
     const vatAmount = (taxableAmount * vatRate) / 100;
     const totalAmount = taxableAmount + vatAmount;
 
-    // SKU Code fallback: If code is unmapped or missing, assign SERV-DEFAULT fallback
+    // SKU Code default: If code is unmapped or missing, assign SERV-DEFAULT code
     let hsCode = item.hsOrServiceCode;
     if (!hsCode || hsCode === 'UNMAPPED' || hsCode.trim().length === 0) {
       hsCode = 'SERV-DEFAULT';

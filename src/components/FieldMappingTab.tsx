@@ -29,7 +29,7 @@ export function FieldMappingTab() {
       clientField: 'Invoice.Header.CustomerTaxId',
       targetField: 'Customer.TaxIdentificationNumber',
       rule: 'TRIM_AND_UPPERCASE',
-      fallback: 'AUTO_DOWNGRADE_TO_B2C',
+      defaultValue: 'AUTO_DOWNGRADE_TO_B2C',
       status: 'ACTIVE'
     },
     {
@@ -37,7 +37,7 @@ export function FieldMappingTab() {
       clientField: 'LineItem.SKU',
       targetField: 'InvoiceLineItem.HsOrServiceCode',
       rule: 'LOOKUP_DICTIONARY',
-      fallback: 'ASSIGN_SERV_DEFAULT',
+      defaultValue: 'ASSIGN_SERV_DEFAULT',
       status: 'ACTIVE'
     },
     {
@@ -45,7 +45,7 @@ export function FieldMappingTab() {
       clientField: 'LineItem.TaxCode',
       targetField: 'InvoiceLineItem.VatRate',
       rule: 'MAP_PERCENTAGE_16',
-      fallback: '16.00',
+      defaultValue: '16.00',
       status: 'ACTIVE'
     },
     {
@@ -53,7 +53,7 @@ export function FieldMappingTab() {
       clientField: 'Invoice.TxnDate',
       targetField: 'Invoice.IssueDateUtc',
       rule: 'CONVERT_ISO_8601_UTC',
-      fallback: 'CURRENT_TIMESTAMP',
+      defaultValue: 'CURRENT_TIMESTAMP',
       status: 'ACTIVE'
     }
   ]);
@@ -64,7 +64,7 @@ export function FieldMappingTab() {
       clientField,
       targetField: transformation === 'MAP_TO_HS_CODE' ? 'InvoiceLineItem.HsOrServiceCode' : 'InvoiceLineItem.VatRate',
       rule: transformation,
-      fallback: nrsTargetCode || 'SERV-DEFAULT',
+      defaultValue: nrsTargetCode || 'SERV-DEFAULT',
       status: 'ACTIVE'
     };
     setFieldRules([newRule, ...fieldRules]);
@@ -167,7 +167,7 @@ export function FieldMappingTab() {
                 <th className="p-3">Client ERP Field</th>
                 <th className="p-3">Target Field</th>
                 <th className="p-3">Transformation</th>
-                <th className="p-3">Fallback Value</th>
+                <th className="p-3">Default Value</th>
                 <th className="p-3">Status</th>
                 <th className="p-3 text-right">Action</th>
               </tr>
@@ -183,7 +183,7 @@ export function FieldMappingTab() {
                       {r.rule}
                     </span>
                   </td>
-                  <td className="p-3 font-bold text-emerald-700">{r.fallback}</td>
+                  <td className="p-3 font-bold text-emerald-700">{r.defaultValue}</td>
                   <td className="p-3">
                     <span className="px-2 py-0.5 bg-emerald-300 text-slate-950 border border-slate-900 text-[10px] font-black uppercase">
                       {r.status}

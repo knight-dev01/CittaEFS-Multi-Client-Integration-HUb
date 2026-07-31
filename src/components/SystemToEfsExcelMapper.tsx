@@ -29,7 +29,7 @@ interface SystemMappingConfig {
     efsExcelColumn: string;
     transformationRule: string;
     nrsTargetField: string;
-    sampleValue: string;
+    exampleValue: string;
   }[];
 }
 
@@ -47,42 +47,42 @@ const SYSTEM_MAPPINGS: SystemMappingConfig[] = [
         efsExcelColumn: 'InvoiceNumber',
         transformationRule: 'DIRECT_PASSTHROUGH',
         nrsTargetField: 'clientInvoiceNumber',
-        sampleValue: 'QBO-99201'
+        exampleValue: 'QBO-99201'
       },
       {
         sourceField: 'CustomerRef.TaxId / TIN',
         efsExcelColumn: 'CustomerTIN',
         transformationRule: 'TRIM_UPPERCASE_VALIDATE_NRS_TIN',
         nrsTargetField: 'customer.customerTin',
-        sampleValue: 'P019283746Z'
+        exampleValue: 'P019283746Z'
       },
       {
         sourceField: 'TxnDate (YYYY-MM-DD)',
         efsExcelColumn: 'IssueDate',
         transformationRule: 'CONVERT_UTC_ISO8601',
         nrsTargetField: 'issueDateUtc',
-        sampleValue: '2026-07-28'
+        exampleValue: '2026-07-28'
       },
       {
         sourceField: 'Line.SalesItemLineDetail.ItemRef.Name',
         efsExcelColumn: 'ItemDescription',
         transformationRule: 'TRIM_AND_SANITIZE',
         nrsTargetField: 'lineItems[].description',
-        sampleValue: 'Dell XPS 15 Laptop'
+        exampleValue: 'Dell XPS 15 Laptop'
       },
       {
         sourceField: 'Line.Amount',
         efsExcelColumn: 'LineTotalAmount',
         transformationRule: 'DECIMAL_2_PLACES',
         nrsTargetField: 'lineItems[].totalAmount',
-        sampleValue: '120000.00'
+        exampleValue: '120000.00'
       },
       {
         sourceField: 'ClassRef.Name / SKU',
         efsExcelColumn: 'HsOrServiceCode',
         transformationRule: 'DICTIONARY_HS_LOOKUP',
         nrsTargetField: 'lineItems[].hsOrServiceCode',
-        sampleValue: 'HS-8471.30'
+        exampleValue: 'HS-8471.30'
       }
     ]
   },
@@ -99,42 +99,42 @@ const SYSTEM_MAPPINGS: SystemMappingConfig[] = [
         efsExcelColumn: 'InvoiceNumber',
         transformationRule: 'PREFIX_SAP_DOC',
         nrsTargetField: 'clientInvoiceNumber',
-        sampleValue: 'SAP-900812'
+        exampleValue: 'SAP-900812'
       },
       {
         sourceField: 'STCEG (Tax Number 1)',
         efsExcelColumn: 'CustomerTIN',
         transformationRule: 'VALIDATE_TAX_ID_FORMAT',
         nrsTargetField: 'customer.customerTin',
-        sampleValue: 'P000998877F'
+        exampleValue: 'P000998877F'
       },
       {
         sourceField: 'FKDAT (Billing Date)',
         efsExcelColumn: 'IssueDate',
         transformationRule: 'FORMAT_YYYY_MM_DD',
         nrsTargetField: 'issueDateUtc',
-        sampleValue: '2026-07-28'
+        exampleValue: '2026-07-28'
       },
       {
         sourceField: 'ARKTX (Item Short Text)',
         efsExcelColumn: 'ItemDescription',
         transformationRule: 'PASSTHROUGH',
         nrsTargetField: 'lineItems[].description',
-        sampleValue: 'Consulting Logistics Setup'
+        exampleValue: 'Consulting Logistics Setup'
       },
       {
         sourceField: 'NETWR (Net Value in Doc Currency)',
         efsExcelColumn: 'LineTotalAmount',
         transformationRule: 'FORMAT_CURRENCY_NUMERIC',
         nrsTargetField: 'lineItems[].totalAmount',
-        sampleValue: '85000.00'
+        exampleValue: '85000.00'
       },
       {
         sourceField: 'MATNR / MWSKZ (Material Tax Code)',
         efsExcelColumn: 'HsOrServiceCode',
         transformationRule: 'AUTO_INFER_NRS_SERVICE_CODE',
         nrsTargetField: 'lineItems[].hsOrServiceCode',
-        sampleValue: 'SRV-8703.20'
+        exampleValue: 'SRV-8703.20'
       }
     ]
   },
@@ -151,42 +151,42 @@ const SYSTEM_MAPPINGS: SystemMappingConfig[] = [
         efsExcelColumn: 'InvoiceNumber',
         transformationRule: 'DIRECT_ASSIGN',
         nrsTargetField: 'clientInvoiceNumber',
-        sampleValue: 'NS-INV-4401'
+        exampleValue: 'NS-INV-4401'
       },
       {
         sourceField: 'vatRegNum',
         efsExcelColumn: 'CustomerTIN',
         transformationRule: 'CLEAN_NON_ALPHANUMERIC',
         nrsTargetField: 'customer.customerTin',
-        sampleValue: 'P019283746Z'
+        exampleValue: 'P019283746Z'
       },
       {
         sourceField: 'trandate',
         efsExcelColumn: 'IssueDate',
         transformationRule: 'PARSE_MM_DD_YYYY',
         nrsTargetField: 'issueDateUtc',
-        sampleValue: '2026-07-28'
+        exampleValue: '2026-07-28'
       },
       {
         sourceField: 'item_description',
         efsExcelColumn: 'ItemDescription',
         transformationRule: 'PASSTHROUGH',
         nrsTargetField: 'lineItems[].description',
-        sampleValue: 'Oracle License Renewal'
+        exampleValue: 'Oracle License Renewal'
       },
       {
         sourceField: 'amount',
         efsExcelColumn: 'LineTotalAmount',
         transformationRule: 'CONVERT_FLOAT',
         nrsTargetField: 'lineItems[].totalAmount',
-        sampleValue: '250000.00'
+        exampleValue: '250000.00'
       },
       {
         sourceField: 'custcol_hs_code',
         efsExcelColumn: 'HsOrServiceCode',
         transformationRule: 'VALIDATE_HS_REGISTRY',
         nrsTargetField: 'lineItems[].hsOrServiceCode',
-        sampleValue: 'HS-8471.30'
+        exampleValue: 'HS-8471.30'
       }
     ]
   },
@@ -203,42 +203,42 @@ const SYSTEM_MAPPINGS: SystemMappingConfig[] = [
         efsExcelColumn: 'InvoiceNumber',
         transformationRule: 'DIRECT_PASSTHROUGH',
         nrsTargetField: 'clientInvoiceNumber',
-        sampleValue: 'SQL-STG-8812'
+        exampleValue: 'SQL-STG-8812'
       },
       {
         sourceField: 'cust_tin',
         efsExcelColumn: 'CustomerTIN',
-        transformationRule: 'CHECK_NULL_FALLBACK_B2C',
+        transformationRule: 'CHECK_NULL_DOWNGRADE_B2C',
         nrsTargetField: 'customer.customerTin',
-        sampleValue: 'P019283746Z'
+        exampleValue: 'P019283746Z'
       },
       {
         sourceField: 'created_at',
         efsExcelColumn: 'IssueDate',
         transformationRule: 'TRUNCATE_DATE',
         nrsTargetField: 'issueDateUtc',
-        sampleValue: '2026-07-28'
+        exampleValue: '2026-07-28'
       },
       {
         sourceField: 'item_name',
         efsExcelColumn: 'ItemDescription',
         transformationRule: 'TRIM_WHITESPACE',
         nrsTargetField: 'lineItems[].description',
-        sampleValue: 'Heavy Industrial Pumps'
+        exampleValue: 'Heavy Industrial Pumps'
       },
       {
         sourceField: 'subtotal',
         efsExcelColumn: 'LineTotalAmount',
         transformationRule: 'NUMERIC_PARSE',
         nrsTargetField: 'lineItems[].totalAmount',
-        sampleValue: '450000.00'
+        exampleValue: '450000.00'
       },
       {
         sourceField: 'hs_tariff_code',
         efsExcelColumn: 'HsOrServiceCode',
         transformationRule: 'DEFAULT_LOOKUP',
         nrsTargetField: 'lineItems[].hsOrServiceCode',
-        sampleValue: 'HS-8471.30'
+        exampleValue: 'HS-8471.30'
       }
     ]
   },
@@ -255,42 +255,42 @@ const SYSTEM_MAPPINGS: SystemMappingConfig[] = [
         efsExcelColumn: 'InvoiceNumber',
         transformationRule: 'ROW_GROUPING_KEY',
         nrsTargetField: 'clientInvoiceNumber',
-        sampleValue: 'EFS-EXCEL-001'
+        exampleValue: 'EFS-EXCEL-001'
       },
       {
         sourceField: 'customerTin',
         efsExcelColumn: 'CustomerTIN',
         transformationRule: 'REGULATORY_TIN_CHECK',
         nrsTargetField: 'customer.customerTin',
-        sampleValue: 'P019283746Z'
+        exampleValue: 'P019283746Z'
       },
       {
         sourceField: 'issueDate',
         efsExcelColumn: 'IssueDate',
         transformationRule: 'DATE_ISO_FORMAT',
         nrsTargetField: 'issueDateUtc',
-        sampleValue: '2026-07-28'
+        exampleValue: '2026-07-28'
       },
       {
         sourceField: 'description',
         efsExcelColumn: 'ItemDescription',
         transformationRule: 'NRS_STRING_ESCAPE',
         nrsTargetField: 'lineItems[].description',
-        sampleValue: 'Enterprise Cloud Server'
+        exampleValue: 'Enterprise Cloud Server'
       },
       {
         sourceField: 'unitPrice',
         efsExcelColumn: 'UnitPrice',
         transformationRule: 'CURRENCY_MULTIPLY_QTY',
         nrsTargetField: 'lineItems[].unitPrice',
-        sampleValue: '350000.00'
+        exampleValue: '350000.00'
       },
       {
         sourceField: 'hsOrServiceCode',
         efsExcelColumn: 'HsOrServiceCode',
         transformationRule: 'TAXONOMY_MATCH',
         nrsTargetField: 'lineItems[].hsOrServiceCode',
-        sampleValue: 'HS-8471.30'
+        exampleValue: 'HS-8471.30'
       }
     ]
   }
@@ -309,19 +309,19 @@ export function SystemToEfsExcelMapper() {
     setTransformedOutput(null);
 
     setTimeout(() => {
-      const mockJson = {
+      const transformedSampleJson = {
         tenantId: 'tenant_qbo_smb',
         sourceAdapter: selectedSystem.name,
         ingestionProtocol: selectedSystem.badge,
         efsExcelStandardRow: {
-          clientInvoiceNumber: selectedSystem.mappings[0].sampleValue,
-          customerTin: selectedSystem.mappings[1].sampleValue,
-          issueDate: selectedSystem.mappings[2].sampleValue,
+          clientInvoiceNumber: selectedSystem.mappings[0].exampleValue,
+          customerTin: selectedSystem.mappings[1].exampleValue,
+          issueDate: selectedSystem.mappings[2].exampleValue,
           lineItems: [
             {
-              description: selectedSystem.mappings[3].sampleValue,
-              totalAmount: parseFloat(selectedSystem.mappings[4].sampleValue.replace(/,/g, '')),
-              hsOrServiceCode: selectedSystem.mappings[5].sampleValue,
+              description: selectedSystem.mappings[3].exampleValue,
+              totalAmount: parseFloat(selectedSystem.mappings[4].exampleValue.replace(/,/g, '')),
+              hsOrServiceCode: selectedSystem.mappings[5].exampleValue,
               vatPercentage: 16.0
             }
           ]
@@ -333,14 +333,14 @@ export function SystemToEfsExcelMapper() {
             schemaVersion: 'NRS_2026_V2'
           },
           taxpayer: {
-            tin: selectedSystem.mappings[1].sampleValue,
+            tin: selectedSystem.mappings[1].exampleValue,
             status: 'NRS_VERIFIED'
           },
           validationStatus: 'PASSED_100_PERCENT'
         }
       };
 
-      setTransformedOutput(mockJson);
+      setTransformedOutput(transformedSampleJson);
       setIsSimulatingTransform(false);
     }, 600);
   };
@@ -459,7 +459,7 @@ export function SystemToEfsExcelMapper() {
                     </td>
                     <td className="p-2.5 text-[10px] font-mono text-slate-600 uppercase">{m.transformationRule}</td>
                     <td className="p-2.5 font-mono text-amber-800">{m.nrsTargetField}</td>
-                    <td className="p-2.5 font-mono text-slate-900 bg-slate-100">{m.sampleValue}</td>
+                    <td className="p-2.5 font-mono text-slate-900 bg-slate-100">{m.exampleValue}</td>
                   </tr>
                 ))}
               </tbody>
@@ -592,12 +592,12 @@ export function SystemToEfsExcelMapper() {
     "vatRate"
   ],
   "mapped_row_data": {
-    "clientInvoiceNumber": "${selectedSystem.mappings[0].sampleValue}",
-    "customerTin": "${selectedSystem.mappings[1].sampleValue}",
-    "issueDate": "${selectedSystem.mappings[2].sampleValue}",
-    "description": "${selectedSystem.mappings[3].sampleValue}",
-    "unitPrice": ${selectedSystem.mappings[4].sampleValue.replace(/,/g, '')},
-    "hsOrServiceCode": "${selectedSystem.mappings[5].sampleValue}",
+    "clientInvoiceNumber": "${selectedSystem.mappings[0].exampleValue}",
+    "customerTin": "${selectedSystem.mappings[1].exampleValue}",
+    "issueDate": "${selectedSystem.mappings[2].exampleValue}",
+    "description": "${selectedSystem.mappings[3].exampleValue}",
+    "unitPrice": ${selectedSystem.mappings[4].exampleValue.replace(/,/g, '')},
+    "hsOrServiceCode": "${selectedSystem.mappings[5].exampleValue}",
     "vatRate": 16.0
   }
 }`}

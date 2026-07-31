@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useHub } from '../lib/store';
 import { ValidationErrorItem } from '../types';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/mockData';
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
 import { 
   AlertTriangle, 
   CheckCircle2, 

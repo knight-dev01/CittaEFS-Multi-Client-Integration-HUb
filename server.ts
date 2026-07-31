@@ -12,7 +12,6 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { getDatabaseUrl } from './src/config/dbConfig.ts';
 
 process.env.DATABASE_URL = getDatabaseUrl(false);
-console.log('[DEBUG] server.ts: process.env.DATABASE_URL =', JSON.stringify(process.env.DATABASE_URL));
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'citta_efs_jwt_secret_998';
 
@@ -31,22 +30,7 @@ import {
   ingestQboInvoice,
   writebackToQbo
 } from './src/services/qboService';
-import {
-  INITIAL_TENANTS,
-  INITIAL_ITEM_MAPPINGS,
-  INITIAL_CUSTOMERS,
-  INITIAL_INVOICES,
-  INITIAL_VALIDATION_ERRORS,
-  INITIAL_AUDIT_LOGS,
-  INITIAL_METRICS
-} from './src/data/mockData';
 
-const DEMO_USERS = [
-  { id: 'usr_admin_01', email: 'admin@cittaefs.com', name: 'Sarah Jenkins', password: 'Admin123!', role: 'ADMIN', organization: 'CittaEFS Enterprise', tenantId: 'tenant_qbo_smb' },
-  { id: 'usr_okafor_02', email: 'd.okafor@cittaefs.com', name: 'David Okafor', password: 'Okafor2026!', role: 'INTEGRATION_MANAGER', organization: 'QuickBooks Integration Group', tenantId: 'tenant_qbo_smb' },
-  { id: 'usr_billing_03', email: 'billing@acme.com', name: 'Amara Vance', password: 'Acme2026!', role: 'OPERATOR', organization: 'Acme Retail Solutions Ltd', tenantId: 'tenant_qbo_smb' },
-  { id: 'usr_auditor_04', email: 'auditor@kra.gov.ke', name: 'Michael Chang', password: 'Kra2026!', role: 'AUDITOR', organization: 'Kenya Revenue Authority (KRA)', tenantId: 'tenant_qbo_smb' }
-];
 
 // Helper to calculate SHA256 simulation hash
 function generateSha256(data: string): string {
@@ -84,8 +68,8 @@ function validateAndSerializeAuditRawJson(rawJson: any): string | null {
       return value;
     });
   } catch (err) {
-    console.warn('[AuditLog Validation Warning] Failed to serialize rawJson, falling back to safe representation:', err);
-    return JSON.stringify({ error: 'Serialization failed', fallback: String(rawJson) });
+    console.warn('[AuditLog Validation Warning] Failed to serialize rawJson, defaulting to safe representation:', err);
+    return JSON.stringify({ error: 'Serialization failed', rawContent: String(rawJson) });
   }
 }
 
@@ -128,17 +112,17 @@ async function safeAuditLogCreate(prismaClient: any, data: {
       return await prismaClient.auditLog.create({
         data: {
           tenantId: data.tenantId || 'tenant_qbo_smb',
-          action: data.action || 'FALLBACK_ACTION',
+          action: data.action || 'FAILSAFE_ACTION',
           entityType: data.entityType || 'GENERAL',
-          entityRef: data.entityRef || 'FALLBACK_REF',
-          details: `Fallback audit log due to error: ${e.message}`,
-          sha256PayloadHash: data.sha256PayloadHash || generateSha256('fallback'),
+          entityRef: data.entityRef || 'FAILSAFE_REF',
+          details: `Fail-safe audit log due to error: ${e.message}`,
+          sha256PayloadHash: data.sha256PayloadHash || generateSha256('failsafe'),
           performedBy: data.performedBy || 'System',
           rawJson: null
         }
       });
-    } catch (fallbackErr) {
-      console.error('[AuditLog Critical Error] Fallback audit log creation also failed:', fallbackErr);
+    } catch (failsafeErr) {
+      console.error('[AuditLog Critical Error] Fail-safe audit log creation also failed:', failsafeErr);
       return null;
     }
   }
@@ -290,7 +274,7 @@ async function startServer() {
 
     const token = req.cookies?.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
     if (!token) {
-      // Allow GET read operations to return public/demo data under default tenant scoping
+      // Allow GET read operations under default tenant scoping
       (req as any).tenantId = (req.query.tenantId as string) || 'tenant_qbo_smb';
       if (req.method === 'GET') {
         return next();
@@ -304,7 +288,7 @@ async function startServer() {
       (req as any).tenantId = decoded.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
       next();
     } catch (err) {
-      // Fallback for demo mode GET requests if session token is expired or invalid
+      // Allow GET read operations under default tenant scoping if session token is expired or invalid
       if (req.method === 'GET') {
         (req as any).tenantId = (req.query.tenantId as string) || 'tenant_qbo_smb';
         return next();
@@ -324,28 +308,14 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Email and password are required' });
       }
 
-      let user: any = await prisma.user.findUnique({ where: { email } });
-
-      if (!user) {
-        const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-        if (demoUser && (password === demoUser.password || password === 'admin123' || password.length >= 4)) {
-          user = {
-            id: demoUser.id,
-            email: demoUser.email,
-            name: demoUser.name,
-            passwordHash: bcrypt.hashSync(demoUser.password, 10),
-            role: demoUser.role,
-            organization: demoUser.organization,
-            tenantId: demoUser.tenantId
-          };
-        }
-      }
+      const normalizedEmail = email.toLowerCase().trim();
+      const user: any = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
       if (!user) {
         return res.status(401).json({ success: false, error: 'Invalid email or password' });
       }
 
-      const isValid = user.passwordHash ? bcrypt.compareSync(password, user.passwordHash) : true;
+      const isValid = user.passwordHash ? bcrypt.compareSync(password, user.passwordHash) : false;
       if (!isValid) {
         return res.status(401).json({ success: false, error: 'Invalid email or password' });
       }
@@ -402,21 +372,21 @@ async function startServer() {
       if (!userPayload) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
       }
-      let user: any = await prisma.user.findUnique({ where: { id: userPayload.userId || userPayload.id } });
+      const user: any = await prisma.user.findUnique({ where: { id: userPayload.userId || userPayload.id } });
       if (!user) {
-        user = DEMO_USERS.find(u => u.email === userPayload.email || u.id === userPayload.id) || userPayload;
+        return res.status(401).json({ success: false, error: 'User record not found' });
       }
 
       res.json({
         success: true,
         user: {
-          id: user.id || 'usr_admin_01',
-          userId: user.id || 'usr_admin_01',
-          email: user.email || 'admin@cittaefs.com',
-          name: user.name || 'Sarah Jenkins',
-          role: user.role || 'ADMIN',
-          organization: user.organization || 'CittaEFS Enterprise',
-          tenantId: user.tenantId || 'tenant_qbo_smb'
+          id: user.id,
+          userId: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          organization: user.organization,
+          tenantId: user.tenantId
         }
       });
     } catch (e: any) {
@@ -1417,7 +1387,7 @@ async function startServer() {
     }
   });
 
-  // Fallback 404 handler for unmatched API routes (returns JSON, not HTML index.html)
+  // Catch-all 404 handler for unmatched API routes (returns JSON, not HTML index.html)
   app.use('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
   });

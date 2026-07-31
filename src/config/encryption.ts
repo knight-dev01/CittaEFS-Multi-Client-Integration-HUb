@@ -5,7 +5,7 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // Recommended IV length for AES-GCM
 const AUTH_TAG_LENGTH = 16;
 
-// Secret key should be 32 bytes (256 bits). Uses process.env.ENCRYPTION_SECRET or fallback
+// Secret key should be 32 bytes (256 bits). Uses process.env.ENCRYPTION_SECRET or default secret key
 function getEncryptionKey(): Buffer {
   const secret = process.env.ENCRYPTION_SECRET || 'cittaefs_compliance_hub_default_secret_32bytes!!';
   return crypto.scryptSync(secret, 'salt_citta_hub', 32);

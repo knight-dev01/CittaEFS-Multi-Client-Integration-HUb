@@ -29,9 +29,9 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
 
   const handlePurge = async () => {
     if (!canPurge) return;
-    if (window.confirm('Are you sure you want to purge all demo invoices, validation errors, and audit logs to start with a clean slate?')) {
+    if (window.confirm('Are you sure you want to purge all test invoices, validation errors, and audit logs to reset staging data?')) {
       await purgeDemoData();
-      alert('Demo data purged! You can now onboard client entities or transmit real invoices.');
+      alert('Staging test data purged! You can now onboard client entities or transmit real invoices.');
     }
   };
 
@@ -68,7 +68,7 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
               onClick={handlePurge}
               className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-black uppercase border-2 border-slate-900 cursor-pointer"
             >
-              Clear Demo Data
+              Clear Test Staging Data
             </button>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, FormEvent } from 'react';
 import { useHub } from '../lib/store';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/mockData';
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
 import { Send, Plus, Trash2, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface NewInvoiceModalProps {

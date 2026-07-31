@@ -21,7 +21,7 @@ function getQboBaseUrl(): string {
 /**
  * Retrieves a valid, non-expired Access Token for a tenant's QBO integration.
  * Performs auto-refresh if the token is expired or close to expiring.
- * If refresh token exchange fails, catches error and returns mock token for sandbox/demo mode.
+ * Throws explicit error if integration is missing, refresh token is invalid, or token exchange fails.
  */
 export async function getValidQboAccessToken(tenantId: string): Promise<string> {
   const integration = await prisma.integration.findUnique({
@@ -50,9 +50,6 @@ export async function getValidQboAccessToken(tenantId: string): Promise<string> 
   const clientId = process.env.QBO_CLIENT_ID;
   const clientSecret = process.env.QBO_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    if (process.env.NODE_ENV === 'test') {
-      return 'mock_qbo_access_token_' + tenantId;
-    }
     throw new Error('QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables are required.');
   }
 
@@ -60,11 +57,7 @@ export async function getValidQboAccessToken(tenantId: string): Promise<string> 
   try {
     decryptedRefreshToken = unpackAndDecryptString(integration.refreshToken);
   } catch (e: any) {
-    if (process.env.NODE_ENV === 'test') {
-      decryptedRefreshToken = 'mock_refresh_token';
-    } else {
-      throw new Error(`Failed to decrypt refresh token: ${e.message}`);
-    }
+    throw new Error(`Failed to decrypt refresh token: ${e.message}`);
   }
 
   try {
@@ -84,9 +77,6 @@ export async function getValidQboAccessToken(tenantId: string): Promise<string> 
 
     if (!response.ok) {
       const errText = await response.text();
-      if (process.env.NODE_ENV === 'test') {
-        return 'mock_qbo_access_token_' + tenantId;
-      }
       throw new Error(`QuickBooks connection needs reauthorization (token exchange failed ${response.status}): ${errText}`);
     }
 
@@ -107,81 +97,9 @@ export async function getValidQboAccessToken(tenantId: string): Promise<string> 
 
     return data.access_token;
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'test') {
-      return 'mock_qbo_access_token_' + tenantId;
-    }
     throw new Error(`Error refreshing QBO token for tenant ${tenantId}: ${error.message}`);
   }
 }
-
-export const MOCK_QBO_HISTORICAL_INVOICES = [
-  {
-    Id: "qbo_inv_hist_01",
-    DocNumber: "INV-QBO-2026-001",
-    TxnDate: "2026-01-15",
-    DueDate: "2026-02-15",
-    TotalAmt: 125000,
-    CurrencyRef: { value: "KES" },
-    CustomerRef: { value: "cust_1", name: "Acme Kenya Ltd" },
-    Line: [
-      {
-        Id: "line_1",
-        Description: "Enterprise Cloud Hosting - Q1",
-        Amount: 125000,
-        DetailType: "SalesItemLineDetail",
-        SalesItemLineDetail: {
-          ItemRef: { value: "item_cloud", name: "Cloud Services" },
-          Qty: 1,
-          UnitPrice: 125000
-        }
-      }
-    ]
-  },
-  {
-    Id: "qbo_inv_hist_02",
-    DocNumber: "INV-QBO-2026-002",
-    TxnDate: "2026-02-10",
-    DueDate: "2026-03-10",
-    TotalAmt: 85000,
-    CurrencyRef: { value: "KES" },
-    CustomerRef: { value: "cust_2", name: "Savannah Logistics" },
-    Line: [
-      {
-        Id: "line_2",
-        Description: "Fleet GPS Tracking Module",
-        Amount: 85000,
-        DetailType: "SalesItemLineDetail",
-        SalesItemLineDetail: {
-          ItemRef: { value: "item_gps", name: "GPS Hardware" },
-          Qty: 5,
-          UnitPrice: 17000
-        }
-      }
-    ]
-  },
-  {
-    Id: "qbo_inv_hist_03",
-    DocNumber: "INV-QBO-2026-003",
-    TxnDate: "2026-03-05",
-    DueDate: "2026-04-05",
-    TotalAmt: 210000,
-    CurrencyRef: { value: "KES" },
-    CustomerRef: { value: "cust_3", name: "Nairobi Fintech Hub" },
-    Line: [
-      {
-        Id: "line_3",
-        Description: "API Gateway Integration License",
-        Amount: 210000,
-        DetailType: "SalesItemLineDetail",
-        SalesItemLineDetail: {
-          ItemRef: { value: "item_api", name: "Gateway License" },
-          Qty: 2,
-          UnitPrice: 105000
-        }
-      }
-    ]
-  }
-];
 
 /**
  * Fetches recent invoices from QBO based on last sync date or a specific query.
