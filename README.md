@@ -119,7 +119,7 @@ The frontend provides a modular enterprise interface accessible via the top navi
 * **Backend**: Express 4, TypeScript (`tsx`), Prisma ORM 5, WebSockets (`ws`), Zod Schema Validation
 * **Spreadsheet Processing**: SheetJS (`xlsx`)
 * **Visualizations & Charts**: Recharts
-* **Integration Services**: `intuit-oauth` (QuickBooks REST API client), `@google/genai`
+* **Integration Services**: Custom zero-dependency fetch-backed QuickBooks Online OAuth2 client, `@google/genai`
 
 ---
 

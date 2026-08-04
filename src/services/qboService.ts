@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import OAuthClient from 'intuit-oauth';
 import { getDatabaseUrl } from '../config/dbConfig';
 import { unpackAndDecryptString, packEncryptedString } from '../config/encryption';
 import { QuickBooksAdapter } from '../adapters/connectorAdapters';
@@ -9,9 +8,153 @@ import { invoiceIngestionSchema } from '../schemas/invoice.schema';
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 const qboAdapter = new QuickBooksAdapter();
 
+export interface QboOAuthConfig {
+  clientId: string;
+  clientSecret: string;
+  environment: 'sandbox' | 'production' | string;
+  redirectUri: string;
+}
+
+export interface QboTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  x_refresh_token_expires_in?: number;
+  token_type: string;
+}
+
 /**
- * Creates and returns an Intuit OAuth2 client instance using intuit-oauth SDK.
- * Throws explicit error if QBO_CLIENT_ID, QBO_CLIENT_SECRET, or QBO_REDIRECT_URI is missing.
+ * Custom fetch-backed QuickBooks Online OAuth2 client.
+ * Encapsulates authorization URL generation, authorization code exchange, and token refresh
+ * using standard native fetch API without external library dependencies.
+ */
+export class QboOAuthClient {
+  clientId: string;
+  clientSecret: string;
+  environment: string;
+  redirectUri: string;
+
+  constructor(config: QboOAuthConfig) {
+    this.clientId = config.clientId;
+    this.clientSecret = config.clientSecret;
+    this.environment = (config.environment || 'sandbox').toLowerCase();
+    this.redirectUri = config.redirectUri;
+  }
+
+  /**
+   * Generates Intuit OAuth2 Authorization URL
+   */
+  authorizeUri(options?: { scope?: string[]; state?: string }): string {
+    const scopes = options?.scope
+      ? options.scope.join(' ')
+      : 'com.intuit.quickbooks.accounting';
+    const state = options?.state || 'citta_efs_state';
+
+    const params = new URLSearchParams({
+      client_id: this.clientId,
+      response_type: 'code',
+      scope: scopes,
+      redirect_uri: this.redirectUri,
+      state
+    });
+
+    return `https://appcenter.intuit.com/connect/oauth2?${params.toString()}`;
+  }
+
+  /**
+   * Alias for authorizeUri
+   */
+  getAuthorizationUrl(options?: { scope?: string[]; state?: string }): string {
+    return this.authorizeUri(options);
+  }
+
+  /**
+   * Exchanges authorization code for Access & Refresh Tokens using standard fetch
+   */
+  async createToken(authCodeOrUrl: string): Promise<{ token: QboTokenResponse }> {
+    let code = authCodeOrUrl;
+    if (authCodeOrUrl.includes('code=')) {
+      try {
+        const urlObj = new URL(authCodeOrUrl.startsWith('http') ? authCodeOrUrl : `http://localhost${authCodeOrUrl}`);
+        code = urlObj.searchParams.get('code') || authCodeOrUrl;
+      } catch {
+        // retain original authorization code string
+      }
+    }
+
+    const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+    const response = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: this.redirectUri
+      }).toString()
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to exchange authorization code (${response.status}): ${errText}`);
+    }
+
+    const tokenData = (await response.json()) as QboTokenResponse;
+    return { token: tokenData };
+  }
+
+  /**
+   * Refreshes access token using refresh token via standard fetch
+   */
+  async refreshTokens(refreshToken: string): Promise<{ token: QboTokenResponse }> {
+    const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+    const response = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken
+      }).toString()
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Failed to refresh token (${response.status}): ${errText}`);
+    }
+
+    const tokenData = (await response.json()) as QboTokenResponse;
+    return { token: tokenData };
+  }
+
+  /**
+   * Revokes token
+   */
+  async revokeToken(token: string): Promise<boolean> {
+    const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+    const response = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/revoke', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ token })
+    });
+
+    return response.ok;
+  }
+}
+
+/**
+ * Creates and returns a fetch-backed Intuit OAuth2 client instance.
+ * Encapsulates token management logic without requiring external intuit-oauth SDK.
  */
 export function getIntuitOAuthClient() {
   if (!process.env.QBO_CLIENT_ID || !process.env.QBO_CLIENT_SECRET) {
@@ -26,7 +169,7 @@ export function getIntuitOAuthClient() {
   const redirectUri = process.env.QBO_REDIRECT_URI;
   const environment = (process.env.QBO_ENVIRONMENT || 'sandbox').toLowerCase() === 'production' ? 'production' : 'sandbox';
 
-  return new OAuthClient({
+  return new QboOAuthClient({
     clientId,
     clientSecret,
     environment,
