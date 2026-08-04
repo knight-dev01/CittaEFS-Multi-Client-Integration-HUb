@@ -189,9 +189,10 @@ npm run start
 When deploying to cloud platforms such as **Render.com** or **Cloud Run**:
 
 1. **Environment Variables**: Set `NODE_ENV=production`, `PORT=3000`, `DATABASE_URL`, `JWT_SECRET`, and `ENCRYPTION_KEY`.
-2. **Build Command**: `npm install && npm run build`
-3. **Start Command**: `npm run start` (Executes `node start.cjs` which loads `dist/server.cjs`).
-4. **Bundling Optimization**: The server build bundles pure JavaScript dependencies (such as `intuit-oauth`, `express`, `jsonwebtoken`, `ws`) directly into `dist/server.cjs` while keeping `@prisma/client` external, ensuring zero missing runtime module errors on cloud deployment platforms.
+2. **Package Manager**: Use `npm install` for dependency resolution. Ensure no lingering `bun.lock` exists in the repo root so cloud builders execute standard `npm install` from `package.json` (installing all dependencies like `intuit-oauth`, `express`, `prisma`, `ws`).
+3. **Build Command**: `npm install && npm run build`
+4. **Start Command**: `npm run start` (Executes `node start.cjs` which loads `dist/server.cjs`).
+5. **Bundling & External Resolution**: The server build bundles `server.ts` into CommonJS format using `esbuild` with `--packages=external`, deferring external package resolution to standard `node_modules`.
 
 ---
 
