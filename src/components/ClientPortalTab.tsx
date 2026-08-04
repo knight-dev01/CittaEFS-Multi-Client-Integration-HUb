@@ -278,30 +278,29 @@ export function ClientPortalTab() {
   };
 
   return (
-    <div className="space-y-6 font-mono text-xs">
+    <div className="space-y-6 font-sans text-xs">
       
       {/* Top Banner Header */}
-      <div className={`${themeConfig.bg} ${themeConfig.text} p-5 border-2 ${themeConfig.border} shadow-md transition-colors duration-300`}>
+      <div className="bg-slate-900 text-white rounded-xl p-6 shadow-sm border border-slate-800 transition-colors duration-300">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              {themeConfig.icon}
-              <h1 className={`text-base font-black ${themeConfig.accent} uppercase tracking-widest`}>
-                Client ERP & CittaEFS Gateway Portal
-              </h1>
-              <span className={`px-2 py-0.5 ${themeConfig.badgeBg} font-black text-[10px] uppercase border border-slate-950`}>
+              <span className="px-2.5 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-semibold border border-indigo-500/30">
                 {activeTenant.platformType} Environment
               </span>
             </div>
-            <p className="text-slate-200 text-xs mt-1">
-              Active Organization: <strong className="text-white">{activeTenant.name}</strong>
+            <h1 className="text-xl font-bold tracking-tight text-white mt-1">
+              Client ERP & CittaEFS Gateway Portal
+            </h1>
+            <p className="text-slate-400 text-xs mt-1">
+              Active Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
             </p>
           </div>
           <button
             onClick={refreshAll}
-            className={`px-3 py-1.5 ${themeConfig.buttonBg} ${themeConfig.accent} font-black uppercase border border-slate-950 text-xs flex items-center gap-1.5 cursor-pointer`}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-semibold text-xs flex items-center gap-2 cursor-pointer transition-colors"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isBgRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 text-indigo-400 ${isBgRefreshing ? 'animate-spin' : ''}`} />
             <span>Sync ERP Records</span>
           </button>
         </div>
@@ -309,17 +308,17 @@ export function ClientPortalTab() {
 
       {/* Feedback Banners */}
       {transmissionSuccessMsg && (
-        <div className="bg-emerald-100 border-2 border-emerald-700 text-emerald-950 p-4 flex items-center justify-between font-mono text-xs">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 p-4 flex items-center justify-between text-xs shadow-sm">
           <div className="flex items-center space-x-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <div>
-              <strong className="font-black uppercase text-emerald-950">Transmission Success:</strong>
-              <p className="mt-0.5">{transmissionSuccessMsg}</p>
+              <strong className="font-semibold text-emerald-950">Transmission Success:</strong>
+              <p className="mt-0.5 text-emerald-800">{transmissionSuccessMsg}</p>
             </div>
           </div>
           <button 
             onClick={() => setTransmissionSuccessMsg(null)}
-            className="text-emerald-950 font-bold hover:underline cursor-pointer ml-4"
+            className="text-emerald-700 font-semibold hover:underline cursor-pointer ml-4"
           >
             Dismiss
           </button>
@@ -327,17 +326,17 @@ export function ClientPortalTab() {
       )}
 
       {transmissionErrorMsg && (
-        <div className="bg-red-100 border-2 border-red-700 text-red-950 p-4 flex items-center justify-between font-mono text-xs">
+        <div className="bg-rose-50 border border-rose-200 rounded-xl text-rose-900 p-4 flex items-center justify-between text-xs shadow-sm">
           <div className="flex items-center space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-700 shrink-0" />
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
             <div>
-              <strong className="font-black uppercase text-red-950">Gateway Transmission Alert:</strong>
-              <p className="mt-0.5">{transmissionErrorMsg}</p>
+              <strong className="font-semibold text-rose-950">Gateway Transmission Alert:</strong>
+              <p className="mt-0.5 text-rose-800">{transmissionErrorMsg}</p>
             </div>
           </div>
           <button 
             onClick={() => setTransmissionErrorMsg(null)}
-            className="text-red-950 font-bold hover:underline cursor-pointer ml-4"
+            className="text-rose-700 font-semibold hover:underline cursor-pointer ml-4"
           >
             Dismiss
           </button>
@@ -348,28 +347,28 @@ export function ClientPortalTab() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         
         {/* QuickBooks Online Connector Card */}
-        <div className="bg-white border-2 border-slate-900 p-4 space-y-3 flex flex-col justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 flex flex-col justify-between shadow-sm">
           <div>
-            <div className="flex items-center justify-between border-b-2 border-slate-900 pb-2">
-              <span className="font-black text-slate-900 uppercase flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-600" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <span className="font-bold text-slate-900 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-500" />
                 QuickBooks Online (QBO)
               </span>
-              <span className="px-2 py-0.5 bg-emerald-300 text-slate-950 border border-slate-900 font-black uppercase text-[10px]">
+              <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold rounded-full text-[10px]">
                 ACTIVE & CONNECTED
               </span>
             </div>
-            <p className="text-slate-600 text-xs my-2 leading-relaxed">
+            <p className="text-slate-500 text-xs my-3 leading-relaxed">
               Invoices created in QuickBooks Online are automatically pulled into this preview table via background webhooks & CDC sync.
             </p>
-            <div className="text-[11px] text-slate-700 space-y-1 bg-slate-50 p-2 border border-slate-200">
+            <div className="text-xs text-slate-600 space-y-1.5 bg-slate-50/80 p-3 rounded-lg border border-slate-200/60">
               <div className="flex justify-between">
                 <span>Target CittaEFS Endpoint:</span>
-                <span className="font-bold text-slate-900">gateway.cittaefs.com/api/v1</span>
+                <span className="font-medium text-slate-900">gateway.cittaefs.com/api/v1</span>
               </div>
               <div className="flex justify-between">
                 <span>QBO Invoices Ready:</span>
-                <span className="font-black text-indigo-700">
+                <span className="font-semibold text-indigo-600">
                   {tenantInvoices.filter(i => getInvoiceSource(i) === 'QBO').length} Records
                 </span>
               </div>
@@ -379,8 +378,8 @@ export function ClientPortalTab() {
           <div className="pt-2 flex justify-end">
             <button
               onClick={() => setSourceFilter('QBO')}
-              className={`px-3 py-1.5 border-2 font-black uppercase text-[11px] cursor-pointer ${
-                sourceFilter === 'QBO' ? 'bg-amber-400 text-slate-950 border-slate-900' : 'bg-slate-100 text-slate-900 border-slate-800 hover:bg-slate-200'
+              className={`px-3 py-1.5 rounded-lg border font-semibold text-xs transition-all cursor-pointer ${
+                sourceFilter === 'QBO' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
             >
               View QBO Invoices
@@ -389,38 +388,38 @@ export function ClientPortalTab() {
         </div>
 
         {/* Excel & CSV File Upload Connector Card */}
-        <div className="bg-white border-2 border-slate-900 p-4 space-y-3 flex flex-col justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 flex flex-col justify-between shadow-sm">
           <div>
-            <div className="flex items-center justify-between border-b-2 border-slate-900 pb-2">
-              <span className="font-black text-slate-900 uppercase flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <span className="font-bold text-slate-900 flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
                 Excel & CSV File Import
               </span>
-              <span className="px-2 py-0.5 bg-emerald-300 text-slate-950 border border-slate-900 font-black uppercase text-[10px]">
+              <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold rounded-full text-[10px]">
                 UPLOAD READY
               </span>
             </div>
-            <p className="text-slate-600 text-xs my-2 leading-relaxed">
+            <p className="text-slate-500 text-xs my-3 leading-relaxed">
               Upload your billing spreadsheet (.xlsx or .csv) to preview invoice rows and push them directly to CittaEFS.
             </p>
 
-            <div className="relative border-2 border-dashed border-slate-400 bg-slate-50 p-3 text-center space-y-1 hover:bg-slate-100 transition cursor-pointer">
+            <div className="relative border-2 border-dashed border-slate-200 bg-slate-50/50 rounded-xl p-4 text-center space-y-1 hover:bg-slate-100/60 hover:border-indigo-300 transition-all cursor-pointer">
               <input
                 type="file"
                 accept=".xlsx,.xls,.csv"
                 onChange={handleExcelUpload}
                 className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
               />
-              <div className="flex items-center justify-center space-x-2 text-emerald-800">
+              <div className="flex items-center justify-center space-x-2 text-indigo-600">
                 <Upload className="w-4 h-4" />
-                <span className="font-black uppercase text-xs">
+                <span className="font-semibold text-xs">
                   {isUploading ? 'Parsing Spreadsheet...' : 'Click to Upload Excel / CSV'}
                 </span>
               </div>
             </div>
 
             {uploadLog && (
-              <div className="text-[10px] text-emerald-800 font-mono font-bold mt-1.5 bg-emerald-50 p-1.5 border border-emerald-300">
+              <div className="text-xs text-indigo-900 font-medium mt-2 bg-indigo-50 p-2.5 rounded-lg border border-indigo-200">
                 {uploadLog}
               </div>
             )}
@@ -429,8 +428,8 @@ export function ClientPortalTab() {
           <div className="pt-2 flex justify-end">
             <button
               onClick={() => setSourceFilter('EXCEL')}
-              className={`px-3 py-1.5 border-2 font-black uppercase text-[11px] cursor-pointer ${
-                sourceFilter === 'EXCEL' ? 'bg-emerald-400 text-slate-950 border-slate-900' : 'bg-slate-100 text-slate-900 border-slate-800 hover:bg-slate-200'
+              className={`px-3 py-1.5 rounded-lg border font-semibold text-xs transition-all cursor-pointer ${
+                sourceFilter === 'EXCEL' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
             >
               View Excel Invoices
@@ -441,33 +440,33 @@ export function ClientPortalTab() {
       </div>
 
       {/* Main Invoice Preview & CittaEFS Push Table */}
-      <div className="bg-white border-2 border-slate-900 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
         
         {/* Table Toolbar Controls */}
-        <div className="p-4 bg-slate-100 border-b-2 border-slate-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-black uppercase text-slate-900 text-xs">Filter Source:</span>
+            <span className="font-semibold text-slate-500 text-xs">Filter Source:</span>
             <button
               onClick={() => setSourceFilter('ALL')}
-              className={`px-2.5 py-1 border border-slate-900 font-bold uppercase text-[10px] cursor-pointer ${
-                sourceFilter === 'ALL' ? 'bg-slate-900 text-amber-400' : 'bg-white text-slate-800 hover:bg-slate-200'
+              className={`px-3 py-1 rounded-lg border font-medium text-xs transition-all cursor-pointer ${
+                sourceFilter === 'ALL' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
             >
               All Sources ({tenantInvoices.length})
             </button>
             <button
               onClick={() => setSourceFilter('QBO')}
-              className={`px-2.5 py-1 border border-slate-900 font-bold uppercase text-[10px] cursor-pointer ${
-                sourceFilter === 'QBO' ? 'bg-amber-400 text-slate-950 font-black' : 'bg-white text-slate-800 hover:bg-slate-200'
+              className={`px-3 py-1 rounded-lg border font-medium text-xs transition-all cursor-pointer ${
+                sourceFilter === 'QBO' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
             >
               QuickBooks Online ({tenantInvoices.filter(i => getInvoiceSource(i) === 'QBO').length})
             </button>
             <button
               onClick={() => setSourceFilter('EXCEL')}
-              className={`px-2.5 py-1 border border-slate-900 font-bold uppercase text-[10px] cursor-pointer ${
-                sourceFilter === 'EXCEL' ? 'bg-emerald-400 text-slate-950 font-black' : 'bg-white text-slate-800 hover:bg-slate-200'
+              className={`px-3 py-1 rounded-lg border font-medium text-xs transition-all cursor-pointer ${
+                sourceFilter === 'EXCEL' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
             >
               Excel / CSV ({tenantInvoices.filter(i => getInvoiceSource(i) === 'EXCEL').length})
@@ -477,13 +476,13 @@ export function ClientPortalTab() {
           <div className="flex items-center space-x-2 w-full md:w-auto">
             {/* Search Input */}
             <div className="relative flex-1 md:w-56">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search Invoice #, Customer..."
-                className="w-full bg-white border border-slate-900 pl-8 pr-3 py-1.5 text-xs text-slate-900 outline-none"
+                className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
               />
             </div>
 
@@ -492,9 +491,9 @@ export function ClientPortalTab() {
               <button
                 onClick={handlePushBatchToCittaEFS}
                 disabled={isTransmitting}
-                className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black border-2 border-slate-900 uppercase text-[11px] flex items-center gap-1.5 cursor-pointer shrink-0 shadow"
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm transition-colors"
               >
-                <Send className="w-3.5 h-3.5 text-slate-950" />
+                <Send className="w-3.5 h-3.5 text-indigo-200" />
                 <span>Push ({selectedInvoiceIds.length}) to CittaEFS</span>
               </button>
             )}
@@ -506,35 +505,35 @@ export function ClientPortalTab() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-900 text-amber-400 font-black uppercase text-[10px] border-b-2 border-slate-900">
-                <th className="p-3 w-8 text-center">
+              <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
+                <th className="py-3 px-3 w-8 text-center">
                   <button 
                     onClick={toggleSelectAll} 
-                    className="text-amber-400 hover:text-white cursor-pointer"
+                    className="text-slate-400 hover:text-indigo-600 cursor-pointer"
                     title="Select all pending"
                   >
                     {selectedInvoiceIds.length > 0 && selectedInvoiceIds.length === pendingInvoices.length ? (
-                      <CheckSquare className="w-4 h-4 text-amber-400" />
+                      <CheckSquare className="w-4 h-4 text-indigo-600" />
                     ) : (
-                      <Square className="w-4 h-4 text-slate-400" />
+                      <Square className="w-4 h-4 text-slate-300" />
                     )}
                   </button>
                 </th>
-                <th className="p-3">Client Inv #</th>
-                <th className="p-3">ERP Source</th>
-                <th className="p-3">Customer</th>
-                <th className="p-3">TIN (Tax ID)</th>
-                <th className="p-3">Issue Date</th>
-                <th className="p-3">Total Amount</th>
-                <th className="p-3">CittaEFS Status</th>
-                <th className="p-3">NRS IRN Stamp & Link</th>
-                <th className="p-3 text-right">Action</th>
+                <th className="py-3 px-4">Client Inv #</th>
+                <th className="py-3 px-4">ERP Source</th>
+                <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-4">TIN (Tax ID)</th>
+                <th className="py-3 px-4">Issue Date</th>
+                <th className="py-3 px-4">Total Amount</th>
+                <th className="py-3 px-4">CittaEFS Status</th>
+                <th className="py-3 px-4">NRS IRN Stamp & Link</th>
+                <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y-2 divide-slate-100 font-mono text-slate-900 text-xs">
+            <tbody className="divide-y divide-slate-100 text-slate-700 text-xs">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-500 uppercase font-bold">
+                  <td colSpan={10} className="p-8 text-center text-slate-400 font-medium">
                     No invoices match current filter settings.
                   </td>
                 </tr>
@@ -545,55 +544,55 @@ export function ClientPortalTab() {
                   const isSelected = selectedInvoiceIds.includes(inv.id);
 
                   return (
-                    <tr key={inv.id} className={`hover:bg-slate-50 transition ${isSelected ? 'bg-amber-50/60' : ''}`}>
-                      <td className="p-3 text-center">
+                    <tr key={inv.id} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-indigo-50/30' : ''}`}>
+                      <td className="py-3 px-3 text-center">
                         {!isApproved ? (
                           <button 
                             onClick={() => toggleSelectInvoice(inv.id)}
-                            className="text-slate-700 hover:text-slate-950 cursor-pointer"
+                            className="text-slate-400 hover:text-indigo-600 cursor-pointer"
                           >
                             {isSelected ? (
-                              <CheckSquare className="w-4 h-4 text-amber-600" />
+                              <CheckSquare className="w-4 h-4 text-indigo-600" />
                             ) : (
-                              <Square className="w-4 h-4 text-slate-400" />
+                              <Square className="w-4 h-4 text-slate-300" />
                             )}
                           </button>
                         ) : (
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto" />
                         )}
                       </td>
-                      <td className="p-3 font-black text-indigo-700">{inv.clientInvoiceNumber}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 border border-slate-900 text-[9px] font-black uppercase ${
-                          src === 'QBO' ? 'bg-amber-100 text-amber-950 border-amber-500' : 'bg-emerald-100 text-emerald-950 border-emerald-600'
+                      <td className="py-3 px-4 font-semibold text-indigo-600">{inv.clientInvoiceNumber}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                          src === 'QBO' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                         }`}>
                           {src === 'QBO' ? 'QuickBooks Online' : 'Excel / CSV'}
                         </span>
                       </td>
-                      <td className="p-3 font-bold">{inv.customerName}</td>
-                      <td className="p-3 text-slate-700 font-bold">{inv.customerTin || 'B2C / Cash Sale'}</td>
-                      <td className="p-3 text-slate-600">{inv.issueDate}</td>
-                      <td className="p-3 font-black text-slate-900">
+                      <td className="py-3 px-4 font-medium text-slate-900">{inv.customerName}</td>
+                      <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">{inv.customerTin || 'B2C / Cash Sale'}</td>
+                      <td className="py-3 px-4 text-slate-500">{inv.issueDate}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">
                         {inv.currency || 'KES'} {inv.grandTotal?.toLocaleString()}
                       </td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 border border-slate-900 text-[10px] font-black uppercase ${
-                          isApproved ? 'bg-emerald-300 text-slate-950' :
-                          inv.status === 'REJECTED' ? 'bg-red-400 text-slate-950' : 'bg-amber-300 text-slate-950'
+                      <td className="py-3 px-4">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                          isApproved ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          inv.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}>
                           {inv.status}
                         </span>
                       </td>
-                      <td className="p-3">
+                      <td className="py-3 px-4">
                         {inv.irn ? (
                           <div className="space-y-0.5">
-                            <span className="font-bold text-emerald-800 text-[11px] block">{inv.irn}</span>
+                            <span className="font-mono text-emerald-700 text-xs block">{inv.irn}</span>
                             {inv.verificationLink && (
                               <a 
                                 href={inv.verificationLink} 
                                 target="_blank" 
                                 rel="noreferrer"
-                                className="text-[10px] text-indigo-600 hover:underline flex items-center gap-1 font-bold"
+                                className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1 font-medium"
                               >
                                 <span>Verify QR Link</span>
                                 <ExternalLink className="w-3 h-3" />
@@ -601,21 +600,21 @@ export function ClientPortalTab() {
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic">Not Stamped Yet</span>
+                          <span className="text-slate-400 text-xs">Not Stamped Yet</span>
                         )}
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="py-3 px-4 text-right">
                         {!isApproved ? (
                           <button
                             onClick={() => handlePushSingleToCittaEFS(inv)}
                             disabled={isTransmitting}
-                            className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black border border-slate-900 uppercase text-[10px] flex items-center gap-1 ml-auto cursor-pointer"
+                            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs flex items-center gap-1 ml-auto cursor-pointer transition-colors shadow-sm"
                           >
-                            <Send className="w-3 h-3 text-slate-950" />
+                            <Send className="w-3 h-3 text-indigo-200" />
                             <span>Push to CittaEFS</span>
                           </button>
                         ) : (
-                          <span className="px-2 py-0.5 bg-slate-100 text-emerald-800 border border-emerald-400 font-bold text-[10px] uppercase">
+                          <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold rounded-full text-[10px]">
                             ✓ Transmitted
                           </span>
                         )}
@@ -629,9 +628,9 @@ export function ClientPortalTab() {
         </div>
 
         {/* Footer info note */}
-        <div className="p-3 bg-slate-50 border-t-2 border-slate-900 text-[11px] text-slate-600 flex items-center justify-between">
-          <span>All pushed invoices are validated & transmitted directly to CittaEFS REST Gateway (`gateway.cittaefs.com/api/v1`).</span>
-          <span className="font-bold text-slate-900">Total: {tenantInvoices.length} Invoices</span>
+        <div className="p-4 bg-slate-50/50 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
+          <span>All pushed invoices are validated & transmitted directly to CittaEFS REST Gateway (gateway.cittaefs.com/api/v1).</span>
+          <span className="font-semibold text-slate-800">Total: {tenantInvoices.length} Invoices</span>
         </div>
 
       </div>

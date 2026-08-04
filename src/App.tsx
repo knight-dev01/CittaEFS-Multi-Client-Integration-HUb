@@ -24,8 +24,10 @@ import { Cpu } from 'lucide-react';
 function HubMainContent() {
   const { currentUser, login, isBgRefreshing } = useHub();
 
-  const [activeTab, setActiveTab] = useState<string>(() => {
+  const [activeTab, setActiveTabState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('citta_active_tab');
+      if (saved) return saved;
       const params = new URLSearchParams(window.location.search);
       const path = window.location.pathname;
       if (
@@ -39,6 +41,13 @@ function HubMainContent() {
     }
     return 'clients';
   });
+
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('citta_active_tab', tab);
+    }
+  };
 
   const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
@@ -89,7 +98,7 @@ function HubMainContent() {
 
       {/* Main Content Area next to Sidebar */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64 xl:pl-72">
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 space-y-6 w-full mx-auto max-w-7xl">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full mx-auto max-w-7xl">
           
           {/* Render Tab Content */}
           <div className="transition-all duration-150">
@@ -116,18 +125,20 @@ function HubMainContent() {
         </main>
 
         {/* Footer */}
-        <footer className="bg-slate-900 text-slate-400 border-t-2 border-slate-900 text-xs py-5 mt-12 font-mono shrink-0">
+        <footer className="bg-white text-slate-500 border-t border-slate-200 text-xs py-6 mt-12 font-sans shrink-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <Cpu className="w-4 h-4 text-amber-400" />
-              <span className="font-bold text-slate-200">CittaEFS Multi-Tenant Integration Hub Engine</span>
+              <div className="w-5 h-5 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                C
+              </div>
+              <span className="font-semibold text-slate-700">CittaEFS Multi-Tenant Integration Hub</span>
             </div>
             <div className="flex items-center space-x-4 text-[11px] text-slate-400">
-              <span>PostgreSQL Row-Level Security</span>
+              <span>PostgreSQL RLS</span>
               <span>•</span>
-              <span>BullMQ Async Queues</span>
+              <span>BullMQ Queues</span>
               <span>•</span>
-              <span>AES-256-GCM Token Encryption</span>
+              <span>AES-256-GCM Encryption</span>
             </div>
           </div>
         </footer>

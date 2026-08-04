@@ -94,30 +94,30 @@ export function InvoicesTab() {
     <div className="space-y-6">
       
       {/* Top Action Bar & Filters */}
-      <div className="bg-white p-4 border-2 border-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans">
         
         {/* Search */}
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-900 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="SEARCH INVOICE #, IRN, OR CUSTOMER NAME..."
+            placeholder="Search Invoice #, IRN, or Customer Name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs font-mono font-bold border-2 border-slate-900 bg-slate-50 focus:bg-white focus:outline-none uppercase text-slate-900"
+            className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-900"
           />
         </div>
 
         {/* Filter Dropdowns */}
-        <div className="flex flex-wrap items-center gap-3 font-mono">
+        <div className="flex flex-wrap items-center gap-3 font-sans">
           
-          <div className="flex items-center space-x-1 text-xs text-slate-900">
-            <Filter className="w-3.5 h-3.5 text-slate-900" />
-            <span className="font-black uppercase">Status:</span>
+          <div className="flex items-center space-x-2 text-xs text-slate-600">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-medium">Status:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-white border-2 border-slate-900 px-2.5 py-1.5 text-xs text-slate-900 font-black uppercase focus:outline-none cursor-pointer"
+              className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
               <option value="SIGNED">SIGNED (NRS Stamped)</option>
@@ -128,12 +128,12 @@ export function InvoicesTab() {
             </select>
           </div>
 
-          <div className="flex items-center space-x-1 text-xs text-slate-900">
-            <span className="font-black uppercase">Type:</span>
+          <div className="flex items-center space-x-2 text-xs text-slate-600">
+            <span className="font-medium">Type:</span>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="bg-white border-2 border-slate-900 px-2.5 py-1.5 text-xs text-slate-900 font-black uppercase focus:outline-none cursor-pointer"
+              className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
             >
               <option value="ALL">All Document Types</option>
               <option value="STANDARD">Standard Invoice</option>
@@ -147,142 +147,142 @@ export function InvoicesTab() {
       </div>
 
       {/* Invoices Master Table */}
-      <div className="bg-white border-2 border-slate-900 overflow-hidden">
-        <div className="px-4 py-3 bg-slate-900 text-white border-b-2 border-slate-900 flex items-center justify-between font-mono">
-          <div className="flex items-center space-x-2">
-            <FileText className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-black uppercase tracking-wider">
+      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm font-sans">
+        <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <FileText className="w-4 h-4 text-indigo-400" />
+            <h3 className="text-sm font-bold tracking-tight">
               {activeTenant.name} Invoices Ledger ({filteredInvoices.length})
             </h3>
           </div>
-          <span className="text-[11px] text-slate-300">
-            Format: <strong className="text-amber-400">{activeTenant.platformType}</strong>
+          <span className="text-xs text-slate-300">
+            Format: <strong className="text-indigo-300">{activeTenant.platformType}</strong>
           </span>
         </div>
 
         {filteredInvoices.length === 0 ? (
-          <div className="p-8 text-center text-slate-900 font-mono">
-            <FileText className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-            <p className="text-sm font-black uppercase">No invoices match your filter criteria.</p>
-            <p className="text-xs text-slate-600 mt-1">Try clearing filters or transmitting a test transaction.</p>
+          <div className="p-12 text-center text-slate-500 font-sans">
+            <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-slate-800">No invoices match your filter criteria.</p>
+            <p className="text-xs text-slate-500 mt-1">Try clearing filters or transmitting a test transaction.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse font-mono">
+            <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-100 text-slate-900 uppercase text-[10px] tracking-wider border-b-2 border-slate-900">
-                  <th className="py-2.5 px-3 border-r border-slate-300"></th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Client Inv #</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Type & Kind</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Customer</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Grand Total</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">NRS Gateway IRN</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Compliance Status</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Ledger Writeback</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
+                <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
+                  <th className="py-3 px-3"></th>
+                  <th className="py-3 px-4">Client Inv #</th>
+                  <th className="py-3 px-4">Type & Kind</th>
+                  <th className="py-3 px-4">Customer</th>
+                  <th className="py-3 px-4">Grand Total</th>
+                  <th className="py-3 px-4">NRS Gateway IRN</th>
+                  <th className="py-3 px-4">Compliance Status</th>
+                  <th className="py-3 px-4">Ledger Writeback</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-300 text-xs text-slate-900">
+              <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredInvoices.map((inv) => {
                   const isExpanded = expandedInvoiceId === inv.id;
 
                   return (
-                    <tr key={inv.id} className={`hover:bg-slate-100 transition ${isExpanded ? 'bg-amber-50' : ''}`}>
-                      <td className="py-3 px-3 border-r border-slate-200">
+                    <tr key={inv.id} className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-indigo-50/30' : ''}`}>
+                      <td className="py-3 px-3">
                         <button
                           onClick={() => setExpandedInvoiceId(isExpanded ? null : inv.id)}
-                          className="text-slate-900 hover:text-amber-600 cursor-pointer"
+                          className="text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer p-1"
                         >
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </button>
                       </td>
 
-                      <td className="py-3 px-3 font-black text-slate-900 border-r border-slate-200">
+                      <td className="py-3 px-4 font-semibold text-slate-900">
                         {inv.clientInvoiceNumber}
-                        <div className="text-[10px] text-slate-500 font-normal">{inv.issueDate}</div>
+                        <div className="text-[11px] text-slate-400 font-normal mt-0.5">{inv.issueDate}</div>
                       </td>
 
-                      <td className="py-3 px-3 border-r border-slate-200">
-                        <div className="flex flex-col space-y-0.5">
-                          <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-black border border-slate-900 uppercase w-max ${
-                            inv.invoiceType === 'CREDIT_NOTE' ? 'bg-slate-900 text-white' :
-                            inv.invoiceType === 'DEBIT_NOTE' ? 'bg-amber-400 text-slate-950' :
-                            'bg-slate-200 text-slate-950'
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col space-y-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full w-max ${
+                            inv.invoiceType === 'CREDIT_NOTE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                            inv.invoiceType === 'DEBIT_NOTE' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                            'bg-slate-100 text-slate-700'
                           }`}>
                             {inv.invoiceType}
                           </span>
-                          <span className="text-[10px] text-slate-600">Kind: {inv.invoiceKind}</span>
+                          <span className="text-[11px] text-slate-400">Kind: {inv.invoiceKind}</span>
                         </div>
                       </td>
 
-                      <td className="py-3 px-3 max-w-[160px] border-r border-slate-200">
-                        <div className="font-bold text-slate-900 truncate" title={inv.customerName}>
+                      <td className="py-3 px-4 max-w-[170px]">
+                        <div className="font-medium text-slate-900 truncate" title={inv.customerName}>
                           {inv.customerName}
                         </div>
-                        <div className="text-[10px] text-slate-600 font-mono">
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">
                           TIN: {inv.customerTin || 'N/A (B2C)'}
                         </div>
                       </td>
 
-                      <td className="py-3 px-3 font-black text-slate-900 border-r border-slate-200">
+                      <td className="py-3 px-4 font-semibold text-slate-900">
                         KES {inv.grandTotal.toLocaleString()}
-                        <div className="text-[10px] text-slate-600 font-normal">VAT: KES {inv.totalVat.toLocaleString()}</div>
+                        <div className="text-[11px] text-slate-400 font-normal mt-0.5">VAT: KES {inv.totalVat.toLocaleString()}</div>
                       </td>
 
-                      <td className="py-3 px-3 font-mono text-[11px] border-r border-slate-200">
+                      <td className="py-3 px-4 font-mono text-[11px]">
                         {inv.irn ? (
-                          <div className="flex items-center space-x-1 text-slate-900 font-black">
+                          <div className="flex items-center space-x-1.5 text-slate-800 font-medium">
                             <span className="truncate max-w-[140px]" title={inv.irn}>{inv.irn}</span>
                             <button
                               onClick={() => setQrModalInvoice(inv)}
-                              className="text-slate-900 hover:text-amber-600 p-0.5 cursor-pointer"
+                              className="text-slate-400 hover:text-indigo-600 p-0.5 transition-colors cursor-pointer"
                               title="Show Official QR Code"
                             >
-                              <QrCode className="w-3.5 h-3.5" />
+                              <QrCode className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
-                          <span className="text-amber-700 font-bold uppercase text-[10px]">Pending Stamp</span>
+                          <span className="text-amber-600 font-medium text-xs">Pending Stamp</span>
                         )}
                         {inv.originalIrn && (
-                          <div className="text-[10px] text-slate-600 font-mono truncate" title={`Linked Original IRN: ${inv.originalIrn}`}>
+                          <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5" title={`Linked Original IRN: ${inv.originalIrn}`}>
                             Ref: {inv.originalIrn.substring(0, 14)}...
                           </div>
                         )}
                       </td>
 
-                      <td className="py-3 px-3 border-r border-slate-200">
-                        <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black border border-slate-900 uppercase ${
-                          inv.status === 'SIGNED' || inv.status === 'APPROVED' ? 'bg-emerald-400 text-slate-950' :
-                          inv.status === 'PENDING_NRS_STAMP' ? 'bg-amber-400 text-slate-950' :
-                          inv.status === 'REJECTED' ? 'bg-red-500 text-white' :
-                          'bg-slate-200 text-slate-900'
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                          inv.status === 'SIGNED' || inv.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          inv.status === 'PENDING_NRS_STAMP' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                          inv.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                          'bg-slate-100 text-slate-700'
                         }`}>
                           {inv.status === 'SIGNED' || inv.status === 'APPROVED' ? (
-                            <CheckCircle2 className="w-3 h-3 mr-1 text-slate-950" />
+                            <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />
                           ) : inv.status === 'REJECTED' ? (
-                            <AlertCircle className="w-3 h-3 mr-1 text-white" />
+                            <AlertCircle className="w-3 h-3 mr-1 text-rose-600" />
                           ) : null}
                           {inv.status}
                         </span>
                       </td>
 
-                      <td className="py-3 px-3 border-r border-slate-200">
-                        <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black border border-slate-900 uppercase ${
-                          inv.ledgerWritebackStatus === 'SYNCED' ? 'bg-slate-900 text-amber-400' :
-                          'bg-amber-200 text-slate-900'
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                          inv.ledgerWritebackStatus === 'SYNCED' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                          'bg-slate-100 text-slate-600'
                         }`}>
                           {inv.ledgerWritebackStatus === 'SYNCED' ? 'Synced to ERP' : 'Pending Writeback'}
                         </span>
                       </td>
 
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end space-x-1">
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end space-x-1.5">
                           
                           {/* Inspect CittaEFS JSON Payload */}
                           <button
                             onClick={() => setSelectedPayloadInvoice(inv)}
-                            className="p-1 bg-white border border-slate-900 hover:bg-slate-900 hover:text-white transition cursor-pointer"
+                            className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-md border border-slate-200 transition-colors cursor-pointer"
                             title="Inspect CittaEFS JSON Payload"
                           >
                             <FileCode className="w-3.5 h-3.5" />
@@ -292,7 +292,7 @@ export function InvoicesTab() {
                           {true && inv.status === 'SIGNED' && inv.invoiceType === 'STANDARD' && (
                             <button
                               onClick={() => setCreditNoteModalInvoice(inv)}
-                              className="p-1 bg-amber-400 border border-slate-900 text-slate-950 hover:bg-amber-300 transition cursor-pointer"
+                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md border border-amber-200 transition-colors cursor-pointer"
                               title="Issue Linked Credit Note"
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
@@ -303,7 +303,7 @@ export function InvoicesTab() {
                           {true && inv.status !== 'CANCELLED' && (
                             <button
                               onClick={() => handleCancelInvoice(inv)}
-                              className="p-1 bg-red-100 border border-slate-900 text-red-700 hover:bg-red-600 hover:text-white transition cursor-pointer"
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md border border-rose-200 transition-colors cursor-pointer"
                               title="Revoke / Cancel Invoice"
                             >
                               <XCircle className="w-3.5 h-3.5" />

@@ -98,17 +98,17 @@ export function WebhookInspectorTab() {
   };
 
   return (
-    <div className="space-y-6 font-mono text-xs">
+    <div className="space-y-6 font-sans text-xs">
       
       {/* Header Banner */}
-      <div className="bg-slate-900 text-white p-4 border-2 border-slate-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-black text-amber-400 uppercase flex items-center gap-2">
-            <Radio className="w-5 h-5 text-amber-400" />
+          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <Radio className="w-5 h-5 text-indigo-400" />
             Real-Time Webhook Inspector & Dispatch Replay
           </h2>
-          <p className="text-slate-300 text-xs mt-1">
-            Raw Payload Debugger • Signature Verification • Tenant: <strong className="text-white">{activeTenant.name}</strong>
+          <p className="text-slate-400 text-xs mt-1">
+            Raw Payload Debugger • Signature Verification • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
           </p>
         </div>
       </div>
@@ -117,36 +117,36 @@ export function WebhookInspectorTab() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left: Webhook Event Log List */}
-        <div className="lg:col-span-6 bg-white border-2 border-slate-900 overflow-hidden">
-          <div className="p-3 bg-slate-100 border-b-2 border-slate-900 font-black uppercase text-slate-900 flex justify-between items-center">
+        <div className="lg:col-span-6 bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
+          <div className="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-900 flex justify-between items-center">
             <span>Incoming Webhook Streams ({incomingWebhooks.length})</span>
-            <span className="text-[10px] text-slate-600 font-normal">HTTP POST Listeners</span>
+            <span className="text-xs text-slate-500 font-normal">HTTP POST Listeners</span>
           </div>
 
-          <div className="divide-y-2 divide-slate-100 font-mono">
+          <div className="divide-y divide-slate-100">
             {incomingWebhooks.map((wh) => (
               <div 
                 key={wh.id}
                 onClick={() => setSelectedWebhook(wh)}
-                className={`p-3 cursor-pointer hover:bg-amber-50 transition-colors space-y-1.5 ${
-                  selectedWebhook?.id === wh.id ? 'bg-amber-100 border-l-4 border-slate-900' : ''
+                className={`p-4 cursor-pointer hover:bg-slate-50/80 transition-all space-y-2 ${
+                  selectedWebhook?.id === wh.id ? 'bg-indigo-50/60 border-l-4 border-indigo-600' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-black text-slate-900">{wh.source}</span>
-                  <span className={`px-2 py-0.5 border border-slate-900 text-[10px] font-black uppercase ${
-                    wh.statusCode === 200 ? 'bg-emerald-300 text-slate-950' : 'bg-red-400 text-slate-950'
+                  <span className="font-semibold text-slate-900">{wh.source}</span>
+                  <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-semibold ${
+                    wh.statusCode === 200 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
                   }`}>
                     {wh.statusCode} OK
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-600">
-                  <span className="font-bold text-indigo-700">{wh.event}</span>
-                  <span>{wh.processingTimeMs} ms</span>
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-mono font-medium text-indigo-600">{wh.event}</span>
+                  <span className="font-mono text-[11px]">{wh.processingTimeMs} ms</span>
                 </div>
-                <div className="text-[10px] text-slate-500 font-bold flex justify-between pt-1">
+                <div className="text-[11px] text-slate-400 font-medium flex justify-between pt-0.5">
                   <span>{wh.timestamp}</span>
-                  <span className="text-slate-900">{wh.id}</span>
+                  <span className="font-mono text-slate-500">{wh.id}</span>
                 </div>
               </div>
             ))}
@@ -154,40 +154,40 @@ export function WebhookInspectorTab() {
         </div>
 
         {/* Right: Detailed Inspection Panel */}
-        <div className="lg:col-span-6 bg-white border-2 border-slate-900 p-4 space-y-4">
+        <div className="lg:col-span-6 bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 shadow-sm">
           {selectedWebhook ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b-2 border-slate-900 pb-2">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 font-black uppercase block">Inspecting Payload</span>
-                  <h4 className="font-black text-slate-900 text-sm uppercase">{selectedWebhook.id} — {selectedWebhook.source}</h4>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">Inspecting Payload</span>
+                  <h4 className="font-bold text-slate-900 text-sm">{selectedWebhook.id} — {selectedWebhook.source}</h4>
                 </div>
                 <button
                   onClick={() => handleReplayWebhook(selectedWebhook)}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black border-2 border-slate-900 uppercase cursor-pointer"
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer transition-colors"
                 >
                   Replay Payload
                 </button>
               </div>
 
               <div>
-                <span className="font-black text-slate-900 uppercase block mb-1">HTTP Headers</span>
-                <pre className="bg-slate-900 text-emerald-400 p-3 text-[11px] font-mono border-2 border-slate-900 overflow-x-auto">
+                <span className="font-semibold text-slate-800 block mb-1.5">HTTP Headers</span>
+                <pre className="bg-slate-900 text-emerald-400 p-4 text-[11px] font-mono rounded-lg overflow-x-auto shadow-inner">
                   {JSON.stringify(selectedWebhook.headers, null, 2)}
                 </pre>
               </div>
 
               <div>
-                <span className="font-black text-slate-900 uppercase block mb-1">JSON Raw Body Payload</span>
-                <pre className="bg-slate-900 text-amber-300 p-3 text-[11px] font-mono border-2 border-slate-900 overflow-x-auto max-h-60">
+                <span className="font-semibold text-slate-800 block mb-1.5">JSON Raw Body Payload</span>
+                <pre className="bg-slate-900 text-amber-300 p-4 text-[11px] font-mono rounded-lg overflow-x-auto max-h-60 shadow-inner">
                   {JSON.stringify(selectedWebhook.body, null, 2)}
                 </pre>
               </div>
             </div>
           ) : (
-            <div className="p-8 text-center text-slate-500 font-bold space-y-2">
-              <Code2 className="w-8 h-8 text-slate-400 mx-auto" />
-              <p>Select any webhook event on the left to inspect raw headers, signature authentication, and JSON body payload.</p>
+            <div className="py-12 px-6 text-center text-slate-400 font-medium space-y-2">
+              <Code2 className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-xs">Select any webhook event on the left to inspect raw headers, signature authentication, and JSON body payload.</p>
             </div>
           )}
         </div>

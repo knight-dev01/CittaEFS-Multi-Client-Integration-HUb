@@ -98,48 +98,6 @@ export function ConnectorsTab() {
       syncedInvoices: 12450,
       environment: 'PRODUCTION',
       isComingSoon: false
-    },
-    {
-      id: 'conn_sap_04',
-      tenantId: activeTenant.id,
-      platform: 'SAP S/4HANA',
-      type: 'OData REST API',
-      auth: 'X-CSRF-Token / OAuth2',
-      status: 'WARNING',
-      endpoint: 'https://my300192.s4hana.cloud.sap/sap/opu/odata/sap/API_INVOICE_SRV',
-      latencyMs: 0,
-      lastSync: 'Not Configured',
-      syncedInvoices: 0,
-      environment: 'PRODUCTION',
-      isComingSoon: true
-    },
-    {
-      id: 'conn_ns_05',
-      tenantId: activeTenant.id,
-      platform: 'NetSuite SuiteTalk',
-      type: 'RESTlet / Webhook',
-      auth: 'Token-Based Auth (TBA)',
-      status: 'WARNING',
-      endpoint: 'https://1234567.restlets.api.netsuite.com/app/site/hosting/restlet.nl',
-      latencyMs: 0,
-      lastSync: 'Not Configured',
-      syncedInvoices: 0,
-      environment: 'PRODUCTION',
-      isComingSoon: true
-    },
-    {
-      id: 'conn_sql_06',
-      tenantId: activeTenant.id,
-      platform: 'Custom SQL Staging DB',
-      type: 'PostgreSQL / View Poller',
-      auth: 'TLS Encrypted Pool',
-      status: 'WARNING',
-      endpoint: 'postgresql://db.tenant.internal:5432/erp_staging',
-      latencyMs: 0,
-      lastSync: 'Not Configured',
-      syncedInvoices: 0,
-      environment: 'SANDBOX',
-      isComingSoon: true
     }
   ]);
 
@@ -188,36 +146,36 @@ export function ConnectorsTab() {
   };
 
   return (
-    <div className="space-y-6 font-mono text-xs">
+    <div className="space-y-6 font-sans text-xs">
       
       {/* Header Banner */}
-      <div className="bg-slate-900 text-white p-4 border-2 border-slate-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-black text-amber-400 uppercase flex items-center gap-2">
-            <Plug className="w-5 h-5 text-amber-400" />
+          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <Plug className="w-5 h-5 text-indigo-400" />
             Pluggable ERP & Accounting Connectors Hub
           </h2>
-          <p className="text-slate-300 text-xs mt-1">
-            Active Adapter Architecture • Tenant: <strong className="text-white">{activeTenant.name}</strong> ({activeTenant.id})
+          <p className="text-slate-400 text-xs mt-1">
+            Active Adapter Architecture • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong> ({activeTenant.id})
           </p>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase border-2 border-slate-900 cursor-pointer inline-flex items-center space-x-1.5 shrink-0"
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 shrink-0 transition-colors"
         >
-          <Plus className="w-4 h-4 text-slate-950" />
-          <span>+ Add New Connector Adapter</span>
+          <Plus className="w-4 h-4 text-indigo-200" />
+          <span>Add New Connector</span>
         </button>
       </div>
 
       {/* Intuit Disconnect Route Banner */}
       {isQboDisconnectedNotice && (
-        <div className="bg-amber-100 border-2 border-amber-600 text-amber-950 p-4 font-mono text-xs flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 text-xs flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
             <div>
-              <strong className="font-black text-amber-950 uppercase">QuickBooks Disconnect Notice:</strong>
-              <p className="mt-0.5">Your QuickBooks Online app session was disconnected from Intuit. To restore automated CDC webhooks & IRN writebacks, please click "+ Add New Connector Adapter" to re-authenticate.</p>
+              <strong className="font-semibold text-amber-950">QuickBooks Disconnect Notice:</strong>
+              <p className="mt-0.5 text-amber-800">Your QuickBooks Online app session was disconnected from Intuit. To restore automated CDC webhooks & IRN writebacks, please click "+ Add New Connector Adapter" to re-authenticate.</p>
             </div>
           </div>
         </div>
@@ -225,17 +183,17 @@ export function ConnectorsTab() {
 
       {/* Intuit Connect / Reconnect Route Banner */}
       {isQboConnectNotice && (
-        <div className="bg-emerald-100 border-2 border-emerald-700 text-emerald-950 p-4 font-mono text-xs flex items-center justify-between">
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-4 text-xs flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-3">
-            <Zap className="w-5 h-5 text-emerald-700 shrink-0" />
+            <Zap className="w-5 h-5 text-emerald-600 shrink-0" />
             <div>
-              <strong className="font-black text-emerald-950 uppercase">Intuit Authorization Request:</strong>
-              <p className="mt-0.5">You arrived via QuickBooks App Store integration link. Click "+ Add New Connector Adapter" or select QuickBooks Online below to initiate OAuth 2.0 grant.</p>
+              <strong className="font-semibold text-emerald-950">Intuit Authorization Request:</strong>
+              <p className="mt-0.5 text-emerald-800">You arrived via QuickBooks App Store integration link. Click "+ Add New Connector Adapter" or select QuickBooks Online below to initiate OAuth 2.0 grant.</p>
             </div>
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black uppercase border-2 border-slate-900 cursor-pointer text-[11px] shrink-0"
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer text-xs shrink-0 transition-colors shadow-sm"
           >
             Authorize QBO Now
           </button>
@@ -245,8 +203,8 @@ export function ConnectorsTab() {
       {/* Connector Health Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {connectors.map((conn) => (
-          <div key={conn.id} className="bg-white border-2 border-slate-900 p-4 space-y-3 relative hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between pb-2 border-b-2 border-slate-100">
+          <div key={conn.id} className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 {conn.platform.includes('SQL') ? (
                   <Database className="w-4 h-4 text-indigo-600" />
@@ -255,52 +213,52 @@ export function ConnectorsTab() {
                 ) : conn.platform.includes('SAP') ? (
                   <Server className="w-4 h-4 text-indigo-600" />
                 ) : conn.platform.includes('NetSuite') ? (
-                  <Zap className="w-4 h-4 text-amber-600" />
+                  <Zap className="w-4 h-4 text-amber-500" />
                 ) : (
-                  <Globe className="w-4 h-4 text-amber-600" />
+                  <Globe className="w-4 h-4 text-indigo-600" />
                 )}
-                <span className="font-black text-slate-900 text-sm uppercase">{conn.platform}</span>
+                <span className="font-semibold text-slate-900 text-sm">{conn.platform}</span>
               </div>
               {conn.isComingSoon ? (
-                <span className="px-2 py-0.5 text-[10px] font-black uppercase border border-slate-900 bg-slate-200 text-slate-800">
+                <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                   COMING SOON
                 </span>
               ) : (
-                <span className={`px-2 py-0.5 text-[10px] font-black uppercase border border-slate-900 ${
-                  conn.status === 'HEALTHY' ? 'bg-emerald-300 text-slate-950' : 'bg-amber-300 text-slate-950'
+                <span className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                  conn.status === 'HEALTHY' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                 }`}>
                   {conn.status} (LIVE)
                 </span>
               )}
             </div>
 
-            <div className="space-y-1.5 text-[11px]">
-              <div className="flex justify-between text-slate-600">
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between text-slate-500">
                 <span>Protocol:</span>
-                <span className="font-bold text-slate-900">{conn.type}</span>
+                <span className="font-medium text-slate-900">{conn.type}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-slate-500">
                 <span>Auth Scheme:</span>
-                <span className="font-bold text-slate-900">{conn.auth}</span>
+                <span className="font-medium text-slate-900">{conn.auth}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-slate-500">
                 <span>Adapter Latency:</span>
-                <span className="font-mono font-bold text-emerald-700">{conn.isComingSoon ? 'N/A' : `${conn.latencyMs} ms`}</span>
+                <span className="font-mono font-medium text-emerald-600">{conn.isComingSoon ? 'N/A' : `${conn.latencyMs} ms`}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-slate-500">
                 <span>Total Ingested:</span>
-                <span className="font-mono font-bold text-slate-900">{conn.syncedInvoices.toLocaleString()}</span>
+                <span className="font-mono font-medium text-slate-900">{conn.syncedInvoices.toLocaleString()}</span>
               </div>
             </div>
 
-            <div className="pt-2 border-t-2 border-slate-100 flex items-center justify-between text-[10px]">
-              <span className="text-slate-500 font-bold">Last Sync: {conn.lastSync}</span>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="text-slate-400">Last Sync: {conn.lastSync}</span>
               <div className="flex items-center gap-2">
                 {conn.platform.includes('QuickBooks') && (
                   <button
                     onClick={handleSyncQbo}
                     disabled={syncingQbo}
-                    className="px-2 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase text-[10px] border border-slate-900 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-lg border border-indigo-200 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
                   >
                     <RefreshCw className={`w-3 h-3 ${syncingQbo ? 'animate-spin' : ''}`} />
                     <span>{syncingQbo ? 'Syncing...' : 'Sync Now'}</span>
@@ -309,8 +267,8 @@ export function ConnectorsTab() {
                 <button 
                   onClick={() => handleTestExistingConnector(conn.id, conn.platform, conn.isComingSoon)}
                   disabled={testingId === conn.id}
-                  className={`font-black hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 ${
-                    conn.isComingSoon ? 'text-slate-500 hover:text-slate-800' : 'text-indigo-700'
+                  className={`font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 ${
+                    conn.isComingSoon ? 'text-slate-400 hover:text-slate-600' : 'text-indigo-600 hover:text-indigo-700'
                   }`}
                 >
                   <RefreshCw className={`w-3 h-3 ${testingId === conn.id ? 'animate-spin' : ''}`} />
@@ -323,18 +281,18 @@ export function ConnectorsTab() {
       </div>
 
       {/* Adapter Architecture Summary */}
-      <div className="bg-slate-100 border-2 border-slate-900 p-4 space-y-3">
-        <div className="flex items-center gap-2 font-black text-slate-900 uppercase">
-          <Server className="w-4 h-4 text-slate-900" />
+      <div className="bg-slate-50/80 rounded-xl border border-slate-200/80 p-5 space-y-2">
+        <div className="flex items-center gap-2 font-bold text-slate-800">
+          <Server className="w-4 h-4 text-indigo-600" />
           <span>Adapter Pattern Specifications (`ConnectorAdapter` Class Hierarchy)</span>
         </div>
-        <p className="text-slate-700 text-xs leading-relaxed">
+        <p className="text-slate-600 text-xs leading-relaxed">
           The Hub utilizes an Enterprise Adapter Pattern (`ConnectorAdapter`). Every client integration implements standard methods: 
-          <code className="bg-white border border-slate-400 px-1 py-0.5 ml-1 text-slate-900 font-bold">authenticate()</code>, 
-          <code className="bg-white border border-slate-400 px-1 py-0.5 ml-1 text-slate-900 font-bold">fetchData()</code>, 
-          <code className="bg-white border border-slate-400 px-1 py-0.5 ml-1 text-slate-900 font-bold">validate()</code>, 
-          <code className="bg-white border border-slate-400 px-1 py-0.5 ml-1 text-slate-900 font-bold">transform()</code>, and 
-          <code className="bg-white border border-slate-400 px-1 py-0.5 ml-1 text-slate-900 font-bold">receiveWebhook()</code>.
+          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">authenticate()</code>, 
+          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">fetchData()</code>, 
+          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">validate()</code>, 
+          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">transform()</code>, and 
+          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">receiveWebhook()</code>.
         </p>
       </div>
 

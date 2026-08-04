@@ -79,24 +79,24 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 overflow-y-auto font-mono">
-      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-4 border-4 border-slate-900 relative">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto font-sans text-xs">
+      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-4 rounded-2xl border border-slate-200 shadow-xl relative">
         
-        <div className="flex items-center justify-between pb-3 border-b-2 border-slate-900">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
-            <h3 className="text-base font-black text-slate-900 uppercase flex items-center gap-2">
-              <Send className="w-5 h-5 text-amber-500" />
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Send className="w-4 h-4 text-indigo-600" />
               Test Invoice Transmission Gateway
             </h3>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Dispatches live payload to <code className="bg-slate-900 text-amber-400 px-1 py-0.5 font-mono">POST /api/integration/gen/invoices</code> for {activeTenant.name}
+            <p className="text-xs text-slate-500 mt-0.5">
+              Dispatches live payload to <code className="bg-slate-100 text-indigo-700 px-1.5 py-0.5 rounded font-mono text-[11px]">POST /api/integration/gen/invoices</code> for {activeTenant.name}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-xs text-slate-500 hover:text-slate-900 cursor-pointer font-black"
+            className="text-slate-400 hover:text-slate-600 cursor-pointer font-medium p-1 rounded-lg hover:bg-slate-100 transition-colors"
           >
-            [X]
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -104,22 +104,22 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
           
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block font-black text-slate-900 uppercase mb-1">Client Invoice # *</label>
+              <label className="block font-medium text-slate-700 mb-1">Client Invoice # *</label>
               <input
                 type="text"
                 value={invNum}
                 onChange={(e) => setInvNum(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-slate-900 font-mono font-bold text-slate-900 focus:outline-none uppercase"
+                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
                 required
               />
             </div>
 
             <div>
-              <label className="block font-black text-slate-900 uppercase mb-1">Invoice Kind *</label>
+              <label className="block font-medium text-slate-700 mb-1">Invoice Kind *</label>
               <select
                 value={kind}
                 onChange={(e) => setKind(e.target.value as any)}
-                className="w-full px-3 py-2 border-2 border-slate-900 bg-white font-black text-slate-900 focus:outline-none uppercase cursor-pointer"
+                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
               >
                 <option value="B2B">B2B (Corporate)</option>
                 <option value="B2C">B2C (Retail)</option>
@@ -127,11 +127,11 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
             </div>
 
             <div>
-              <label className="block font-black text-slate-900 uppercase mb-1">Document Type *</label>
+              <label className="block font-medium text-slate-700 mb-1">Document Type *</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as any)}
-                className="w-full px-3 py-2 border-2 border-slate-900 bg-white font-black text-slate-900 focus:outline-none uppercase cursor-pointer"
+                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
               >
                 <option value="STANDARD">STANDARD</option>
                 <option value="CREDIT_NOTE">CREDIT NOTE</option>
@@ -142,25 +142,25 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-black text-slate-900 uppercase mb-1">Customer Name *</label>
+              <label className="block font-medium text-slate-700 mb-1">Customer Name *</label>
               <input
                 type="text"
                 value={custName}
                 onChange={(e) => setCustName(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-slate-900 font-bold text-slate-900 focus:outline-none uppercase"
+                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 required
               />
             </div>
 
             {kind === 'B2B' && (
               <div>
-                <label className="block font-black text-slate-900 uppercase mb-1">Tax ID (TIN) *</label>
+                <label className="block font-medium text-slate-700 mb-1">Tax ID (TIN) *</label>
                 <input
                   type="text"
                   value={custTin}
                   onChange={(e) => setCustTin(e.target.value)}
                   placeholder="e.g. P019283746Z"
-                  className="w-full px-3 py-2 border-2 border-slate-900 font-mono font-bold text-slate-900 focus:outline-none uppercase"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
                   required
                 />
               </div>
@@ -168,13 +168,13 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
           </div>
 
           {/* Line Items */}
-          <div className="space-y-2 pt-2 border-t-2 border-slate-900">
+          <div className="space-y-3 pt-3 border-t border-slate-100">
             <div className="flex items-center justify-between">
-              <span className="font-black uppercase text-slate-900">Invoice Line Items ({lineItems.length}):</span>
+              <span className="font-semibold text-slate-800">Invoice Line Items ({lineItems.length}):</span>
               <button
                 type="button"
                 onClick={handleAddLine}
-                className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black border border-slate-900 text-[11px] cursor-pointer inline-flex items-center space-x-1 uppercase"
+                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold border border-indigo-200 rounded-lg text-xs cursor-pointer inline-flex items-center space-x-1 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Item Line</span>
@@ -182,55 +182,55 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
             </div>
 
             {lineItems.map((item, idx) => (
-              <div key={idx} className="p-3 bg-slate-100 border-2 border-slate-900 space-y-2">
+              <div key={idx} className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2.5">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <div className="sm:col-span-1">
-                    <label className="text-[10px] text-slate-900 font-black uppercase block">Item SKU</label>
+                    <label className="text-[11px] text-slate-500 font-medium block mb-1">Item SKU</label>
                     <input
                       type="text"
                       value={item.itemCode}
                       onChange={(e) => handleLineChange(idx, 'itemCode', e.target.value)}
-                      className="w-full px-2 py-1 border-2 border-slate-900 font-mono font-bold text-slate-900 uppercase"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 uppercase"
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-[10px] text-slate-900 font-black uppercase block">Description</label>
+                    <label className="text-[11px] text-slate-500 font-medium block mb-1">Description</label>
                     <input
                       type="text"
                       value={item.description}
                       onChange={(e) => handleLineChange(idx, 'description', e.target.value)}
-                      className="w-full px-2 py-1 border-2 border-slate-900 font-bold text-slate-900"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-900 font-black uppercase block">Unit Price (KES)</label>
+                    <label className="text-[11px] text-slate-500 font-medium block mb-1">Unit Price (KES)</label>
                     <input
                       type="number"
                       value={item.unitPrice}
                       onChange={(e) => handleLineChange(idx, 'unitPrice', Number(e.target.value))}
-                      className="w-full px-2 py-1 border-2 border-slate-900 font-black text-slate-900"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
                   <div>
-                    <label className="text-[10px] text-slate-900 font-black uppercase block">Quantity</label>
+                    <label className="text-[11px] text-slate-500 font-medium block mb-1">Quantity</label>
                     <input
                       type="number"
                       value={item.quantity}
                       onChange={(e) => handleLineChange(idx, 'quantity', Number(e.target.value))}
-                      className="w-full px-2 py-1 border-2 border-slate-900 font-black text-slate-900"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
 
                   <div className="sm:col-span-2 flex items-center space-x-2">
                     <div className="flex-1">
-                      <label className="text-[10px] text-slate-900 font-black uppercase block">Compliance Code (hsOrServiceCode)</label>
+                      <label className="text-[11px] text-slate-500 font-medium block mb-1">Compliance Code (hsOrServiceCode)</label>
                       <select
                         value={item.hsOrServiceCode}
                         onChange={(e) => handleLineChange(idx, 'hsOrServiceCode', e.target.value)}
-                        className="w-full px-2 py-1 border-2 border-slate-900 bg-white text-[11px] font-mono font-bold text-slate-900 uppercase cursor-pointer"
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
                       >
                         <option value="UNMAPPED">UNMAPPED (Trigger Pre-flight Error)</option>
                         <optgroup label="HS Codes">
@@ -250,7 +250,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                       <button
                         type="button"
                         onClick={() => handleRemoveLine(idx)}
-                        className="p-1 bg-red-500 text-white hover:bg-red-600 cursor-pointer border border-slate-900 mt-4"
+                        className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg cursor-pointer border border-rose-200 mt-5 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -262,31 +262,31 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
           </div>
 
           {responseResult && (
-            <div className={`p-3 border-2 border-slate-900 text-xs space-y-1 ${
-              responseResult.success ? 'bg-emerald-400 text-slate-950 font-black' : 'bg-red-500 text-white font-black'
+            <div className={`p-4 rounded-xl border text-xs space-y-1 shadow-sm ${
+              responseResult.success ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-medium' : 'bg-rose-50 text-rose-900 border-rose-200 font-medium'
             }`}>
-              <div className="flex items-center space-x-1.5 font-black uppercase">
-                {responseResult.success ? <CheckCircle2 className="w-4 h-4 text-slate-950" /> : <AlertCircle className="w-4 h-4 text-white" />}
+              <div className="flex items-center space-x-2 font-semibold">
+                {responseResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
                 <span>{responseResult.message || 'Gateway Response Returned'}</span>
               </div>
               {responseResult.cittaResponse?.irn && (
-                <p className="font-mono text-[11px]">IRN Assigned: <strong>{responseResult.cittaResponse.irn}</strong></p>
+                <p className="font-mono text-xs">IRN Assigned: <strong className="text-slate-900">{responseResult.cittaResponse.irn}</strong></p>
               )}
             </div>
           )}
 
-          <div className="pt-2 flex justify-end space-x-2">
+          <div className="pt-3 flex justify-end space-x-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-900 font-black text-xs uppercase border-2 border-slate-900 cursor-pointer"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg cursor-pointer transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isTransmitting}
-              className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black text-xs uppercase border-2 border-slate-900 cursor-pointer inline-flex items-center space-x-1.5"
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors disabled:opacity-50"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{isTransmitting ? 'Transmitting to Gateway...' : 'Transmit Invoice'}</span>

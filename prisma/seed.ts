@@ -66,8 +66,8 @@ async function main() {
   }
 
   const defaultUsers = [
-    { email: 'admin@cittaefs.com', name: 'James Carter', password: 'Admin123!', role: 'ADMIN', organization: 'CittaEFS Enterprise', tenantId: 'tenant_qbo' },
-    { email: 'billing@technova.com', name: 'Amara Vance', password: 'TechNova2026!', role: 'OPERATOR', organization: 'TechNova Solutions Group', tenantId: 'tenant_qbo' }
+    { email: 'admin@cittaefs.com', name: 'James Carter', password: 'Admin123!', role: 'ADMIN', organization: 'CittaEFS Enterprise', tenantId: '' },
+    { email: 'operator@cittaefs.com', name: 'CittaEFS Operator', password: 'Operator123!', role: 'OPERATOR', organization: 'CittaEFS Operations', tenantId: '' }
   ];
 
   if (hasDatabaseUrl) {
@@ -76,7 +76,7 @@ async function main() {
       await prisma.user.deleteMany({
         where: {
           NOT: {
-            email: { in: ['admin@cittaefs.com', 'billing@technova.com'] }
+            email: { in: ['admin@cittaefs.com', 'operator@cittaefs.com'] }
           }
         }
       });

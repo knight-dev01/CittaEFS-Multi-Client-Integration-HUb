@@ -342,11 +342,7 @@ export class SqlAdapter implements ConnectorAdapter {
 
 export const CONNECTOR_ADAPTERS: Record<string, ConnectorAdapter> = {
   'QuickBooks Online': new QuickBooksAdapter(),
-  'Sage ERP': new SageAdapter(),
+  'Excel & CSV Import (.xlsx, .csv)': new CsvAdapter(),
   'Excel & CSV Import': new CsvAdapter(),
-  'CSV Direct Drops': new CsvAdapter(),
-  'SAP S/4HANA': new SapAdapter(),
-  'NetSuite SuiteTalk': new NetsuiteAdapter(),
-  'Odoo ERP': new OdooAdapter(),
-  'Custom SQL Staging DB': new SqlAdapter()
+  'CSV Direct Drops': new CsvAdapter()
 };

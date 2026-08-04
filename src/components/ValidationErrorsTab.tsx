@@ -9,14 +9,12 @@ import {
   FileCode, 
   ArrowRight, 
   Building2,
-  ListFilter
+  ListFilter,
+  X
 } from 'lucide-react';
 
 export function ValidationErrorsTab() {
   const { validationErrors, activeTenant, resolveValidationError, currentUser } = useHub();
-
-  // Operator and Admin can both resolve errors
-  // (Assuming full access since auditor check is removed)
 
   const [selectedError, setSelectedError] = useState<ValidationErrorItem | null>(null);
   const [selectedHsCode, setSelectedHsCode] = useState<string>('HS-3926.90');
@@ -41,118 +39,113 @@ export function ValidationErrorsTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans text-xs">
       
       {/* Header Summary */}
-      <div className="bg-slate-900 border-2 border-slate-900 p-5 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 font-mono">
-        <div className="flex items-start space-x-3">
-          <div className="p-2 bg-amber-400 border border-slate-900 text-slate-950 shrink-0">
-            <AlertTriangle className="w-5 h-5" />
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-start space-x-3.5">
+          <div className="p-3 bg-amber-500 rounded-xl text-slate-950 shrink-0 shadow-md shadow-amber-500/20">
+            <AlertTriangle className="w-5 h-5 text-slate-950" />
           </div>
           <div>
-            <h2 className="text-sm font-black text-amber-400 uppercase tracking-tight">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
               Pre-Flight Validation Errors Queue ({openErrors.length} Open)
             </h2>
-            <p className="text-xs text-slate-300 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               Automated pre-flight guard catching unmapped SKUs, missing HS/Service codes, and malformed TINs before sending to CittaEFS.
             </p>
           </div>
         </div>
-        <div className="flex items-center space-x-2 text-xs">
-          <span className="px-3 py-1 bg-amber-400 text-slate-950 border border-slate-900 font-black uppercase">
+        <div className="flex items-center space-x-2 text-xs shrink-0">
+          <span className="px-3 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full font-medium">
             {openErrors.length} Open Rejections
           </span>
-          <span className="px-3 py-1 bg-emerald-400 text-slate-950 border border-slate-900 font-black uppercase">
+          <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-medium">
             {resolvedErrors.length} Auto-Resolved
           </span>
         </div>
       </div>
 
       {/* Main Table */}
-      <div className="bg-white border-2 border-slate-900 overflow-hidden font-mono">
-        <div className="px-4 py-3 bg-slate-900 text-white border-b-2 border-slate-900 flex items-center justify-between">
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 bg-slate-900 text-white border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <ListFilter className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-black uppercase tracking-wider">
+            <h3 className="text-xs font-bold uppercase tracking-wider">
               {activeTenant.name} Exception List
             </h3>
           </div>
         </div>
 
         {tenantErrors.length === 0 ? (
-          <div className="p-8 text-center text-slate-900">
-            <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
-            <p className="text-sm font-black uppercase">Zero Validation Errors Detected!</p>
-            <p className="text-xs text-slate-600 mt-1">All ingested transactions comply 100% with CittaEFS & NRS specifications.</p>
+          <div className="p-10 text-center text-slate-800">
+            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+            <p className="text-base font-bold text-slate-900">Zero Validation Errors Detected!</p>
+            <p className="text-xs text-slate-500 mt-1">All ingested transactions comply 100% with CittaEFS & NRS specifications.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs text-slate-900">
               <thead>
-                <tr className="bg-slate-100 text-slate-900 uppercase text-[10px] tracking-wider border-b-2 border-slate-900">
-                  <th className="py-2.5 px-3 border-r border-slate-300">Status</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Client Invoice #</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Error Category</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Field Affected</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Error Description</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Detected At</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
+                <tr className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-semibold tracking-wider border-b border-slate-100">
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Client Invoice #</th>
+                  <th className="py-3 px-4">Error Category</th>
+                  <th className="py-3 px-4">Field Affected</th>
+                  <th className="py-3 px-4">Error Description</th>
+                  <th className="py-3 px-4">Detected At</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-300">
+              <tbody className="divide-y divide-slate-100">
                 {tenantErrors.map((err) => (
-                  <tr key={err.id} className="hover:bg-slate-100 transition">
-                    <td className="py-3 px-3 border-r border-slate-200">
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black border border-slate-900 uppercase ${
-                        err.status === 'OPEN' ? 'bg-amber-400 text-slate-950' : 'bg-emerald-400 text-slate-950'
+                  <tr key={err.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3.5 px-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full border ${
+                        err.status === 'OPEN' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       }`}>
                         {err.status}
                       </span>
                     </td>
 
-                    <td className="py-3 px-3 font-black text-slate-900 font-mono border-r border-slate-200">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
                       {err.clientInvoiceNumber}
                     </td>
 
-                    <td className="py-3 px-3 border-r border-slate-200">
-                      <span className="px-1.5 py-0.5 bg-slate-900 text-white font-black text-[10px] uppercase">
+                    <td className="py-3.5 px-4">
+                      <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 font-medium rounded-full text-[10px]">
                         {err.errorCategory}
                       </span>
                     </td>
 
-                    <td className="py-3 px-3 font-mono text-[10px] text-slate-900 font-black border-r border-slate-200">
+                    <td className="py-3.5 px-4 font-mono text-[11px] text-slate-700 font-medium">
                       {err.fieldAffected}
                     </td>
 
-                    <td className="py-3 px-3 max-w-xs truncate text-slate-900 font-medium border-r border-slate-200" title={err.errorMessage}>
+                    <td className="py-3.5 px-4 max-w-xs truncate text-slate-600 font-medium" title={err.errorMessage}>
                       {err.errorMessage}
                     </td>
 
-                    <td className="py-3 px-3 text-[10px] text-slate-600 font-mono border-r border-slate-200">
+                    <td className="py-3.5 px-4 text-xs text-slate-500 font-mono">
                       {err.createdAt}
                     </td>
 
-                    <td className="py-3 px-3 text-right">
+                    <td className="py-3.5 px-4 text-right">
                       {err.status === 'OPEN' ? (
-                        true ? (
-                          <button
-                            onClick={() => {
-                              setSelectedError(err);
-                              if (err.errorCategory === 'MISSING_HS_CODE') setSelectedHsCode('HS-3926.90');
-                            }}
-                            className="px-3 py-1 bg-amber-400 border border-slate-900 text-slate-950 font-black text-xs hover:bg-amber-300 transition cursor-pointer inline-flex items-center space-x-1 uppercase"
-                          >
-                            <Wrench className="w-3.5 h-3.5" />
-                            <span>1-Click Fix</span>
-                          </button>
-                        ) : (
-                          <span className="text-slate-500 font-bold uppercase text-[11px]">
-                            Awaiting Action
-                          </span>
-                        )
+                        <button
+                          onClick={() => {
+                            setSelectedError(err);
+                            if (err.errorCategory === 'MISSING_HS_CODE') setSelectedHsCode('HS-3926.90');
+                          }}
+                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer inline-flex items-center space-x-1.5 shadow-sm"
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>1-Click Fix</span>
+                        </button>
                       ) : (
-                        <span className="text-emerald-700 font-black text-[11px] uppercase">
-                          Resolved & Stamped
+                        <span className="text-emerald-700 font-semibold text-xs inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          Resolved
                         </span>
                       )}
                     </td>
@@ -166,36 +159,36 @@ export function ValidationErrorsTab() {
 
       {/* 1-CLICK RESOLUTION MODAL */}
       {selectedError && (
-        <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 font-mono">
-          <div className="bg-white border-4 border-slate-900 max-w-lg w-full p-6 text-slate-900 space-y-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 text-slate-900 space-y-4">
             
-            <div className="flex items-center justify-between pb-3 border-b-2 border-slate-900">
-              <h3 className="text-sm font-black text-slate-900 uppercase flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-amber-500" />
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-indigo-600" />
                 1-Click Resolution for {selectedError.clientInvoiceNumber}
               </h3>
               <button
                 onClick={() => setSelectedError(null)}
-                className="text-xs text-slate-500 hover:text-slate-900 cursor-pointer font-black"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
               >
-                [CANCEL]
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-amber-100 border-2 border-slate-900 p-3 text-xs text-slate-950 space-y-1">
-              <p><strong>Affected Field:</strong> <code className="font-mono bg-white px-1 py-0.5 border border-slate-900 font-black">{selectedError.fieldAffected}</code></p>
-              <p><strong>Error:</strong> {selectedError.errorMessage}</p>
+            <div className="bg-amber-50 rounded-xl border border-amber-200/80 p-3.5 text-xs text-amber-900 space-y-1">
+              <p><strong>Affected Field:</strong> <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-300/80 font-bold text-amber-950">{selectedError.fieldAffected}</code></p>
+              <p className="text-amber-800"><strong>Error:</strong> {selectedError.errorMessage}</p>
             </div>
 
             {selectedError.errorCategory === 'MISSING_HS_CODE' && (
               <div className="space-y-2 text-xs">
-                <label className="block font-black text-slate-900 uppercase">
+                <label className="block font-medium text-slate-700">
                   Select Official CittaEFS Code Mapping:
                 </label>
                 <select
                   value={selectedHsCode}
                   onChange={(e) => setSelectedHsCode(e.target.value)}
-                  className="w-full px-3 py-2 border-2 border-slate-900 bg-white font-black text-slate-900 focus:outline-none"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
                 >
                   <optgroup label="Physical Goods (HS Codes)">
                     {CITTA_HS_CODES_REFERENCE.map(c => (
@@ -212,7 +205,7 @@ export function ValidationErrorsTab() {
                     ))}
                   </optgroup>
                 </select>
-                <p className="text-[11px] text-slate-600">
+                <p className="text-[11px] text-slate-500 leading-relaxed">
                   Resolving will automatically register this code in the Item Dictionary and re-transmit invoice {selectedError.clientInvoiceNumber} to CittaEFS.
                 </p>
               </div>
@@ -220,7 +213,7 @@ export function ValidationErrorsTab() {
 
             {selectedError.errorCategory === 'INVALID_TIN_FORMAT' && (
               <div className="space-y-2 text-xs">
-                <label className="block font-black text-slate-900 uppercase">
+                <label className="block font-medium text-slate-700">
                   Corrected Tax Identification Number (TIN):
                 </label>
                 <input
@@ -228,9 +221,9 @@ export function ValidationErrorsTab() {
                   value={correctedTin}
                   onChange={(e) => setCorrectedTin(e.target.value)}
                   placeholder="e.g. P051239841A"
-                  className="w-full px-3 py-2 border-2 border-slate-900 font-mono font-black text-slate-900 focus:outline-none uppercase"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
                 />
-                <p className="text-[11px] text-slate-600">
+                <p className="text-[11px] text-slate-500 leading-relaxed">
                   Must follow standard NRS Taxpayer TIN format (Starts with P, followed by 9 digits and ending with letter).
                 </p>
               </div>
@@ -239,17 +232,17 @@ export function ValidationErrorsTab() {
             <div className="pt-2 flex justify-end space-x-2">
               <button
                 onClick={() => setSelectedError(null)}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-900 text-xs font-black uppercase border-2 border-slate-900 cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleResolve}
                 disabled={isResolving}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-black uppercase border-2 border-slate-900 cursor-pointer inline-flex items-center space-x-1"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-1.5 transition-colors disabled:opacity-50"
               >
                 <span>{isResolving ? 'Re-Transmitting...' : 'Fix & Re-Transmit Invoice'}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
 

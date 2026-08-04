@@ -97,66 +97,83 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const canIngest = userRole === 'ADMIN' || userRole === 'OPERATOR';
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full bg-slate-900 text-white font-mono border-r-4 border-slate-950">
+    <div className="flex flex-col h-full bg-slate-900 text-slate-100 font-sans border-r border-slate-800 shadow-xl">
       {/* Brand Title */}
-      <div className="p-4 border-b border-slate-800 shrink-0">
-        <div className="flex items-center space-x-2.5">
-          <div className="bg-amber-400 p-1.5 border-2 border-slate-950 font-black text-slate-950 flex items-center justify-center shrink-0">
-            <Layers className="w-5 h-5 text-slate-950" />
+      <div className="p-5 border-b border-slate-800/80 shrink-0">
+        <div className="flex items-center space-x-3">
+          <div className="bg-gradient-to-tr from-indigo-600 to-indigo-500 p-2 rounded-xl text-white shadow-md shadow-indigo-600/30 flex items-center justify-center shrink-0">
+            <Layers className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-xs font-black text-amber-400 uppercase tracking-widest leading-none">
-                CittaEFS Hub
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-white tracking-tight leading-none">
+                CittaEFS
               </h1>
-              <span className="text-[9px] bg-emerald-400 text-slate-950 px-1 py-0.2 border border-slate-950 font-black shrink-0">
+              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
                 v2.4
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 font-bold mt-1">
-              Multi-Tenant Middleware
+            <p className="text-[11px] text-slate-400 font-normal mt-1">
+              Integration & Tax Compliance Hub
             </p>
           </div>
         </div>
       </div>
 
       {/* Tenant Selector */}
-      <div className="p-4 border-b border-slate-800 shrink-0 bg-slate-950/40">
-        <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1.5 tracking-wider">Active Workspace Tenant:</label>
-        <div className="flex items-center bg-slate-800 border-2 border-slate-700 px-2 py-1.5 space-x-1.5 w-full">
-          <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
-          <select
-            value={activeTenantId}
-            onChange={(e) => setActiveTenantId(e.target.value as any)}
-            className="bg-transparent text-white font-bold focus:outline-none cursor-pointer uppercase text-xs w-full"
-          >
-            {tenants.map((t) => (
-              <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                {t.name}
-              </option>
-            ))}
-          </select>
+      <div className="p-4 border-b border-slate-800/80 shrink-0 bg-slate-950/30">
+        <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider">Active Workspace Client:</label>
+        <div className="relative">
+          <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 w-full focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+            <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
+            <select
+              value={activeTenantId}
+              onChange={(e) => {
+                if (!e.target.value) {
+                  onOpenOnboardModal();
+                } else {
+                  setActiveTenantId(e.target.value as any);
+                }
+              }}
+              className="bg-transparent text-white font-medium focus:outline-none cursor-pointer text-xs w-full pr-4 appearance-none"
+            >
+              {tenants.filter(t => t.platformType === 'QuickBooks Online' || t.platformType === 'Excel & CSV Import' || !t.platformType).length === 0 ? (
+                <option value="" className="bg-slate-900 text-indigo-400 font-medium">
+                  + Onboard Client Entity
+                </option>
+              ) : (
+                tenants
+                  .filter(t => t.platformType === 'QuickBooks Online' || t.platformType === 'Excel & CSV Import' || !t.platformType)
+                  .map((t) => (
+                    <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                      {t.name} ({t.platformType === 'QuickBooks Online' ? 'QBO' : 'Excel/CSV'})
+                    </option>
+                  ))
+              )}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />
+          </div>
         </div>
-        <div className="text-[9px] text-slate-400 font-bold mt-1.5 flex justify-between items-center px-1">
-          <span>Platform: {activeTenant.platformType}</span>
-          <span className="bg-slate-800 px-1 py-0.2 text-[8px] text-amber-400 border border-slate-700 font-mono">
-            {activeTenant.region || 'EU-WEST2'}
+        <div className="text-[10px] text-slate-400 font-medium mt-2 flex justify-between items-center px-0.5">
+          <span>{activeTenant?.platformType || 'QuickBooks / Excel'}</span>
+          <span className="bg-slate-800 px-2 py-0.5 text-[9px] text-indigo-300 rounded border border-slate-700 font-mono">
+            {activeTenant?.region || 'EU-WEST2'}
           </span>
         </div>
       </div>
 
       {/* Main navigation section grouped by categories */}
-      <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 scrollbar-thin">
         {categories.map((category) => {
           const categoryTabs = visibleTabs.filter(tab => tab.category === category.id);
           if (categoryTabs.length === 0) return null;
 
           return (
             <div key={category.id} className="space-y-1">
-              <h3 className="px-2 text-[9px] font-black tracking-widest text-slate-500 uppercase">
+              <h3 className="px-2 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
                 {category.label}
               </h3>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {categoryTabs.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
@@ -168,19 +185,19 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                         setActiveTab(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`flex items-center justify-between w-full px-2.5 py-1.5 font-bold uppercase tracking-wider text-xs border transition-colors cursor-pointer ${
+                      className={`flex items-center justify-between w-full px-3 py-2 rounded-lg font-medium text-xs transition-all cursor-pointer ${
                         isActive
-                          ? 'bg-amber-400 text-slate-950 border-amber-400 font-black'
-                          : 'bg-transparent text-slate-400 hover:text-white hover:bg-slate-800 border-transparent'
+                          ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                       }`}
                     >
-                      <div className="flex items-center space-x-2">
-                        <Icon className={`w-4 h-4 ${isActive ? 'text-slate-950' : 'text-slate-400'}`} />
+                      <div className="flex items-center space-x-2.5">
+                        <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                         <span>{tab.label}</span>
                       </div>
                       {tab.count !== undefined && tab.count > 0 && (
-                        <span className={`px-1.5 py-0.2 text-[9px] font-black border ${
-                          isActive ? 'bg-slate-950 text-red-400 border-slate-950' : 'bg-red-500 text-white border-red-600'
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                          isActive ? 'bg-white/20 text-white' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                         }`}>
                           {tab.count}
                         </span>
@@ -195,17 +212,17 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       </div>
 
       {/* Quick Action Button Section */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950/20 shrink-0 space-y-2">
+      <div className="p-4 border-t border-slate-800/80 bg-slate-950/30 shrink-0 space-y-2">
         {canOnboard && (
           <button
             onClick={() => {
               onOpenOnboardModal();
               setIsMobileMenuOpen(false);
             }}
-            className="flex items-center justify-center space-x-1.5 w-full py-1.5 bg-emerald-400 hover:bg-emerald-300 text-slate-950 text-xs font-black border-2 border-slate-950 cursor-pointer uppercase tracking-wider transition-colors"
+            className="flex items-center justify-center space-x-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg cursor-pointer shadow-sm transition-all"
           >
-            <Plus className="w-4 h-4 text-slate-950" />
-            <span>+ Onboard Client</span>
+            <Plus className="w-4 h-4 text-white" />
+            <span>Onboard Client</span>
           </button>
         )}
         {canIngest && (
@@ -214,23 +231,23 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
               onOpenNewInvoiceModal();
               setIsMobileMenuOpen(false);
             }}
-            className="flex items-center justify-center space-x-1.5 w-full py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black border-2 border-slate-950 cursor-pointer uppercase tracking-wider transition-colors"
+            className="flex items-center justify-center space-x-2 w-full py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg border border-slate-700 cursor-pointer transition-all"
           >
-            <Plus className="w-4 h-4 text-slate-950" />
+            <Plus className="w-4 h-4 text-indigo-400" />
             <span>Ingest Transaction</span>
           </button>
         )}
       </div>
 
       {/* User profile footer section */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950/60 shrink-0 flex items-center justify-between text-xs gap-2">
-        <div className="flex items-center space-x-2 shrink-0 truncate max-w-[130px]">
-          <div className="w-7 h-7 bg-slate-800 border-2 border-slate-700 flex items-center justify-center font-black text-amber-400 text-xs rounded-none">
+      <div className="p-4 border-t border-slate-800/80 bg-slate-950/50 shrink-0 flex items-center justify-between text-xs gap-2">
+        <div className="flex items-center space-x-2.5 shrink-0 truncate max-w-[140px]">
+          <div className="w-8 h-8 bg-indigo-500/20 border border-indigo-500/30 rounded-full flex items-center justify-center font-bold text-indigo-400 text-xs shrink-0">
             {currentUser?.name?.substring(0, 2).toUpperCase() || 'OP'}
           </div>
           <div className="flex flex-col text-left truncate">
-            <span className="font-black text-white leading-none uppercase truncate">{currentUser?.name}</span>
-            <span className="text-[8px] text-amber-400 font-mono font-bold uppercase mt-1">[{currentUser?.role}]</span>
+            <span className="font-semibold text-white leading-tight truncate">{currentUser?.name}</span>
+            <span className="text-[10px] text-slate-400 font-medium capitalize">{currentUser?.role?.toLowerCase()}</span>
           </div>
         </div>
 
@@ -238,16 +255,16 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           {/* Sync Button */}
           <button
             onClick={handleRefresh}
-            className="p-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-amber-400 cursor-pointer transition-colors"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition-colors"
             title="Refresh All Engine Services"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
           </button>
 
           {/* Logout */}
           <button
             onClick={logout}
-            className="p-1 bg-slate-800 hover:bg-red-600 border border-slate-700 hover:border-red-600 text-slate-300 hover:text-white cursor-pointer transition-colors"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white cursor-pointer transition-colors"
             title="Log Out Session"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -260,32 +277,32 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   return (
     <>
       {/* Mobile Top Header (Fixed only on Mobile) */}
-      <header className="lg:hidden bg-slate-900 border-b-2 border-slate-950 text-white font-mono sticky top-0 z-40 h-14 flex items-center justify-between px-4">
-        <div className="flex items-center space-x-2">
+      <header className="lg:hidden bg-slate-900 border-b border-slate-800 text-white font-sans sticky top-0 z-40 h-14 flex items-center justify-between px-4 shadow-sm">
+        <div className="flex items-center space-x-2.5">
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-1 border border-slate-700 hover:border-white text-slate-300 hover:text-white bg-slate-800 cursor-pointer focus:outline-none"
+            className="p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white bg-slate-800/80 cursor-pointer focus:outline-none transition-colors"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <div className="flex items-center space-x-1">
-            <div className="bg-amber-400 p-1 border border-slate-950 font-black text-slate-950 flex items-center justify-center shrink-0">
-              <Layers className="w-3.5 h-3.5 text-slate-950" />
+          <div className="flex items-center space-x-2">
+            <div className="bg-indigo-600 p-1.5 rounded-lg font-bold text-white flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4 text-white" />
             </div>
-            <span className="text-xs font-black text-amber-400 uppercase tracking-wider">CittaEFS</span>
+            <span className="text-sm font-bold text-white tracking-tight">CittaEFS</span>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
           {/* Active Tenant Code Badge */}
-          <span className="text-[9px] bg-slate-850 px-2 py-0.5 border border-slate-700 font-bold uppercase text-slate-300 max-w-[120px] truncate">
+          <span className="text-[11px] bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700 font-medium text-slate-200 max-w-[120px] truncate">
             {activeTenant.name}
           </span>
           <button
             onClick={handleRefresh}
-            className="p-1 border border-slate-700 hover:border-white text-slate-300 hover:text-white bg-slate-800 cursor-pointer"
+            className="p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white bg-slate-800/80 cursor-pointer transition-colors"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
           </button>
         </div>
       </header>

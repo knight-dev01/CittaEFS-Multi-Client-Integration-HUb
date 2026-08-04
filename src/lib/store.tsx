@@ -80,7 +80,10 @@ export function HubProvider({ children }: { children: ReactNode }) {
               loginAt: new Date().toISOString()
             };
             setCurrentUser(session);
-          } else {
+            try {
+              localStorage.setItem('cittaefs_user_session', JSON.stringify(session));
+            } catch {}
+          } else if (data && data.error === 'Invalid or expired session token') {
             logout();
           }
         })
@@ -105,12 +108,45 @@ export function HubProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.removeItem('cittaefs_user_session');
       localStorage.removeItem('citta_jwt_token');
+      localStorage.removeItem('citta_active_tenant_id');
+      localStorage.removeItem('citta_active_tab');
     } catch (e) {
       console.warn('Could not remove session from localStorage', e);
     }
   };
 
-  const [activeTenantId, setActiveTenantId] = useState<TenantId>('tenant_qbo');
+  const defaultEmptyTenant: Tenant = {
+    id: '',
+    name: 'No Active Client Onboarded',
+    companyName: 'No Client Selected',
+    tin: 'N/A',
+    platformType: 'QuickBooks / Excel',
+    marketTier: 'Enterprise',
+    cittaApiKey: 'N/A',
+    onboardingStatus: 'VERIFIED_READY',
+    monthlyAllowance: 0,
+    monthlyUsed: 0,
+    lastSyncAt: new Date().toISOString()
+  };
+
+  const [activeTenantId, setActiveTenantIdState] = useState<TenantId>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('citta_active_tenant_id') || '';
+    }
+    return '';
+  });
+
+  const setActiveTenantId = (id: TenantId) => {
+    setActiveTenantIdState(id);
+    if (typeof window !== 'undefined') {
+      if (id) {
+        localStorage.setItem('citta_active_tenant_id', id);
+      } else {
+        localStorage.removeItem('citta_active_tenant_id');
+      }
+    }
+  };
+
   const [tenants, setTenants] = useState<Tenant[]>(INITIAL_TENANTS);
   const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
   const [customers, setCustomers] = useState<CustomerProfile[]>(INITIAL_CUSTOMERS);
@@ -119,7 +155,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [metrics, setMetrics] = useState<SystemMetrics>(INITIAL_METRICS);
 
-  const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
+  const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0] || defaultEmptyTenant;
 
   const [activeRequests, setActiveRequests] = useState(0);
   const isBgRefreshing = activeRequests > 0;
@@ -149,7 +185,18 @@ export function HubProvider({ children }: { children: ReactNode }) {
           fetchOrNull('/api/metrics')
         ]);
 
-        if (Array.isArray(tenRes)) setTenants(tenRes);
+        if (Array.isArray(tenRes)) {
+          setTenants(tenRes);
+          const savedId = typeof window !== 'undefined' ? localStorage.getItem('citta_active_tenant_id') : null;
+          if (savedId && tenRes.some((t: Tenant) => t.id === savedId)) {
+            setActiveTenantIdState(savedId);
+          } else if (tenRes.length > 0) {
+            setActiveTenantIdState(tenRes[0].id);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('citta_active_tenant_id', tenRes[0].id);
+            }
+          }
+        }
         if (Array.isArray(invRes)) setInvoices(invRes);
         if (Array.isArray(custRes)) setCustomers(custRes);
         if (Array.isArray(itemRes)) setItemMappings(itemRes);

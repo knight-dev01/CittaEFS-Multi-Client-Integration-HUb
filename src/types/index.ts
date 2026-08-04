@@ -1,4 +1,4 @@
-export type TenantId = 'tenant_qbo' | 'tenant_sap' | 'tenant_d365' | 'tenant_xero';
+export type TenantId = 'tenant_qbo' | 'tenant_excel' | string;
 
 export interface Tenant {
   id: TenantId;

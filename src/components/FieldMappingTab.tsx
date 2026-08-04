@@ -73,53 +73,53 @@ export function FieldMappingTab() {
   };
 
   return (
-    <div className="space-y-6 font-mono text-xs">
+    <div className="space-y-6 font-sans text-xs">
       
       {/* Top Banner */}
-      <div className="bg-slate-900 text-white p-4 border-2 border-slate-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-black text-amber-400 uppercase flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-amber-400" />
+          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <Sliders className="w-5 h-5 text-indigo-400" />
             Visual Field Mapping & Rule Engine Mapper
           </h2>
-          <p className="text-slate-300 text-xs mt-1">
-            Configures client ERP schema transformations to official NRS taxonomy specifications • Tenant: <strong className="text-white">{activeTenant.name}</strong>
+          <p className="text-slate-400 text-xs mt-1">
+            Configures client ERP schema transformations to official NRS taxonomy specifications • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
           </p>
         </div>
         <button
           onClick={autoMapItems}
-          className="px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black uppercase border-2 border-slate-900 cursor-pointer inline-flex items-center space-x-1.5"
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 shrink-0 transition-colors"
         >
-          <Sparkles className="w-4 h-4 text-slate-950" />
+          <Sparkles className="w-4 h-4 text-emerald-200" />
           <span>Auto-Infer HS/Service Codes</span>
         </button>
       </div>
 
       {/* Field Mapper Workbench */}
-      <div className="bg-white border-2 border-slate-900 p-5 space-y-4">
-        <h3 className="font-black text-slate-900 uppercase text-sm border-b-2 border-slate-900 pb-2 flex items-center gap-2">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 shadow-sm">
+        <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
           <Code2 className="w-4 h-4 text-indigo-600" />
           <span>Define Schema Transformation Rule</span>
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
           <div>
-            <label className="block font-black text-slate-900 uppercase mb-1">1. Client ERP Field</label>
+            <label className="block font-medium text-slate-700 mb-1">1. Client ERP Field</label>
             <input
               type="text"
               value={clientField}
               onChange={(e) => setClientField(e.target.value)}
-              className="w-full px-3 py-2 border-2 border-slate-900 font-mono text-slate-900 font-bold focus:outline-none"
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
               placeholder="e.g. LineItem.ProductSKU"
             />
           </div>
 
           <div>
-            <label className="block font-black text-slate-900 uppercase mb-1">2. Transformation Rule</label>
+            <label className="block font-medium text-slate-700 mb-1">2. Transformation Rule</label>
             <select
               value={transformation}
               onChange={(e) => setTransformation(e.target.value)}
-              className="w-full px-3 py-2 border-2 border-slate-900 font-bold bg-white focus:outline-none"
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
             >
               <option value="MAP_TO_HS_CODE">Map to Harmonized System (HS) Code</option>
               <option value="MAP_TO_SERVICE_CODE">Map to Service Code</option>
@@ -130,12 +130,12 @@ export function FieldMappingTab() {
           </div>
 
           <div>
-            <label className="block font-black text-slate-900 uppercase mb-1">3. Target NRS Code / Value</label>
+            <label className="block font-medium text-slate-700 mb-1">3. Target NRS Code / Value</label>
             <input
               type="text"
               value={nrsTargetCode}
               onChange={(e) => setNrsTargetCode(e.target.value)}
-              className="w-full px-3 py-2 border-2 border-slate-900 font-mono text-slate-900 font-bold focus:outline-none"
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
               placeholder="e.g. HS-8471.30.00"
             />
           </div>
@@ -143,9 +143,9 @@ export function FieldMappingTab() {
           <div>
             <button
               onClick={handleAddRule}
-              className="w-full px-4 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black uppercase border-2 border-slate-900 cursor-pointer flex items-center justify-center space-x-1.5"
+              className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm cursor-pointer flex items-center justify-center space-x-1.5 transition-colors"
             >
-              {isSaved ? <Check className="w-4 h-4 text-emerald-400" /> : <Plus className="w-4 h-4 text-amber-400" />}
+              {isSaved ? <Check className="w-4 h-4 text-emerald-300" /> : <Plus className="w-4 h-4 text-indigo-200" />}
               <span>{isSaved ? 'Rule Added!' : 'Add Mapping Rule'}</span>
             </button>
           </div>
@@ -153,48 +153,48 @@ export function FieldMappingTab() {
       </div>
 
       {/* Rules Matrix Table */}
-      <div className="bg-white border-2 border-slate-900 overflow-hidden">
-        <div className="p-3 bg-slate-100 border-b-2 border-slate-900 font-black uppercase text-slate-900 flex justify-between items-center">
+      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
+        <div className="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-900 flex justify-between items-center">
           <span>Active Transformation Rules Matrix ({fieldRules.length})</span>
-          <span className="text-[10px] text-slate-600 font-normal">Strict pre-flight schema enforcement</span>
+          <span className="text-xs text-slate-500 font-normal">Strict pre-flight schema enforcement</span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse text-xs text-slate-700">
             <thead>
-              <tr className="bg-slate-900 text-amber-400 font-black uppercase text-[10px] border-b-2 border-slate-900">
-                <th className="p-3">Rule ID</th>
-                <th className="p-3">Client ERP Field</th>
-                <th className="p-3">Target Field</th>
-                <th className="p-3">Transformation</th>
-                <th className="p-3">Default Value</th>
-                <th className="p-3">Status</th>
-                <th className="p-3 text-right">Action</th>
+              <tr className="bg-slate-100/70 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
+                <th className="py-3 px-4">Rule ID</th>
+                <th className="py-3 px-4">Client ERP Field</th>
+                <th className="py-3 px-4">Target Field</th>
+                <th className="py-3 px-4">Transformation</th>
+                <th className="py-3 px-4">Default Value</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y-2 divide-slate-100 font-mono text-slate-900">
+            <tbody className="divide-y divide-slate-100">
               {fieldRules.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="p-3 font-bold text-slate-600">{r.id}</td>
-                  <td className="p-3 font-bold text-indigo-700">{r.clientField}</td>
-                  <td className="p-3 font-bold text-slate-900">{r.targetField}</td>
-                  <td className="p-3">
-                    <span className="px-2 py-0.5 bg-slate-200 border border-slate-800 text-[10px] font-black uppercase">
+                <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-3 px-4 font-mono font-medium text-slate-400">{r.id}</td>
+                  <td className="py-3 px-4 font-mono font-semibold text-indigo-600">{r.clientField}</td>
+                  <td className="py-3 px-4 font-mono font-medium text-slate-900">{r.targetField}</td>
+                  <td className="py-3 px-4">
+                    <span className="px-2.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-semibold rounded-full">
                       {r.rule}
                     </span>
                   </td>
-                  <td className="p-3 font-bold text-emerald-700">{r.defaultValue}</td>
-                  <td className="p-3">
-                    <span className="px-2 py-0.5 bg-emerald-300 text-slate-950 border border-slate-900 text-[10px] font-black uppercase">
+                  <td className="py-3 px-4 font-mono font-medium text-emerald-600">{r.defaultValue}</td>
+                  <td className="py-3 px-4">
+                    <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold rounded-full">
                       {r.status}
                     </span>
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="py-3 px-4 text-right">
                     <button
                       onClick={() => setFieldRules(fieldRules.filter(x => x.id !== r.id))}
-                      className="text-red-600 hover:text-red-900 font-black uppercase cursor-pointer"
+                      className="text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
                     >
-                      [Delete]
+                      Delete
                     </button>
                   </td>
                 </tr>
