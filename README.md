@@ -191,7 +191,7 @@ When deploying to cloud platforms such as **Render.com** or **Cloud Run**:
 1. **Environment Variables**: Set `NODE_ENV=production`, `PORT=3000`, `DATABASE_URL`, `JWT_SECRET`, and `ENCRYPTION_KEY`.
 2. **Build Command**: `npm install && npm run build`
 3. **Start Command**: `npm run start` (Executes `node start.cjs` which loads `dist/server.cjs`).
-4. **External Bundling Optimization**: The build uses `--packages=external` in `esbuild` to ensure all native Node modules (such as `prisma`, `intuit-oauth`, `bcryptjs`) are cleanly resolved from `node_modules`.
+4. **Bundling Optimization**: The server build bundles pure JavaScript dependencies (such as `intuit-oauth`, `express`, `jsonwebtoken`, `ws`) directly into `dist/server.cjs` while keeping `@prisma/client` external, ensuring zero missing runtime module errors on cloud deployment platforms.
 
 ---
 
