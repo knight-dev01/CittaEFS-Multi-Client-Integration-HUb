@@ -8,11 +8,8 @@ import {
   Building2, 
   Layers, 
   ArrowRight, 
-  Globe, 
   AlertCircle,
   CheckCircle2,
-  Sparkles,
-  UserPlus,
   User
 } from 'lucide-react';
 import { UserSession } from '../types';
@@ -21,17 +18,16 @@ interface LoginScreenProps {
   onLogin: (session: UserSession, token: string) => void;
 }
 
-type AuthMode = 'login' | 'register' | 'sso';
-
 export function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [mode, setMode] = useState<AuthMode>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [organization, setOrganization] = useState('');
+  // Default admin credentials - change these via environment variables in production
+  const [email, setEmail] = useState(
+    import.meta.env.VITE_ADMIN_EMAIL || 'admin@cittaefs.com'
+  );
+  const [password, setPassword] = useState(
+    import.meta.env.VITE_ADMIN_PASSWORD || 'Admin123!'
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   const queryParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const isQboConnectRedirect = (typeof window !== 'undefined' && window.location.pathname === '/connect-quickbooks') || queryParams.get('connect') === 'qbo';
@@ -40,7 +36,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMsg('');
-    setSuccessMsg('');
 
     try {
       const res = await fetchWithAuth('/api/auth/login', {
@@ -65,42 +60,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       onLogin(session, data.token);
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed. Please verify credentials.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRegister = async (e: FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setErrorMsg('');
-    setSuccessMsg('');
-
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, organization })
-      });
-      const data = await parseJsonResponse(res);
-      
-      if (!data.success) {
-        throw new Error(data.error || 'Registration failed');
-      }
-
-      setSuccessMsg('Account created successfully! Logging you in...');
-      localStorage.setItem('citta_jwt_token', data.token);
-      const session: UserSession = {
-        id: data.user.id,
-        name: data.user.name,
-        email: data.user.email,
-        role: data.user.role,
-        organization: data.user.organization,
-        loginAt: new Date().toISOString()
-      };
-      onLogin(session, data.token);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -149,171 +108,47 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         )}
 
-        {successMsg && (
-          <div className="bg-emerald-950/40 border border-emerald-500/30 text-emerald-200/90 rounded-xl p-3.5 text-xs flex items-center space-x-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span>{successMsg}</span>
+        {/* Login Form */}
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Email</span>
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@example.com"
+              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
+            />
           </div>
-        )}
 
-        {/* Auth Mode Tabs */}
-        <div className="flex bg-slate-950/60 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => { setMode('login'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`flex-1 py-2 rounded-lg text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${mode === 'login' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            <User className="w-3.5 h-3.5" />
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('register'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`flex-1 py-2 rounded-lg text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${mode === 'register' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            Register
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('sso'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`flex-1 py-2 rounded-lg text-center transition cursor-pointer ${mode === 'sso' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            SSO
-          </button>
-        </div>
-
-        {/* Forms */}
-        {mode === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Email</span>
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
-                className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                <Key className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Password</span>
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-lg text-xs shadow-lg shadow-indigo-600/20 transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
-            >
-              <span>{isSubmitting ? 'Signing in...' : 'Sign In'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-        )}
-
-        {mode === 'register' && (
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Full Name</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="John Doe"
-                className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Email</span>
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
-                className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Organization</span>
-              </label>
-              <input
-                type="text"
-                value={organization}
-                onChange={(e) => setOrganization(e.target.value)}
-                placeholder="My Company Ltd"
-                className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                <Key className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Password (min 8 characters)</span>
-              </label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg text-xs shadow-lg shadow-emerald-600/20 transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
-            >
-              <span>{isSubmitting ? 'Creating account...' : 'Create Account'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-        )}
-
-        {mode === 'sso' && (
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-3">
-            <div className="flex items-center space-x-2 text-indigo-400 font-semibold">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>SSO Configuration Required</span>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Corporate SAML Single Sign-On integration is available for enterprise deployments.
-            </p>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Contact your administrator to configure SSO for your organization.
-            </p>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Password</span>
+            </label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
+            />
           </div>
-        )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-lg text-xs shadow-lg shadow-indigo-600/20 transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+          >
+            <span>{isSubmitting ? 'Signing in...' : 'Sign In'}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </form>
 
         <div className="text-center text-[11px] text-slate-500 pt-2 border-t border-slate-800/60 flex items-center justify-center space-x-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

@@ -65,20 +65,25 @@ async function main() {
     }
   }
 
-  // Only seed admin user if environment variables are provided
-  const defaultUsers: Array<{email: string; name: string; password: string; role: string; organization: string; tenantId: string}> = [];
+  // Default admin user - always created unless explicitly disabled
+  const defaultUsers: Array<{email: string; name: string; password: string; role: string; organization: string; tenantId: string | null}> = [];
   
-  if (process.env.DEFAULT_ADMIN_EMAIL && process.env.DEFAULT_ADMIN_PASSWORD) {
-    defaultUsers.push({
-      email: process.env.DEFAULT_ADMIN_EMAIL,
-      name: process.env.DEFAULT_ADMIN_NAME || 'System Administrator',
-      password: process.env.DEFAULT_ADMIN_PASSWORD,
-      role: 'ADMIN',
-      organization: process.env.DEFAULT_ADMIN_ORG || 'Default Organization',
-      tenantId: ''
-    });
-  }
+  // Use env vars if provided, otherwise use defaults
+  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@cittaefs.com';
+  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'Admin123!';
+  const adminName = process.env.DEFAULT_ADMIN_NAME || 'System Administrator';
+  const adminOrg = process.env.DEFAULT_ADMIN_ORG || 'CittaEFS Enterprise';
   
+  defaultUsers.push({
+    email: adminEmail,
+    name: adminName,
+    password: adminPassword,
+    role: 'ADMIN',
+    organization: adminOrg,
+    tenantId: null
+  });
+  
+  // Optional operator user
   if (process.env.DEFAULT_OPERATOR_EMAIL && process.env.DEFAULT_OPERATOR_PASSWORD) {
     defaultUsers.push({
       email: process.env.DEFAULT_OPERATOR_EMAIL,
@@ -86,16 +91,17 @@ async function main() {
       password: process.env.DEFAULT_OPERATOR_PASSWORD,
       role: 'OPERATOR',
       organization: process.env.DEFAULT_OPERATOR_ORG || 'Default Organization',
-      tenantId: ''
+      tenantId: null
     });
   }
   
-  // If no env vars, don't seed any users - registration should be handled separately
-  if (defaultUsers.length === 0 && hasDatabaseUrl) {
-    console.log('ℹ️ No DEFAULT_ADMIN_EMAIL/DEFAULT_ADMIN_PASSWORD env vars set. Skipping user seeding.');
-    console.log('   To seed an admin user, set these environment variables:');
-    console.log('   - DEFAULT_ADMIN_EMAIL=admin@example.com');
-    console.log('   - DEFAULT_ADMIN_PASSWORD=SecurePassword123!');
+  console.log('ℹ️ Default admin user will be seeded:');
+  console.log(`   Email: ${adminEmail}`);
+  console.log('   Password: [hidden]');
+  if (process.env.DEFAULT_ADMIN_EMAIL) {
+    console.log('   (from environment variables)');
+  } else {
+    console.log('   (using default - change via DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASSWORD env vars)');
   }
 
   if (hasDatabaseUrl) {
