@@ -65,25 +65,57 @@ async function main() {
     }
   }
 
-  const defaultUsers = [
-    { email: 'admin@cittaefs.com', name: 'James Carter', password: 'Admin123!', role: 'ADMIN', organization: 'CittaEFS Enterprise', tenantId: '' },
-    { email: 'operator@cittaefs.com', name: 'CittaEFS Operator', password: 'Operator123!', role: 'OPERATOR', organization: 'CittaEFS Operations', tenantId: '' }
-  ];
+  // Only seed admin user if environment variables are provided
+  const defaultUsers: Array<{email: string; name: string; password: string; role: string; organization: string; tenantId: string}> = [];
+  
+  if (process.env.DEFAULT_ADMIN_EMAIL && process.env.DEFAULT_ADMIN_PASSWORD) {
+    defaultUsers.push({
+      email: process.env.DEFAULT_ADMIN_EMAIL,
+      name: process.env.DEFAULT_ADMIN_NAME || 'System Administrator',
+      password: process.env.DEFAULT_ADMIN_PASSWORD,
+      role: 'ADMIN',
+      organization: process.env.DEFAULT_ADMIN_ORG || 'Default Organization',
+      tenantId: ''
+    });
+  }
+  
+  if (process.env.DEFAULT_OPERATOR_EMAIL && process.env.DEFAULT_OPERATOR_PASSWORD) {
+    defaultUsers.push({
+      email: process.env.DEFAULT_OPERATOR_EMAIL,
+      name: process.env.DEFAULT_OPERATOR_NAME || 'System Operator',
+      password: process.env.DEFAULT_OPERATOR_PASSWORD,
+      role: 'OPERATOR',
+      organization: process.env.DEFAULT_OPERATOR_ORG || 'Default Organization',
+      tenantId: ''
+    });
+  }
+  
+  // If no env vars, don't seed any users - registration should be handled separately
+  if (defaultUsers.length === 0 && hasDatabaseUrl) {
+    console.log('ℹ️ No DEFAULT_ADMIN_EMAIL/DEFAULT_ADMIN_PASSWORD env vars set. Skipping user seeding.');
+    console.log('   To seed an admin user, set these environment variables:');
+    console.log('   - DEFAULT_ADMIN_EMAIL=admin@example.com');
+    console.log('   - DEFAULT_ADMIN_PASSWORD=SecurePassword123!');
+  }
 
   if (hasDatabaseUrl) {
-    console.log('\n🔐 Seeding Default Users (Admin & Operator only)...');
-    try {
-      await prisma.user.deleteMany({
-        where: {
-          NOT: {
-            email: { in: ['admin@cittaefs.com', 'operator@cittaefs.com'] }
+    if (defaultUsers.length > 0) {
+      console.log('\n🔐 Seeding Default Users...');
+      const seededEmails = defaultUsers.map(u => u.email);
+      
+      // Only purge users not in the seeded list
+      try {
+        await prisma.user.deleteMany({
+          where: {
+            email: { notIn: seededEmails }
           }
-        }
-      });
-      console.log('🧹 Purged obsolete user accounts.');
-    } catch (e) {
-      console.warn('Warning purging obsolete users:', e);
+        });
+        console.log('🧹 Purged user accounts not in seed list.');
+      } catch (e) {
+        console.error('Warning purging obsolete users:', e);
+      }
     }
+    
     for (const u of defaultUsers) {
       const passwordHash = bcrypt.hashSync(u.password, 10);
       try {

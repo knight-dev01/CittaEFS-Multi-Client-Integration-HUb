@@ -57,12 +57,12 @@ function HubMainContent() {
   }
 
   // Enforce role-based tab routing restrictions:
-  // Admin: Overall system view across all configuration, management, security & engine tabs.
-  // Operator: Action Points view only (Invoices, Validation Errors, Item HS Mapping, Import Ingestion, Customers).
+  // Admin: Full access to all tabs
+  // Operator: Main tabs only (Invoices, Validation, Items, Import, Customers, Overview)
   const userRole = currentUser?.role || 'OPERATOR';
   const allowedTabs = userRole === 'ADMIN'
-    ? ['clients', 'client_portal', 'invoices', 'customers', 'items', 'import', 'connectors', 'field_mapping', 'webhooks', 'validation', 'queues', 'gateway', 'reconciliation', 'audit', 'settings']
-    : ['invoices', 'validation', 'items', 'import', 'customers'];
+    ? ['clients', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'settings']
+    : ['clients', 'invoices', 'import', 'customers', 'items', 'validation'];
 
   if (!allowedTabs.includes(activeTab)) {
     setActiveTab(userRole === 'ADMIN' ? 'clients' : 'invoices');
@@ -102,24 +102,18 @@ function HubMainContent() {
           
           {/* Render Tab Content */}
           <div className="transition-all duration-150">
-            {(activeTab === 'clients' || activeTab === 'overview') && (
+            {activeTab === 'clients' && (
               <OverviewTab onOpenOnboardModal={() => setIsOnboardModalOpen(true)} />
             )}
-            {activeTab === 'client_portal' && <ClientPortalTab />}
             {activeTab === 'connectors' && <ConnectorsTab />}
             {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
             {activeTab === 'invoices' && <InvoicesTab />}
             {activeTab === 'validation' && <ValidationErrorsTab />}
-            {activeTab === 'queues' && <QueueMonitorTab />}
-            {(activeTab === 'gateway' || activeTab === 'reconciliation') && <ReconciliationTab />}
-            {activeTab === 'audit' && <AuditTrailTab />}
             {activeTab === 'settings' && <SettingsTab />}
             
             {/* Secondary Modules */}
             {activeTab === 'customers' && <CustomerSyncTab />}
             {activeTab === 'items' && <ItemDictionaryTab />}
-            {activeTab === 'field_mapping' && <FieldMappingTab />}
-            {activeTab === 'webhooks' && <WebhookInspectorTab />}
           </div>
 
         </main>
@@ -131,14 +125,14 @@ function HubMainContent() {
               <div className="w-5 h-5 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
                 C
               </div>
-              <span className="font-semibold text-slate-700">CittaEFS Multi-Tenant Integration Hub</span>
+              <span className="font-semibold text-slate-700">CittaEFS Integration Hub</span>
             </div>
             <div className="flex items-center space-x-4 text-[11px] text-slate-400">
-              <span>PostgreSQL RLS</span>
+              <span>PostgreSQL</span>
               <span>•</span>
-              <span>BullMQ Queues</span>
+              <span>QuickBooks + Excel</span>
               <span>•</span>
-              <span>AES-256-GCM Encryption</span>
+              <span>CittaEFS Gateway</span>
             </div>
           </div>
         </footer>

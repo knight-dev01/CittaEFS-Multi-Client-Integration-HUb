@@ -755,6 +755,471 @@ npm test
 
 ---
 
+## Phase 10: UI Cleanup - Remove Dummy Data & Add Toast Notifications
+
+**Goal:** Replace browser `alert()` and `confirm()` with proper toast notifications, remove hardcoded dummy data.
+
+### Step 10.1: Install Toast Library
+```bash
+npm install sonner
+```
+
+### Step 10.2: Create Toast Provider Component
+Create `src/components/ToastProvider.tsx`:
+```tsx
+import { Toaster, toast } from 'sonner';
+
+export function ToastProvider() {
+  return (
+    <Toaster 
+      position="top-right"
+      richColors
+      closeButton
+      theme="light"
+    />
+  );
+}
+
+// Export toast functions for use throughout the app
+export { toast };
+```
+
+### Step 10.3: Add ToastProvider to App.tsx
+```tsx
+import { ToastProvider } from './components/ToastProvider';
+
+function App() {
+  return (
+    <HubProvider>
+      <ToastProvider />
+      <HubMainContent />
+    </HubProvider>
+  );
+}
+```
+
+### Step 10.4: Replace alert() with toast in components
+
+**ConnectorsTab.tsx** - Replace alerts with toasts:
+```tsx
+// BEFORE:
+alert(`✅ QuickBooks Historical Sync Complete!`);
+alert(`❌ Sync Failed: ${error}`);
+
+// AFTER:
+import { toast } from 'sonner';
+
+toast.success('QuickBooks Historical Sync Complete!', {
+  description: `Found: ${data.totalFound}, Synced: ${data.newSynced}`
+});
+
+toast.error('Sync Failed', {
+  description: error.message
+});
+```
+
+**OverviewTab.tsx** - Replace alerts with toasts:
+```tsx
+// BEFORE:
+alert('Staging test data purged!');
+if (window.confirm('Are you sure you want to purge...')) {}
+
+// AFTER:
+toast.success('Test data purged successfully');
+
+if (!window.confirm('Are you sure you want to purge...')) return;
+```
+
+**NewConnectorModal.tsx** - Replace alerts with toasts:
+```tsx
+toast.success('Connector added successfully');
+toast.error('Failed to add connector', { description: error.message });
+```
+
+### Step 10.5: Remove Hardcoded Dummy Data
+
+**SettingsTab.tsx** - Remove hardcoded values:
+```tsx
+// BEFORE:
+const [apiKey, setApiKey] = useState(activeTenant.cittaApiKey || 'citta_live_9981223910');
+const [users, setUsers] = useState<UserMember[]>([
+  { id: 'usr-1', name: 'Alexander Vance', ... },
+  { id: 'usr-3', name: 'Kwame Osei', ... }
+]);
+const [newUserPassword, setNewUserPassword] = useState('SecurePass123!');
+
+// AFTER:
+const [apiKey, setApiKey] = useState(activeTenant.cittaApiKey || '');
+const [users, setUsers] = useState<UserMember[]>([]); // Empty, fetch from API
+const [newUserPassword, setNewUserPassword] = useState('');
+```
+
+### Step 10.6: Clean Up Console.log Statements
+
+Remove debug logging from production code:
+```tsx
+// REMOVE these patterns:
+console.log('[WS] Attempting to connect...');
+console.log('[WS] Received real-time broadcast:', data);
+console.warn('[WS] WebSocket encountered an error:', err);
+console.error('Transmission error:', e);
+
+// REPLACE with conditional debug mode:
+if (process.env.NODE_ENV === 'development') {
+  console.log('[WS] Attempting to connect...');
+}
+```
+
+### Step 10.7: Update Error Handling in store.tsx
+
+Add toast notifications for all API errors:
+```tsx
+import { toast } from 'sonner';
+
+const transmitInvoice = async (payload: any) => {
+  try {
+    const res = await fetchWithAuth('/api/integration/gen/invoices', {...});
+    const data = await parseJsonResponse(res);
+    toast.success('Invoice transmitted successfully');
+    return data;
+  } catch (e: any) {
+    toast.error('Failed to transmit invoice', {
+      description: e.message
+    });
+    throw e;
+  }
+};
+```
+
+---
+
+## Summary: Changes Required
+
+| File | Changes |
+|------|---------|
+| `package.json` | Add `sonner` dependency |
+| `src/components/ToastProvider.tsx` | Create new toast provider |
+| `src/App.tsx` | Wrap with ToastProvider |
+| `src/components/ConnectorsTab.tsx` | Replace `alert()` with `toast()` |
+| `src/components/OverviewTab.tsx` | Replace `alert()` with `toast()` |
+| `src/components/NewConnectorModal.tsx` | Replace `alert()` with `toast()` |
+| `src/components/SettingsTab.tsx` | Remove hardcoded API key, users, password |
+| `src/lib/store.tsx` | Remove `console.log` statements |
+| `src/components/OnboardClientModal.tsx` | Replace `alert()` with `toast()` |
+
+---
+
+## Phase 11: Reduce Cognitive Overload - Simplify UI
+
+**Goal:** Reduce information density and simplify navigation to focus on core tasks.
+
+### Step 11.1: Simplify Navigation (Navbar.tsx)
+
+**Problem:** 14 tabs with long labels cause decision fatigue.
+
+**Solution:** Consolidate to 5 essential tabs with shorter labels.
+
+```tsx
+// SIMPLIFIED NAVIGATION
+const allTabs = [
+  // Core Actions Only
+  { id: 'invoices', label: 'Invoices', icon: FileText, requiredRoles: ['ADMIN', 'OPERATOR'] },
+  { id: 'import', label: 'Import', icon: Download, requiredRoles: ['ADMIN', 'OPERATOR'] },
+  { id: 'connectors', label: 'Connectors', icon: Plug, requiredRoles: ['ADMIN'] },
+  { id: 'field_mapping', label: 'Mapping', icon: Sliders, requiredRoles: ['ADMIN'] },
+  { id: 'settings', label: 'Settings', icon: Settings, requiredRoles: ['ADMIN'] }
+];
+
+// REMOVE these tabs from navigation:
+// - 'clients' / Overview Center (duplicate of invoices)
+// - 'client_portal' (unnecessary)
+// - 'validation' (merge into invoices view)
+// - 'items' (merge into invoices view)
+// - 'customers' (merge into invoices view)
+// - 'webhooks' (only for debugging)
+// - 'queues' (only for debugging)
+// - 'gateway' (only for debugging)
+// - 'audit' (only for compliance)
+```
+
+### Step 11.2: Simplify Login Screen (LoginScreen.tsx)
+
+**Problem:** Shows test account credentials publicly, confusing for users.
+
+**Solution:** Clean login form without exposed credentials.
+
+```tsx
+// BEFORE:
+const [email, setEmail] = useState('admin@cittaefs.com');
+const [password, setPassword] = useState('Admin123!');
+const quickTestAccounts = [
+  { label: 'Admin Access', role: 'Full System Control', email: 'admin@cittaefs.com', pass: 'Admin123!' },
+  { label: 'Operator Access', role: 'Daily Action Points', email: 'operator@cittaefs.com', pass: 'Operator123!' }
+];
+
+// AFTER:
+const [email, setEmail] = useState('');
+const [password, setPassword] = useState('');
+// Remove quickTestAccounts array entirely
+```
+
+### Step 11.3: Simplify Invoices Tab (InvoicesTab.tsx)
+
+**Problem:** Hardcoded credit note values confuse users.
+
+**Solution:** Use empty defaults, let users fill in values.
+
+```tsx
+// BEFORE:
+const [cnAmount, setCnAmount] = useState<number>(10000);
+const [cnReason, setCnReason] = useState<string>('Product return & damaged goods adjustment');
+
+// AFTER:
+const [cnAmount, setCnAmount] = useState<number>(0);
+const [cnReason, setCnReason] = useState<string>('');
+```
+
+### Step 11.4: Remove Excess Headers and Descriptions
+
+**ConnectorsTab.tsx:**
+```tsx
+// BEFORE: Long descriptions
+<p className="text-xs text-slate-500 my-3 leading-relaxed">
+  Automated OAuth 2.0 API connection to pull customers, SKU catalogs...
+</p>
+
+// AFTER: Short descriptions
+<p className="text-xs text-slate-500">
+  Sync customers and invoices from QuickBooks
+</p>
+```
+
+### Step 11.5: Simplify Overview Metrics Display
+
+**OverviewTab.tsx:**
+```tsx
+// BEFORE: Shows BullMQ details, worker status, reconciliation info
+<div>BullMQ Async Worker Active</div>
+<div>Dead Letter Queue: 1 Job Awaiting Replay</div>
+
+// AFTER: Simple counts only
+<div>Active Processing</div>
+```
+
+### Step 11.6: Reduce Form Complexity
+
+**SettingsTab.tsx:**
+```tsx
+// BEFORE: Shows retry config, timezone, MFA status, etc.
+const [retryMax, setRetryMax] = useState(5);
+const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
+
+// AFTER: Essential settings only
+// Keep only: API Key, Endpoint URL
+// Move advanced settings to "Advanced" collapsible section
+```
+
+### Step 11.7: Summary of UI Simplifications
+
+| Component | Before | After |
+|-----------|--------|--------|
+| Navbar | 14 tabs | 5 tabs |
+| Login | Shows test credentials | Clean form |
+| Invoices | Pre-filled credit note | Empty form |
+| Connectors | Long descriptions | Short descriptions |
+| Overview | Shows worker queues | Simple metrics |
+| Settings | All settings visible | Essential only |
+
+### Step 11.8: Implementation Order
+
+1. Simplify Navbar (most impact)
+2. Clean LoginScreen
+3. Shorten descriptions in Connectors
+4. Simplify Overview metrics
+5. Clean up Invoices credit note form
+
+---
+
+## Phase 12: Remove All Test Logic, Fallbacks, and Test Data
+
+**Goal:** Remove all test/fallback values and ensure only real production data is used.
+
+### Step 12.1: Clean LoginScreen.tsx
+
+**Remove pre-filled test credentials:**
+
+```tsx
+// BEFORE (lines 24-36):
+const [email, setEmail] = useState('admin@cittaefs.com');
+const [password, setPassword] = useState('Admin123!');
+
+const quickTestAccounts = [
+  { label: 'Admin Access', role: 'Full System Control', email: 'admin@cittaefs.com', pass: 'Admin123!' },
+  { label: 'Operator Access', role: 'Daily Action Points', email: 'operator@cittaefs.com', pass: 'Operator123!' }
+];
+
+// AFTER:
+const [email, setEmail] = useState('');
+const [password, setPassword] = useState('');
+// REMOVE quickTestAccounts array entirely
+```
+
+### Step 12.2: Clean store.tsx
+
+**Remove fallback tenant and default empty states:**
+
+```tsx
+// BEFORE (lines 118-158):
+const defaultEmptyTenant: Tenant = {
+  id: '',
+  name: 'No Active Client Onboarded',
+  companyName: 'No Client Selected',
+  tin: 'N/A',
+  // ...
+};
+
+const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0] || defaultEmptyTenant;
+
+// AFTER:
+// Show loading state or redirect to onboarding if no tenants
+const activeTenant = tenants.find(t => t.id === activeTenantId) || null;
+
+// If no activeTenant, show onboarding prompt
+if (!activeTenant) {
+  return <OnboardingPrompt />;
+}
+```
+
+### Step 12.3: Clean prisma/seed.ts
+
+**Remove hardcoded test users:**
+
+```tsx
+// BEFORE (lines 68-71):
+const defaultUsers = [
+  { email: 'admin@cittaefs.com', name: 'James Carter', password: 'Admin123!', role: 'ADMIN' },
+  { email: 'operator@cittaefs.com', name: 'CittaEFS Operator', password: 'Operator123!', role: 'OPERATOR' }
+];
+
+// AFTER:
+// Remove seed users entirely - users should be created via registration/onboarding
+// Or read from environment variables:
+const defaultUsers = process.env.DEFAULT_ADMIN_EMAIL 
+  ? [{ 
+      email: process.env.DEFAULT_ADMIN_EMAIL, 
+      password: process.env.DEFAULT_ADMIN_PASSWORD, 
+      role: 'ADMIN' 
+    }]
+  : [];
+```
+
+### Step 12.4: Clean referenceData.ts
+
+**Already clean - keep empty arrays:**
+
+```tsx
+// Current state (already correct):
+export const INITIAL_TENANTS: Tenant[] = [];  // ✅ Empty
+export const INITIAL_INVOICES: Invoice[] = [];  // ✅ Empty
+export const INITIAL_CUSTOMERS: CustomerProfile[] = [];  // ✅ Empty
+```
+
+### Step 12.5: Clean error handling fallbacks
+
+**Remove silent catch blocks that hide errors:**
+
+```tsx
+// BEFORE:
+} catch (err) {
+  console.warn('[WS] Error processing event data:', err);
+}
+
+// AFTER - Log errors properly:
+} catch (err) {
+  console.error('[WS] Error processing event data:', err);
+  // Optionally show toast notification
+  toast.error('Real-time update failed', { description: 'Please refresh the page' });
+}
+```
+
+### Step 12.6: Remove test data from seedData.json
+
+**Current state is already clean:**
+
+```json
+// Current (already correct):
+{
+  "tenants": [],
+  "datasets": {}
+}
+```
+
+### Step 12.7: Summary of Test Logic Removal
+
+| File | Issue | Fix |
+|------|-------|-----|
+| `LoginScreen.tsx` | Pre-filled credentials | Start with empty fields |
+| `LoginScreen.tsx` | `quickTestAccounts` array | Remove entirely |
+| `store.tsx` | `defaultEmptyTenant` | Show onboarding prompt |
+| `store.tsx` | `tenants[0] \|\| fallback` | Handle null properly |
+| `prisma/seed.ts` | Hardcoded test users | Use env vars or remove |
+| Error handlers | Silent `catch {}` blocks | Log errors properly |
+
+### Step 12.8: Environment Variables for Production
+
+Create `.env.example` with required variables:
+
+```bash
+# Required for seeding
+DATABASE_URL=postgresql://user:password@host:5432/cittaefs
+
+# Optional admin user (if seeding is needed)
+DEFAULT_ADMIN_EMAIL=admin@yourcompany.com
+DEFAULT_ADMIN_PASSWORD=SecurePassword123!
+
+# CittaEFS API
+CITTAEFS_API_KEY=your_api_key_here
+
+# Encryption
+ENCRYPTION_SECRET=your_32_byte_encryption_key_here
+
+# JWT
+JWT_SECRET=your_jwt_secret_here
+```
+
+### Step 12.9: Onboarding Flow
+
+When no tenant exists, redirect to onboarding:
+
+```tsx
+// In store.tsx
+const activeTenant = tenants.find(t => t.id === activeTenantId);
+
+// If no tenants at all, show onboarding
+if (tenants.length === 0) {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <h1>Welcome to CittaEFS Hub</h1>
+        <p>Get started by onboarding your organization</p>
+        <button onClick={onOpenOnboardModal}>Get Started</button>
+      </div>
+    </div>
+  );
+}
+
+// If tenant exists but not selected
+if (!activeTenant) {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <p>Select an organization to continue</p>
+    </div>
+  );
+}
+```
+
+---
+
 # 5. TESTING AND VALIDATION
 
 ### Success Criteria

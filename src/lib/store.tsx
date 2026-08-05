@@ -27,7 +27,7 @@ interface HubContextType {
   logout: () => void;
   activeTenantId: TenantId;
   setActiveTenantId: (id: TenantId) => void;
-  activeTenant: Tenant;
+  activeTenant: Tenant | null;
   tenants: Tenant[];
   invoices: Invoice[];
   customers: CustomerProfile[];
@@ -99,7 +99,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('citta_jwt_token', token);
       }
     } catch (e) {
-      console.warn('Could not save session to localStorage', e);
+      console.error('Could not save session to localStorage', e);
     }
   };
 
@@ -111,22 +111,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('citta_active_tenant_id');
       localStorage.removeItem('citta_active_tab');
     } catch (e) {
-      console.warn('Could not remove session from localStorage', e);
+      console.error('Could not remove session from localStorage', e);
     }
-  };
-
-  const defaultEmptyTenant: Tenant = {
-    id: '',
-    name: 'No Active Client Onboarded',
-    companyName: 'No Client Selected',
-    tin: 'N/A',
-    platformType: 'QuickBooks / Excel',
-    marketTier: 'Enterprise',
-    cittaApiKey: 'N/A',
-    onboardingStatus: 'VERIFIED_READY',
-    monthlyAllowance: 0,
-    monthlyUsed: 0,
-    lastSyncAt: new Date().toISOString()
   };
 
   const [activeTenantId, setActiveTenantIdState] = useState<TenantId>(() => {
@@ -155,7 +141,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [metrics, setMetrics] = useState<SystemMetrics>(INITIAL_METRICS);
 
-  const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0] || defaultEmptyTenant;
+  const activeTenant = tenants.find(t => t.id === activeTenantId) || null;
 
   const [activeRequests, setActiveRequests] = useState(0);
   const isBgRefreshing = activeRequests > 0;
@@ -204,7 +190,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         if (Array.isArray(auditRes)) setAuditLogs(auditRes);
         if (metRes && typeof metRes === 'object') setMetrics(metRes);
       } catch (e) {
-        console.warn('Backend refresh warning, preserving local state:', e);
+        console.error('Backend refresh warning, preserving local state:', e);
       }
     });
   };
@@ -245,12 +231,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
               refreshAll();
             }
           } catch (e) {
-            console.warn('[WS] Error processing event data:', e);
+            console.error('[WS] Error processing event data:', e);
           }
         };
 
         ws.onerror = (err) => {
-          console.warn('[WS] WebSocket encountered an error:', err);
+          console.error('[WS] WebSocket encountered an error:', err);
         };
 
         ws.onclose = () => {
@@ -262,7 +248,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           wsReconnectTimeout = setTimeout(connectWS, 5000);
         };
       } catch (err) {
-        console.warn('[WS] Connection error:', err);
+        console.error('[WS] Connection error:', err);
         wsReconnectTimeout = setTimeout(connectWS, 5000);
       }
     };
@@ -281,12 +267,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
             refreshAll();
           }
         } catch (e) {
-          console.warn('[SSE] Error processing event data:', e);
+          console.error('[SSE] Error processing event data:', e);
         }
       };
 
       eventSource.onerror = (err) => {
-        console.warn('[SSE] EventSource failed, scheduling reconnect...', err);
+        console.error('[SSE] EventSource failed, scheduling reconnect...', err);
         if (eventSource) {
           eventSource.close();
           eventSource = null;
