@@ -153,10 +153,13 @@ export function ConnectorsTab() {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
             <Plug className="w-5 h-5 text-indigo-400" />
-            Pluggable ERP & Accounting Connectors Hub
+            QuickBooks Online & Excel Connectors Hub
+            <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              QBO + EXCEL ACTIVE
+            </span>
           </h2>
           <p className="text-slate-400 text-xs mt-1">
-            Active Adapter Architecture • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong> ({activeTenant.id})
+            Active Connectors: QuickBooks Online (OAuth2) & Excel/CSV Upload • Other adapters (SAP, NetSuite, SQL) frozen for future release • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
           </p>
         </div>
         <button
@@ -206,14 +209,10 @@ export function ConnectorsTab() {
           <div key={conn.id} className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                {conn.platform.includes('SQL') ? (
-                  <Database className="w-4 h-4 text-indigo-600" />
-                ) : conn.platform.includes('CSV') ? (
+                {conn.platform.includes('CSV') || conn.platform.includes('Excel') ? (
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                ) : conn.platform.includes('SAP') ? (
-                  <Server className="w-4 h-4 text-indigo-600" />
-                ) : conn.platform.includes('NetSuite') ? (
-                  <Zap className="w-4 h-4 text-amber-500" />
+                ) : conn.platform.includes('CittaEFS') || conn.platform.includes('Gateway') ? (
+                  <ShieldCheck className="w-4 h-4 text-indigo-600" />
                 ) : (
                   <Globe className="w-4 h-4 text-indigo-600" />
                 )}
@@ -281,18 +280,14 @@ export function ConnectorsTab() {
       </div>
 
       {/* Adapter Architecture Summary */}
-      <div className="bg-slate-50/80 rounded-xl border border-slate-200/80 p-5 space-y-2">
-        <div className="flex items-center gap-2 font-bold text-slate-800">
-          <Server className="w-4 h-4 text-indigo-600" />
-          <span>Adapter Pattern Specifications (`ConnectorAdapter` Class Hierarchy)</span>
+      <div className="bg-emerald-50/60 rounded-xl border border-emerald-200/80 p-5 space-y-2">
+        <div className="flex items-center gap-2 font-bold text-emerald-800">
+          <Globe className="w-4 h-4 text-emerald-600" />
+          <span>Active: QuickBooks Online & Excel/CSV Connectors</span>
         </div>
-        <p className="text-slate-600 text-xs leading-relaxed">
-          The Hub utilizes an Enterprise Adapter Pattern (`ConnectorAdapter`). Every client integration implements standard methods: 
-          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">authenticate()</code>, 
-          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">fetchData()</code>, 
-          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">validate()</code>, 
-          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">transform()</code>, and 
-          <code className="bg-white border border-slate-200 rounded px-1.5 py-0.5 mx-1 text-indigo-600 font-mono text-[11px]">receiveWebhook()</code>.
+        <p className="text-emerald-700 text-xs leading-relaxed">
+          <strong>Currently Active:</strong> QuickBooks Online (OAuth2 REST/Webhook) and Excel/CSV File Upload adapters are fully operational. 
+          <br/><strong>Frozen for future release:</strong> SAP S/4HANA, NetSuite SuiteTalk, Custom SQL Staging, Odoo ERP, and Sage ERP adapters.
         </p>
       </div>
 

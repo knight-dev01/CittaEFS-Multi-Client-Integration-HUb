@@ -33,6 +33,11 @@ interface SystemMappingConfig {
   }[];
 }
 
+// ================================================
+// ACTIVE CONNECTORS: QuickBooks Online & Excel Only
+// Other ERP adapters (SAP, NetSuite, SQL) are FROZEN for future release
+// ================================================
+
 const SYSTEM_MAPPINGS: SystemMappingConfig[] = [
   {
     id: 'qbo',
@@ -86,162 +91,42 @@ const SYSTEM_MAPPINGS: SystemMappingConfig[] = [
       }
     ]
   },
-  {
-    id: 'sap',
-    name: 'SAP S/4HANA OData',
-    icon: Server,
-    badge: 'Enterprise OData',
-    color: 'border-indigo-600 bg-indigo-50 text-indigo-950',
-    description: 'SAP billing documents (`API_INVOICE_SRV`) mapped to standardized EFS Excel columns.',
-    mappings: [
-      {
-        sourceField: 'BillingDocument',
-        efsExcelColumn: 'InvoiceNumber',
-        transformationRule: 'PREFIX_SAP_DOC',
-        nrsTargetField: 'clientInvoiceNumber',
-        exampleValue: 'SAP-900812'
-      },
-      {
-        sourceField: 'STCEG (Tax Number 1)',
-        efsExcelColumn: 'CustomerTIN',
-        transformationRule: 'VALIDATE_TAX_ID_FORMAT',
-        nrsTargetField: 'customer.customerTin',
-        exampleValue: 'P000998877F'
-      },
-      {
-        sourceField: 'FKDAT (Billing Date)',
-        efsExcelColumn: 'IssueDate',
-        transformationRule: 'FORMAT_YYYY_MM_DD',
-        nrsTargetField: 'issueDateUtc',
-        exampleValue: '2026-07-28'
-      },
-      {
-        sourceField: 'ARKTX (Item Short Text)',
-        efsExcelColumn: 'ItemDescription',
-        transformationRule: 'PASSTHROUGH',
-        nrsTargetField: 'lineItems[].description',
-        exampleValue: 'Consulting Logistics Setup'
-      },
-      {
-        sourceField: 'NETWR (Net Value in Doc Currency)',
-        efsExcelColumn: 'LineTotalAmount',
-        transformationRule: 'FORMAT_CURRENCY_NUMERIC',
-        nrsTargetField: 'lineItems[].totalAmount',
-        exampleValue: '85000.00'
-      },
-      {
-        sourceField: 'MATNR / MWSKZ (Material Tax Code)',
-        efsExcelColumn: 'HsOrServiceCode',
-        transformationRule: 'AUTO_INFER_NRS_SERVICE_CODE',
-        nrsTargetField: 'lineItems[].hsOrServiceCode',
-        exampleValue: 'SRV-8703.20'
-      }
-    ]
-  },
-  {
-    id: 'netsuite',
-    name: 'NetSuite SuiteTalk RESTlet',
-    icon: Zap,
-    badge: 'TBA HMAC-SHA256',
-    color: 'border-amber-600 bg-amber-50 text-amber-950',
-    description: 'SuiteTalk RESTlet invoice payloads mapped into CittaEFS Excel ingestion structure.',
-    mappings: [
-      {
-        sourceField: 'tranId',
-        efsExcelColumn: 'InvoiceNumber',
-        transformationRule: 'DIRECT_ASSIGN',
-        nrsTargetField: 'clientInvoiceNumber',
-        exampleValue: 'NS-INV-4401'
-      },
-      {
-        sourceField: 'vatRegNum',
-        efsExcelColumn: 'CustomerTIN',
-        transformationRule: 'CLEAN_NON_ALPHANUMERIC',
-        nrsTargetField: 'customer.customerTin',
-        exampleValue: 'P019283746Z'
-      },
-      {
-        sourceField: 'trandate',
-        efsExcelColumn: 'IssueDate',
-        transformationRule: 'PARSE_MM_DD_YYYY',
-        nrsTargetField: 'issueDateUtc',
-        exampleValue: '2026-07-28'
-      },
-      {
-        sourceField: 'item_description',
-        efsExcelColumn: 'ItemDescription',
-        transformationRule: 'PASSTHROUGH',
-        nrsTargetField: 'lineItems[].description',
-        exampleValue: 'Oracle License Renewal'
-      },
-      {
-        sourceField: 'amount',
-        efsExcelColumn: 'LineTotalAmount',
-        transformationRule: 'CONVERT_FLOAT',
-        nrsTargetField: 'lineItems[].totalAmount',
-        exampleValue: '250000.00'
-      },
-      {
-        sourceField: 'custcol_hs_code',
-        efsExcelColumn: 'HsOrServiceCode',
-        transformationRule: 'VALIDATE_HS_REGISTRY',
-        nrsTargetField: 'lineItems[].hsOrServiceCode',
-        exampleValue: 'HS-8471.30'
-      }
-    ]
-  },
-  {
-    id: 'sql',
-    name: 'Custom SQL Staging View',
-    icon: Database,
-    badge: 'PostgreSQL / SQL Server',
-    color: 'border-slate-700 bg-slate-100 text-slate-900',
-    description: 'Relational database view (`vw_pending_invoices`) column mapping into EFS Excel schema.',
-    mappings: [
-      {
-        sourceField: 'inv_no',
-        efsExcelColumn: 'InvoiceNumber',
-        transformationRule: 'DIRECT_PASSTHROUGH',
-        nrsTargetField: 'clientInvoiceNumber',
-        exampleValue: 'SQL-STG-8812'
-      },
-      {
-        sourceField: 'cust_tin',
-        efsExcelColumn: 'CustomerTIN',
-        transformationRule: 'CHECK_NULL_DOWNGRADE_B2C',
-        nrsTargetField: 'customer.customerTin',
-        exampleValue: 'P019283746Z'
-      },
-      {
-        sourceField: 'created_at',
-        efsExcelColumn: 'IssueDate',
-        transformationRule: 'TRUNCATE_DATE',
-        nrsTargetField: 'issueDateUtc',
-        exampleValue: '2026-07-28'
-      },
-      {
-        sourceField: 'item_name',
-        efsExcelColumn: 'ItemDescription',
-        transformationRule: 'TRIM_WHITESPACE',
-        nrsTargetField: 'lineItems[].description',
-        exampleValue: 'Heavy Industrial Pumps'
-      },
-      {
-        sourceField: 'subtotal',
-        efsExcelColumn: 'LineTotalAmount',
-        transformationRule: 'NUMERIC_PARSE',
-        nrsTargetField: 'lineItems[].totalAmount',
-        exampleValue: '450000.00'
-      },
-      {
-        sourceField: 'hs_tariff_code',
-        efsExcelColumn: 'HsOrServiceCode',
-        transformationRule: 'DEFAULT_LOOKUP',
-        nrsTargetField: 'lineItems[].hsOrServiceCode',
-        exampleValue: 'HS-8471.30'
-      }
-    ]
-  },
+  // ================================================
+  // FROZEN: SAP S/4HANA OData - Coming in future release
+  // ================================================
+  // {
+  //   id: 'sap',
+  //   name: 'SAP S/4HANA OData',
+  //   icon: Server,
+  //   badge: 'Enterprise OData',
+  //   color: 'border-indigo-600 bg-indigo-50 text-indigo-950',
+  //   description: 'SAP billing documents mapped to standardized EFS Excel columns.',
+  //   mappings: [ ... ]
+  // },
+  // ================================================
+  // FROZEN: NetSuite SuiteTalk RESTlet - Coming in future release
+  // ================================================
+  // {
+  //   id: 'netsuite',
+  //   name: 'NetSuite SuiteTalk RESTlet',
+  //   icon: Zap,
+  //   badge: 'TBA HMAC-SHA256',
+  //   color: 'border-amber-600 bg-amber-50 text-amber-950',
+  //   description: 'SuiteTalk RESTlet invoice payloads mapped into CittaEFS Excel ingestion structure.',
+  //   mappings: [ ... ]
+  // },
+  // ================================================
+  // FROZEN: Custom SQL Staging View - Coming in future release
+  // ================================================
+  // {
+  //   id: 'sql',
+  //   name: 'Custom SQL Staging View',
+  //   icon: Database,
+  //   badge: 'PostgreSQL / SQL Server',
+  //   color: 'border-slate-700 bg-slate-100 text-slate-900',
+  //   description: 'Relational database view column mapping into EFS Excel schema.',
+  //   mappings: [ ... ]
+  // },
   {
     id: 'excel_native',
     name: 'Direct Excel (.xlsx / .xls) File Upload',

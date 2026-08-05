@@ -32,7 +32,12 @@ CSV-BATCH-102,B2C,2026-07-27,CUST-B2C-GENERIC,Over-The-Counter Cash Sale,N/A,SKU
   const [csvResultMsg, setCsvResultMsg] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
 
-  // Connector Simulators
+  // ================================================
+  // ACTIVE CONNECTORS: QuickBooks Online & Excel Only
+  // Other ERP adapters (SAP, NetSuite, SQL) are FROZEN
+  // ================================================
+  
+  // Connector Simulators (QBO & Excel Only)
   const [qboStatus, setQboStatus] = useState<'IDLE' | 'SIMULATING' | 'SUCCESS'>('IDLE');
   const [efsStatus, setEfsStatus] = useState<'IDLE' | 'QUERYING' | 'SUCCESS'>('IDLE');
   const [connectorLog, setConnectorLog] = useState<string[]>([]);
@@ -372,21 +377,21 @@ CSV-BATCH-102,B2C,2026-07-27,CUST-B2C-GENERIC,Over-The-Counter Cash Sale,N/A,SKU
           </div>
         </div>
 
-        {/* Right Box: Live ERP Webhook & SQL Connectors Simulator */}
+        {/* Right Box: Live QBO Webhook & CittaEFS Gateway Simulators */}
         <div className="bg-slate-900 text-white rounded-xl p-5 border border-slate-800 space-y-4 flex flex-col justify-between shadow-sm">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Zap className="w-4 h-4 text-indigo-400" />
-                <span>Live ERP & SQL Event Simulators</span>
+                <span>QuickBooks & CittaEFS Gateway Simulators</span>
               </h3>
-              <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                {activeTenant.platformType}
+              <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                QBO + EXCEL ACTIVE
               </span>
             </div>
 
             <p className="text-xs text-slate-400 my-2">
-              Test real-time webhook listeners & database CDC polling triggers without leaving the Hub Control Panel.
+              Test QuickBooks Online webhook CDC events & CittaEFS Gateway callbacks directly from the Hub Control Panel.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-4">
@@ -442,7 +447,7 @@ CSV-BATCH-102,B2C,2026-07-27,CUST-B2C-GENERIC,Over-The-Counter Cash Sale,N/A,SKU
           </div>
 
           <div className="text-[11px] text-slate-400 text-center pt-3 border-t border-slate-800 font-medium">
-            Hub ensures <strong className="text-indigo-400 font-semibold">symmetrical bi-directional synchronization</strong> across all client platforms.
+            Active Connectors: <strong className="text-emerald-400 font-semibold">QuickBooks Online</strong> & <strong className="text-emerald-400 font-semibold">Excel/CSV Upload</strong>. Other adapters (SAP, NetSuite, SQL) frozen for future release.
           </div>
         </div>
 

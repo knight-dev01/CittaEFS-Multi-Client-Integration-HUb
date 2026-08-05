@@ -10,7 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDatabaseUrl } from '../config/dbConfig';
 import { packEncryptedString, unpackAndDecryptString } from '../config/encryption';
 import { invoiceIngestionSchema, invoiceLineItemSchema } from '../schemas/invoice.schema';
-import { CONNECTOR_ADAPTERS, QuickBooksAdapter, SapAdapter, NetsuiteAdapter, OdooAdapter, CsvAdapter, SqlAdapter } from '../adapters/connectorAdapters';
+import { QuickBooksAdapter, CsvAdapter } from '../adapters/connectorAdapters';
 import { cittaEfsClient } from '../services/cittaEfsClient';
 import { invoiceQueue } from '../queues/invoiceQueue';
 import { processInvoiceJob } from '../workers/invoiceWorker';
@@ -206,7 +206,8 @@ async function runAllTests() {
     );
 
     // All registered adapters verification
-    const adapters = [new QuickBooksAdapter(), new SapAdapter(), new NetsuiteAdapter(), new OdooAdapter(), new CsvAdapter(), new SqlAdapter()];
+    // NOTE: SAP, NetSuite, Odoo, Sage, SQL adapters are FROZEN - only QBO and CSV active
+    const adapters = [new QuickBooksAdapter(), new CsvAdapter()];
     const allAuth = await Promise.all(
       adapters.map(a => a.authenticate({
         tenantId: 'tenant_test',
