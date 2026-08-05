@@ -98,9 +98,9 @@ export function ItemDictionaryTab() {
             <button
               onClick={handleAutoMap}
               disabled={isAutoMapping}
-              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
             >
-              <Wand2 className="w-4 h-4 text-slate-950" />
+              <Wand2 className="w-4 h-4 text-emerald-200" />
               <span>{isAutoMapping ? 'Auto-Mapping...' : `Auto-Map ${unmappedCount} Unmapped SKUs`}</span>
             </button>
           )}

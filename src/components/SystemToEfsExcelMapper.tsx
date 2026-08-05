@@ -346,42 +346,42 @@ export function SystemToEfsExcelMapper() {
   };
 
   return (
-    <div className="bg-white border-2 border-slate-900 p-4 sm:p-5 space-y-5 font-mono text-xs">
+    <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-5 font-sans text-xs shadow-sm">
       
       {/* Header Banner */}
-      <div className="bg-slate-900 text-white p-4 border-2 border-slate-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-slate-900 text-white p-5 rounded-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-black text-amber-400 uppercase flex items-center gap-2">
-            <Layers className="w-5 h-5 text-amber-400" />
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Layers className="w-5 h-5 text-indigo-400" />
             <span>How Systems Map to EFS Excel Ingestion Schema</span>
           </h3>
-          <p className="text-[11px] text-slate-300 mt-1">
+          <p className="text-xs text-slate-400 mt-1">
             Visual breakdown demonstrating how ERP APIs, Webhooks, SQL Views, and spreadsheets convert into the EFS Excel Matrix for NRS submission.
           </p>
         </div>
 
         {/* View Tabs */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800 self-stretch sm:self-auto overflow-x-auto">
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 self-stretch sm:self-auto overflow-x-auto">
           <button
             onClick={() => setActiveTab('MAPPER')}
-            className={`px-3 py-1.5 font-black uppercase text-[10px] cursor-pointer whitespace-nowrap ${
-              activeTab === 'MAPPER' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white'
+            className={`px-3 py-1.5 font-semibold text-xs rounded-md cursor-pointer whitespace-nowrap transition-colors ${
+              activeTab === 'MAPPER' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
             Visual Field Matrix
           </button>
           <button
             onClick={() => setActiveTab('PIPELINE')}
-            className={`px-3 py-1.5 font-black uppercase text-[10px] cursor-pointer whitespace-nowrap ${
-              activeTab === 'PIPELINE' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white'
+            className={`px-3 py-1.5 font-semibold text-xs rounded-md cursor-pointer whitespace-nowrap transition-colors ${
+              activeTab === 'PIPELINE' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
             4-Stage Pipeline Architecture
           </button>
           <button
             onClick={() => setActiveTab('SCHEMA_JSON')}
-            className={`px-3 py-1.5 font-black uppercase text-[10px] cursor-pointer whitespace-nowrap ${
-              activeTab === 'SCHEMA_JSON' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white'
+            className={`px-3 py-1.5 font-semibold text-xs rounded-md cursor-pointer whitespace-nowrap transition-colors ${
+              activeTab === 'SCHEMA_JSON' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
             Live Payload Previewer
@@ -391,8 +391,8 @@ export function SystemToEfsExcelMapper() {
 
       {/* System Selector Cards */}
       <div>
-        <label className="block font-black text-slate-900 uppercase mb-2">Select Source System Architecture:</label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+        <label className="block font-semibold text-slate-700 text-xs mb-2">Select Source System Architecture:</label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
           {SYSTEM_MAPPINGS.map((sys) => {
             const Icon = sys.icon;
             const isSelected = sys.id === selectedSystemId;
@@ -404,18 +404,20 @@ export function SystemToEfsExcelMapper() {
                   setSelectedSystemId(sys.id);
                   setTransformedOutput(null);
                 }}
-                className={`p-3 text-left border-2 border-slate-900 transition cursor-pointer flex flex-col justify-between space-y-2 ${
-                  isSelected ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-900 hover:bg-slate-100'
+                className={`p-3 text-left rounded-xl border transition cursor-pointer flex flex-col justify-between space-y-2 ${
+                  isSelected 
+                    ? 'bg-indigo-50/70 border-indigo-600 ring-2 ring-indigo-500/20 text-slate-900 shadow-sm' 
+                    : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <Icon className={`w-4 h-4 ${isSelected ? 'text-amber-400' : 'text-indigo-600'}`} />
-                  {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                  <Icon className={`w-4 h-4 ${isSelected ? 'text-indigo-600' : 'text-slate-500'}`} />
+                  {isSelected && <Check className="w-4 h-4 text-indigo-600" />}
                 </div>
 
                 <div>
-                  <div className="font-black text-[11px] leading-tight uppercase">{sys.name}</div>
-                  <div className={`text-[9px] mt-1 font-bold ${isSelected ? 'text-amber-300' : 'text-slate-500'}`}>
+                  <div className="font-bold text-xs leading-tight text-slate-900">{sys.name}</div>
+                  <div className={`text-[10px] mt-1 font-semibold ${isSelected ? 'text-indigo-700' : 'text-slate-500'}`}>
                     {sys.badge}
                   </div>
                 </div>
@@ -428,38 +430,38 @@ export function SystemToEfsExcelMapper() {
       {/* TAB 1: VISUAL FIELD MATRIX */}
       {activeTab === 'MAPPER' && (
         <div className="space-y-4">
-          <div className="p-3 bg-slate-50 border-2 border-slate-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
-              <span className="font-black text-slate-900 uppercase text-xs">Active Mapping Profile: </span>
-              <strong className="text-indigo-700 font-black text-xs">{selectedSystem.name}</strong>
+              <span className="font-semibold text-slate-700 text-xs">Active Mapping Profile: </span>
+              <strong className="text-indigo-600 font-bold text-xs">{selectedSystem.name}</strong>
             </div>
-            <p className="text-[11px] text-slate-600">{selectedSystem.description}</p>
+            <p className="text-xs text-slate-500">{selectedSystem.description}</p>
           </div>
 
           {/* Table displaying field mapping path */}
-          <div className="border-2 border-slate-900 overflow-x-auto">
+          <div className="border border-slate-200/80 rounded-xl overflow-x-auto shadow-sm">
             <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-900 text-amber-400 font-black text-[10px] uppercase border-b-2 border-slate-900">
-                  <th className="p-2.5">1. Source System Field</th>
-                  <th className="p-2.5">2. EFS Excel Column</th>
-                  <th className="p-2.5">3. Transformation Rule</th>
-                  <th className="p-2.5">4. NRS Gateway Target Field</th>
-                  <th className="p-2.5">Sample Value</th>
+                <tr className="bg-slate-50 text-slate-600 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                  <th className="p-3">1. Source System Field</th>
+                  <th className="p-3">2. EFS Excel Column</th>
+                  <th className="p-3">3. Transformation Rule</th>
+                  <th className="p-3">4. NRS Gateway Target Field</th>
+                  <th className="p-3">Sample Value</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 text-[11px] font-bold text-slate-800">
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
                 {selectedSystem.mappings.map((m, idx) => (
-                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
-                    <td className="p-2.5 font-mono text-indigo-900">{m.sourceField}</td>
-                    <td className="p-2.5 font-mono text-emerald-800 font-black">
-                      <span className="bg-emerald-100 border border-emerald-300 px-1.5 py-0.5">
+                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="p-3 font-mono text-indigo-900 font-semibold">{m.sourceField}</td>
+                    <td className="p-3 font-mono">
+                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold text-[11px]">
                         {m.efsExcelColumn}
                       </span>
                     </td>
-                    <td className="p-2.5 text-[10px] font-mono text-slate-600 uppercase">{m.transformationRule}</td>
-                    <td className="p-2.5 font-mono text-amber-800">{m.nrsTargetField}</td>
-                    <td className="p-2.5 font-mono text-slate-900 bg-slate-100">{m.exampleValue}</td>
+                    <td className="p-3 text-[11px] font-mono text-slate-500">{m.transformationRule}</td>
+                    <td className="p-3 font-mono text-indigo-700">{m.nrsTargetField}</td>
+                    <td className="p-3 font-mono text-slate-900 bg-slate-50/50 rounded">{m.exampleValue}</td>
                   </tr>
                 ))}
               </tbody>
@@ -470,25 +472,25 @@ export function SystemToEfsExcelMapper() {
             <button
               onClick={handleRunTransformationSimulation}
               disabled={isSimulatingTransform}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black uppercase border-2 border-slate-900 cursor-pointer flex items-center gap-2"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
             >
-              <RefreshCw className={`w-4 h-4 ${isSimulatingTransform ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isSimulatingTransform ? 'animate-spin text-indigo-200' : ''}`} />
               <span>Simulate Live Mapping Transformation</span>
             </button>
           </div>
 
           {transformedOutput && (
-            <div className="p-4 bg-slate-950 text-white border-2 border-slate-900 space-y-2 font-mono">
+            <div className="p-4 bg-slate-950 text-white rounded-xl border border-slate-800 space-y-2 font-mono">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-emerald-400 font-black flex items-center gap-1.5">
+                <span className="text-emerald-400 font-semibold flex items-center gap-1.5 text-xs">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   <span>Mapping & Schema Standard Transformation Successful!</span>
                 </span>
-                <span className="text-[10px] bg-emerald-400 text-slate-950 font-black px-2 py-0.5">
+                <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   NRS READY
                 </span>
               </div>
-              <pre className="text-[10px] text-emerald-400 bg-slate-900 p-3 overflow-x-auto max-h-60 border border-slate-800">
+              <pre className="text-xs text-emerald-400 bg-slate-900 p-3.5 rounded-lg overflow-x-auto max-h-60 border border-slate-800">
                 {JSON.stringify(transformedOutput, null, 2)}
               </pre>
             </div>
@@ -501,58 +503,58 @@ export function SystemToEfsExcelMapper() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             
-            <div className="bg-slate-50 border-2 border-slate-900 p-3 space-y-2">
-              <div className="flex items-center justify-between text-indigo-700 font-black text-[10px] uppercase">
+            <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-indigo-600 font-bold text-[10px] uppercase tracking-wider">
                 <span>Stage 01</span>
                 <Database className="w-4 h-4" />
               </div>
-              <h4 className="font-black text-slate-900 text-xs uppercase">Source Extraction</h4>
-              <p className="text-[10px] text-slate-600 leading-relaxed">
+              <h4 className="font-bold text-slate-900 text-xs">Source Extraction</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
                 Connectors fetch raw invoice events via OAuth webhooks, OData endpoints, SQL view pollers, or manual Excel drops.
               </p>
             </div>
 
-            <div className="bg-slate-50 border-2 border-slate-900 p-3 space-y-2">
-              <div className="flex items-center justify-between text-amber-700 font-black text-[10px] uppercase">
+            <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-indigo-600 font-bold text-[10px] uppercase tracking-wider">
                 <span>Stage 02</span>
                 <FileSpreadsheet className="w-4 h-4" />
               </div>
-              <h4 className="font-black text-slate-900 text-xs uppercase">EFS Excel Standard Matrix</h4>
-              <p className="text-[10px] text-slate-600 leading-relaxed">
+              <h4 className="font-bold text-slate-900 text-xs">EFS Excel Standard Matrix</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
                 All incoming payloads are converted into the standardized EFS Excel Matrix (`InvoiceNumber`, `CustomerTIN`, `HsOrServiceCode`, `VatRate`).
               </p>
             </div>
 
-            <div className="bg-slate-50 border-2 border-slate-900 p-3 space-y-2">
-              <div className="flex items-center justify-between text-emerald-700 font-black text-[10px] uppercase">
+            <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-emerald-600 font-bold text-[10px] uppercase tracking-wider">
                 <span>Stage 03</span>
                 <Sparkles className="w-4 h-4" />
               </div>
-              <h4 className="font-black text-slate-900 text-xs uppercase">Taxonomy & Rule Verification</h4>
-              <p className="text-[10px] text-slate-600 leading-relaxed">
+              <h4 className="font-bold text-slate-900 text-xs">Taxonomy & Rule Verification</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
                 Rules engine verifies TIN validity, infers HS/Service tax codes, calculates 16% VAT, and flags compliance errors.
               </p>
             </div>
 
-            <div className="bg-slate-50 border-2 border-slate-900 p-3 space-y-2">
-              <div className="flex items-center justify-between text-emerald-800 font-black text-[10px] uppercase">
+            <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-emerald-600 font-bold text-[10px] uppercase tracking-wider">
                 <span>Stage 04</span>
                 <Globe className="w-4 h-4" />
               </div>
-              <h4 className="font-black text-slate-900 text-xs uppercase">NRS Gateway Transmission</h4>
-              <p className="text-[10px] text-slate-600 leading-relaxed">
+              <h4 className="font-bold text-slate-900 text-xs">NRS Gateway Transmission</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
                 Generates cryptographic IRN hash and QR stamp, submitting directly to the official NRS E-Invoicing Gateway.
               </p>
             </div>
 
           </div>
 
-          <div className="p-4 bg-amber-50 border-2 border-amber-400 text-amber-950 space-y-1 text-[11px]">
-            <strong className="font-black uppercase flex items-center gap-1.5">
-              <HelpCircle className="w-4 h-4 text-amber-900" />
+          <div className="p-4 bg-indigo-50/60 border border-indigo-200/80 rounded-xl text-indigo-950 space-y-1 text-xs">
+            <strong className="font-bold flex items-center gap-1.5 text-indigo-900">
+              <HelpCircle className="w-4 h-4 text-indigo-600" />
               <span>Why the EFS Excel Ingestion Schema is the Unified Core:</span>
             </strong>
-            <p className="leading-relaxed">
+            <p className="leading-relaxed text-slate-600">
               Whether your client runs enterprise SAP S/4HANA, QuickBooks Online, legacy SQL databases, or simply drops a weekly Excel spreadsheet, CittaEFS normalizes all incoming transactions into this exact Excel schema first. This guarantees 100% tax compliance consistency regardless of source software!
             </p>
           </div>
@@ -563,13 +565,13 @@ export function SystemToEfsExcelMapper() {
       {activeTab === 'SCHEMA_JSON' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="font-black text-slate-900 uppercase text-xs">Standard EFS Excel Row JSON Representation:</span>
-            <span className="px-2 py-0.5 bg-slate-900 text-amber-400 font-black text-[10px] uppercase">
+            <span className="font-bold text-slate-800 text-xs">Standard EFS Excel Row JSON Representation:</span>
+            <span className="px-2.5 py-0.5 bg-slate-900 text-slate-300 font-semibold text-[10px] rounded-full">
               SCHEMA V2.4
             </span>
           </div>
 
-          <div className="p-4 bg-slate-900 text-emerald-400 border-2 border-slate-900 font-mono text-[11px] overflow-x-auto">
+          <div className="p-4 bg-slate-900 text-emerald-400 rounded-xl border border-slate-800 font-mono text-xs overflow-x-auto shadow-sm">
             <pre>
 {`{
   "efs_excel_matrix_header": {
