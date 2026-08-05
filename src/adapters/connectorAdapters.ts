@@ -366,3 +366,4 @@ export const CONNECTOR_ADAPTERS: Record<string, ConnectorAdapter> = {
   'Excel & CSV Import': new CsvAdapter(),
   'CSV Direct Drops': new CsvAdapter()
 };
+ 
