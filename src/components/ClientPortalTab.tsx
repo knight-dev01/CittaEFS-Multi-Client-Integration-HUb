@@ -44,6 +44,11 @@ export function ClientPortalTab() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadLog, setUploadLog] = useState<string | null>(null);
 
+  // ================================================
+  // ACTIVE CONNECTORS: QuickBooks Online & Excel Only
+  // Other ERP adapters (SAP, NetSuite, SQL) are FROZEN
+  // ================================================
+  
   const themeConfig: any = {
     'QuickBooks Online': {
       bg: 'bg-emerald-800',
@@ -53,25 +58,9 @@ export function ClientPortalTab() {
       buttonBg: 'bg-emerald-700 hover:bg-emerald-600',
       badgeBg: 'bg-emerald-200 text-emerald-950',
       icon: <Zap className="w-5 h-5 text-emerald-300" />
-    },
-    'SAP S/4HANA': {
-      bg: 'bg-blue-900',
-      text: 'text-blue-50',
-      accent: 'text-blue-300',
-      border: 'border-blue-950',
-      buttonBg: 'bg-blue-800 hover:bg-blue-700',
-      badgeBg: 'bg-blue-200 text-blue-950',
-      icon: <Building2 className="w-5 h-5 text-blue-300" />
-    },
-    'Xero': {
-      bg: 'bg-sky-600',
-      text: 'text-white',
-      accent: 'text-sky-100',
-      border: 'border-sky-800',
-      buttonBg: 'bg-sky-500 hover:bg-sky-400',
-      badgeBg: 'bg-sky-100 text-sky-900',
-      icon: <FileSpreadsheet className="w-5 h-5 text-sky-100" />
     }
+    // FROZEN: SAP S/4HANA - Coming in future release
+    // FROZEN: Xero - Coming in future release
   }[activeTenant.platformType] || {
     bg: 'bg-slate-900',
     text: 'text-white',

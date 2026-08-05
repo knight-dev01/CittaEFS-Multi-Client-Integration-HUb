@@ -1,3 +1,8 @@
+// ================================================
+// ACTIVE CONNECTORS: QuickBooks Online & Excel Only
+// Other ERP adapters (SAP, NetSuite, SQL) are FROZEN for future release
+// ================================================
+
 // Pluggable Adapter Pattern for Multi-Tenant ERP/Accounting Connectors
 // Implements ConnectorAdapter interface with clean, modular contracts
 
@@ -108,9 +113,11 @@ export class QuickBooksAdapter implements ConnectorAdapter {
   }
 }
 
-/**
- * SAP S/4HANA OData Enterprise Adapter
- */
+// ================================================
+// FROZEN: SAP S/4HANA OData Enterprise Adapter
+// Uncomment when ready for SAP integration
+// ================================================
+/*
 export class SapAdapter implements ConnectorAdapter {
   connectorType = 'REST_API';
   platformName = 'SAP S/4HANA';
@@ -149,10 +156,13 @@ export class SapAdapter implements ConnectorAdapter {
     return { handled: true, invoiceNumber: body?.BillingDocument || `SAP-EVT-${Date.now()}` };
   }
 }
+*/
 
-/**
- * Oracle NetSuite SuiteTalk Adapter
- */
+// ================================================
+// FROZEN: Oracle NetSuite SuiteTalk Adapter
+// Uncomment when ready for NetSuite integration
+// ================================================
+/*
 export class NetsuiteAdapter implements ConnectorAdapter {
   connectorType = 'REST_API';
   platformName = 'NetSuite SuiteTalk';
@@ -189,10 +199,13 @@ export class NetsuiteAdapter implements ConnectorAdapter {
     return { handled: true, invoiceNumber: body?.tranId || `NS-EVT-${Date.now()}` };
   }
 }
+*/
 
-/**
- * Odoo ERP JSON-RPC Adapter
- */
+// ================================================
+// FROZEN: Odoo ERP JSON-RPC Adapter
+// Uncomment when ready for Odoo integration
+// ================================================
+/*
 export class OdooAdapter implements ConnectorAdapter {
   connectorType = 'REST_API';
   platformName = 'Odoo ERP';
@@ -228,6 +241,7 @@ export class OdooAdapter implements ConnectorAdapter {
     return { handled: true, invoiceNumber: body?.name || `ODOO-EVT-${Date.now()}` };
   }
 }
+*/
 
 /**
  * CSV / Excel Direct File Stream Adapter
@@ -260,9 +274,11 @@ export class CsvAdapter implements ConnectorAdapter {
   async receiveWebhook() { return { handled: false }; }
 }
 
-/**
- * Sage ERP (Sage 50 / Sage Intacct) Adapter
- */
+// ================================================
+// FROZEN: Sage ERP (Sage 50 / Sage Intacct) Adapter
+// Uncomment when ready for Sage integration
+// ================================================
+/*
 export class SageAdapter implements ConnectorAdapter {
   connectorType = 'REST_API';
   platformName = 'Sage ERP';
@@ -308,10 +324,13 @@ export class SageAdapter implements ConnectorAdapter {
     return { handled: true, invoiceNumber: body?.InvoiceNumber || `SAGE-EVT-${Date.now()}` };
   }
 }
+*/
 
-/**
- * Custom SQL Staging Database Adapter
- */
+// ================================================
+// FROZEN: Custom SQL Staging Database Adapter
+// Uncomment when ready for SQL integration
+// ================================================
+/*
 export class SqlAdapter implements ConnectorAdapter {
   connectorType = 'SQL_DATABASE';
   platformName = 'Custom SQL Staging DB';
@@ -339,6 +358,7 @@ export class SqlAdapter implements ConnectorAdapter {
   async submitToGateway(payload: IngestedPayload) { return { success: true, trackingId: `track_sql_${Date.now()}` }; }
   async receiveWebhook() { return { handled: false }; }
 }
+*/
 
 export const CONNECTOR_ADAPTERS: Record<string, ConnectorAdapter> = {
   'QuickBooks Online': new QuickBooksAdapter(),

@@ -9,10 +9,7 @@ import {
   ArrowLeft, 
   ShieldCheck, 
   Globe, 
-  Database, 
   FileSpreadsheet, 
-  Server, 
-  Zap, 
   Lock, 
   Check, 
   Key, 
@@ -32,6 +29,11 @@ interface NewConnectorModalProps {
   tenantName: string;
   onAddConnector: (connector: Connector) => void;
 }
+
+// ================================================
+// ACTIVE CONNECTORS: QuickBooks Online & Excel Only
+// Other ERP adapters (SAP, NetSuite, SQL) are FROZEN
+// ================================================
 
 const PLATFORM_OPTIONS = [
   {
@@ -171,10 +173,13 @@ export function NewConnectorModal({ isOpen, onClose, tenantId, tenantName, onAdd
           <div>
             <h3 className="font-bold text-white text-base flex items-center gap-2">
               <Plug className="w-5 h-5 text-indigo-400" />
-              <span>Configure New ERP / Accounting Connector Adapter</span>
+              <span>Add QuickBooks or Excel Connector</span>
+              <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                QBO + EXCEL ACTIVE
+              </span>
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Multi-Step Adapter Onboarding • Workspace: <strong className="text-white font-medium">{tenantName}</strong> ({tenantId})
+              Active: QuickBooks Online (OAuth2) & Excel/CSV Upload • Other adapters (SAP, NetSuite, SQL) frozen • Workspace: <strong className="text-white font-medium">{tenantName}</strong>
             </p>
           </div>
           <button 
