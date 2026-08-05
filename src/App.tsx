@@ -3,23 +3,15 @@ import { HubProvider, useHub } from './lib/store';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
 import { OverviewTab } from './components/OverviewTab';
-import { ClientPortalTab } from './components/ClientPortalTab';
 import { ConnectorsTab } from './components/ConnectorsTab';
 import { ImportTab } from './components/ImportTab';
-import { FieldMappingTab } from './components/FieldMappingTab';
 import { InvoicesTab } from './components/InvoicesTab';
 import { CustomerSyncTab } from './components/CustomerSyncTab';
 import { ItemDictionaryTab } from './components/ItemDictionaryTab';
-import { QueueMonitorTab } from './components/QueueMonitorTab';
-import { WebhookInspectorTab } from './components/WebhookInspectorTab';
 import { ValidationErrorsTab } from './components/ValidationErrorsTab';
-import { ReconciliationTab } from './components/ReconciliationTab';
-import { AuditTrailTab } from './components/AuditTrailTab';
 import { SettingsTab } from './components/SettingsTab';
 import { NewInvoiceModal } from './components/NewInvoiceModal';
 import { OnboardClientModal } from './components/OnboardClientModal';
-
-import { Cpu } from 'lucide-react';
 
 function HubMainContent() {
   const { currentUser, login, isBgRefreshing } = useHub();

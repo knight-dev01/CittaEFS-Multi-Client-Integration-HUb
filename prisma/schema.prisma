@@ -164,7 +164,7 @@ model AuditLog {
 
 model User {
   id           String   @id @default(uuid())
-  tenantId     String   @map("tenant_id")
+  tenantId     String?  @map("tenant_id")
   email        String   @unique
   name         String
   passwordHash String   @map("password_hash")
@@ -173,7 +173,7 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@map("users")

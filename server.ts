@@ -405,7 +405,7 @@ async function startServer() {
           passwordHash,
           role: 'ADMIN', // First user is always admin
           organization: organization || 'Default Organization',
-          tenantId: ''
+          tenantId: null
         }
       });
 
