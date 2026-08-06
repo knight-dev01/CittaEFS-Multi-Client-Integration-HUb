@@ -41,7 +41,7 @@ export function SettingsTab() {
   const [retryMax, setRetryMax] = useState(5);
   const [cittaEndpoint, setCittaEndpoint] = useState('https://gateway.cittaefs.com/api/v1');
   const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
-  const [apiKey, setApiKey] = useState(activeTenant.cittaApiKey || 'citta_live_9981223910');
+  const [apiKey, setApiKey] = useState(activeTenant?.cittaApiKey || '');
   const [isSaved, setIsSaved] = useState(false);
 
   // Users State
@@ -59,9 +59,10 @@ export function SettingsTab() {
 
   useEffect(() => {
     fetchUsers();
-  }, [activeTenant.id]);
+  }, [activeTenant?.id]);
 
   const fetchUsers = async () => {
+    if (!activeTenant) return;
     try {
       const res = await fetchWithAuth(`/api/users?tenantId=${activeTenant.id}`);
       const data = await parseJsonResponse(res);
@@ -129,7 +130,7 @@ export function SettingsTab() {
         setNewUserEmail('');
         setNewUserPassword('SecurePass123!');
         setIsAddUserOpen(false);
-        alert(`✅ User ${createdUser.name} (${createdUser.email}) successfully created with ${createdUser.role} role for tenant ${activeTenant.name}!`);
+        alert(`✅ User ${createdUser.name} (${createdUser.email}) successfully created with ${createdUser.role} role for tenant ${activeTenant?.name}!`);
       } else {
         alert(`❌ Failed to create user: ${data.error || 'Unknown error'}`);
       }
@@ -176,7 +177,7 @@ export function SettingsTab() {
             Tenant Security, RBAC & User Permissions Hub
           </h2>
           <p className="text-slate-400 text-xs mt-1">
-            Row-Level Security Context • Multi-User RBAC • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong> ({activeTenant.id})
+            Row-Level Security Context • Multi-User RBAC • Workspace: <strong className="text-white font-medium">{activeTenant?.name || 'No Workspace'}</strong> ({activeTenant?.id || 'N/A'})
           </p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HubProvider, useHub } from './lib/store';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
@@ -14,7 +14,7 @@ import { NewInvoiceModal } from './components/NewInvoiceModal';
 import { OnboardClientModal } from './components/OnboardClientModal';
 
 function HubMainContent() {
-  const { currentUser, login, isBgRefreshing } = useHub();
+  const { currentUser, login, isBgRefreshing, tenants } = useHub();
 
   const [activeTab, setActiveTabState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -44,9 +44,20 @@ function HubMainContent() {
   const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
 
+  // Show login if not authenticated
   if (!currentUser) {
     return <LoginScreen onLogin={login} />;
   }
+
+  // Force open onboarding modal if no tenants exist after login
+  const hasTenant = tenants && tenants.length > 0;
+
+  // Show onboarding modal if no tenants exist
+  useEffect(() => {
+    if (!hasTenant && currentUser) {
+      setIsOnboardModalOpen(true);
+    }
+  }, [hasTenant, currentUser]);
 
   // Enforce role-based tab routing restrictions:
   // Admin: Full access to all tabs
