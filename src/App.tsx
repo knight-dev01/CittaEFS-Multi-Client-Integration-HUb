@@ -27,9 +27,33 @@ function HubMainContent() {
   const { currentUser, login, isBgRefreshing, tenants } = useHub();
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Mark as initialized after initial render
+  // All useState calls must be at the top (React Rules of Hooks)
+  const [activeTab, setActiveTabState] = useState<string>('clients');
+  const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
+  const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
+
+  // Mark as initialized after initial render and load saved tab
   useEffect(() => {
-    const timer = setTimeout(() => setIsInitializing(false), 100);
+    const timer = setTimeout(() => {
+      // Load saved tab from localStorage
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('citta_active_tab');
+        if (saved) {
+          setActiveTabState(saved);
+        }
+        const params = new URLSearchParams(window.location.search);
+        const path = window.location.pathname;
+        if (
+          path === '/connect-quickbooks' || 
+          params.get('tab') === 'connectors' || 
+          params.get('qbo') === 'disconnected' || 
+          params.get('connect') === 'qbo'
+        ) {
+          setActiveTabState('connectors');
+        }
+      }
+      setIsInitializing(false);
+    }, 100);
     return () => clearTimeout(timer);
   }, []);
 
@@ -38,33 +62,12 @@ function HubMainContent() {
     return <LoadingScreen />;
   }
 
-  const [activeTab, setActiveTabState] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('citta_active_tab');
-      if (saved) return saved;
-      const params = new URLSearchParams(window.location.search);
-      const path = window.location.pathname;
-      if (
-        path === '/connect-quickbooks' || 
-        params.get('tab') === 'connectors' || 
-        params.get('qbo') === 'disconnected' || 
-        params.get('connect') === 'qbo'
-      ) {
-        return 'connectors';
-      }
-    }
-    return 'clients';
-  });
-
   const setActiveTab = (tab: string) => {
     setActiveTabState(tab);
     if (typeof window !== 'undefined') {
       localStorage.setItem('citta_active_tab', tab);
     }
   };
-
-  const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
-  const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
 
   // Show login if not authenticated
   if (!currentUser) {
