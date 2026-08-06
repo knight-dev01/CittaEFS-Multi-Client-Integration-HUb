@@ -1,1 +1,7 @@
 @import "tailwindcss";
+
+/* Ensure full viewport height */
+html, body, #root {
+  min-height: 100vh;
+  height: 100%;
+}

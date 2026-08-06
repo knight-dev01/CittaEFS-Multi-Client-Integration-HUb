@@ -14,7 +14,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
   const [invNum, setInvNum] = useState(`INV-TEST-${Math.floor(1000 + Math.random() * 9000)}`);
   const [kind, setKind] = useState<'B2B' | 'B2C'>('B2B');
   const [type, setType] = useState<'STANDARD' | 'CREDIT_NOTE' | 'DEBIT_NOTE'>('STANDARD');
-  const [custName, setCustName] = useState('Zenith Logistics Ltd');
+  const [custName, setCustName] = useState('');
   const [custTin, setCustTin] = useState('P019283746Z');
   
   const [lineItems, setLineItems] = useState([

@@ -43,11 +43,9 @@ export function SettingsTab() {
   const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
   const [isSaved, setIsSaved] = useState(false);
 
-  // Users State
-  const [users, setUsers] = useState<UserMember[]>([
-    { id: 'usr-1', name: 'Alexander Vance', email: 'a.vance@enterprise.com', role: 'ADMIN', mfaStatus: 'ENFORCED', lastActive: '2 mins ago', status: 'ACTIVE' },
-    { id: 'usr-3', name: 'Kwame Osei', email: 'k.osei@enterprise.com', role: 'OPERATOR', mfaStatus: 'OPTIONAL', lastActive: '1 hour ago', status: 'ACTIVE' }
-  ]);
+  // Users State - fetched from API, empty initially
+  const [users, setUsers] = useState<UserMember[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -62,6 +60,7 @@ export function SettingsTab() {
 
   const fetchUsers = async () => {
     if (!activeTenant) return;
+    setIsLoadingUsers(true);
     try {
       const res = await fetchWithAuth(`/api/users?tenantId=${activeTenant.id}`);
       const data = await parseJsonResponse(res);
@@ -79,6 +78,8 @@ export function SettingsTab() {
       }
     } catch (err) {
       console.warn('Failed to fetch users from API:', err);
+    } finally {
+      setIsLoadingUsers(false);
     }
   };
 
@@ -258,7 +259,24 @@ export function SettingsTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs text-slate-900">
-              {filteredUsers.map((user) => (
+              {isLoadingUsers ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                    Loading users...
+                  </td>
+                </tr>
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                    <div className="flex flex-col items-center gap-2">
+                      <Users className="w-8 h-8 text-slate-300" />
+                      <p>No users yet</p>
+                      <p className="text-[11px]">Add your first user using the form above</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="p-3 px-4">
                     <div className="font-bold text-slate-900">{user.name}</div>
@@ -297,7 +315,8 @@ export function SettingsTab() {
                     )}
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         </div>

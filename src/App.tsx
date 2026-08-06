@@ -12,9 +12,31 @@ import { ValidationErrorsTab } from './components/ValidationErrorsTab';
 import { SettingsTab } from './components/SettingsTab';
 import { NewInvoiceModal } from './components/NewInvoiceModal';
 import { OnboardClientModal } from './components/OnboardClientModal';
+import { Layers } from 'lucide-react';
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col justify-center items-center">
+      <Layers className="w-12 h-12 text-indigo-500 animate-pulse mb-4" />
+      <p className="text-slate-400 text-sm">Loading...</p>
+    </div>
+  );
+}
 
 function HubMainContent() {
   const { currentUser, login, isBgRefreshing, tenants } = useHub();
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // Mark as initialized after initial render
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitializing(false), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Show loading screen during initialization
+  if (isInitializing) {
+    return <LoadingScreen />;
+  }
 
   const [activeTab, setActiveTabState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
