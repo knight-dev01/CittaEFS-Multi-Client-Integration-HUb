@@ -90,10 +90,6 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
                   <span className="text-slate-500 font-medium text-[11px] block">Platform Type</span>
                   <span className="font-semibold text-indigo-600">{createdResult.platformType}</span>
                 </div>
-                <div>
-                  <span className="text-slate-500 font-medium text-[11px] block">CittaEFS Gateway API Key</span>
-                  <span className="font-mono font-semibold text-slate-900">{createdResult.cittaApiKey || 'citta_live_key_provisioned'}</span>
-                </div>
               </div>
             </div>
 

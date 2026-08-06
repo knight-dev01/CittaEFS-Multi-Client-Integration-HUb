@@ -41,7 +41,6 @@ export function SettingsTab() {
   const [retryMax, setRetryMax] = useState(5);
   const [cittaEndpoint, setCittaEndpoint] = useState('https://gateway.cittaefs.com/api/v1');
   const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
-  const [apiKey, setApiKey] = useState(activeTenant?.cittaApiKey || '');
   const [isSaved, setIsSaved] = useState(false);
 
   // Users State
@@ -81,16 +80,6 @@ export function SettingsTab() {
     } catch (err) {
       console.warn('Failed to fetch users from API:', err);
     }
-  };
-
-  const handleRotateKey = () => {
-    if (currentRole !== 'ADMIN') {
-      alert('Access Restricted: Only Platform Admins are authorized to rotate Tenant Gateway API Keys.');
-      return;
-    }
-    const newKey = `citta_live_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 6)}`;
-    setApiKey(newKey);
-    alert(`CittaEFS Gateway API Key rotated successfully! New Key: ${newKey}`);
   };
 
   const handleSaveSettings = () => {
@@ -156,7 +145,7 @@ export function SettingsTab() {
   );
 
   const permissionsMatrix = [
-    { capability: 'Tenant Credentials & API Key Rotation', admin: true, operator: false },
+    { capability: 'Gateway Configuration (Environment Variables)', admin: true, operator: false },
     { capability: 'ERP Connectors & Custom Endpoint Config', admin: true, operator: false },
     { capability: 'Field Mapping & JSON Transformation Rules', admin: true, operator: false },
     { capability: 'Manual Invoice Ingestion & Retry Queue', admin: true, operator: true },
@@ -367,27 +356,15 @@ export function SettingsTab() {
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">CittaEFS Gateway API Key (Tenant Secret)</label>
+            <label className="block font-medium text-slate-700 mb-1">CittaEFS Gateway API Key (Organization-Wide)</label>
             <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={currentRole === 'ADMIN' ? apiKey : '••••••••••••••••••••••••••••'}
-                readOnly
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-slate-50 font-mono text-slate-900 font-medium"
-              />
-              <button
-                onClick={handleRotateKey}
-                disabled={currentRole !== 'ADMIN'}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Rotate Key
-              </button>
+              <div className="flex-1 px-3.5 py-2 border border-slate-200 rounded-lg bg-amber-50 font-mono text-amber-800 text-xs">
+                ⚙️ Configured via CITTAEFS_API_KEY environment variable
+              </div>
             </div>
-            {currentRole !== 'ADMIN' && (
-              <span className="text-xs text-rose-600 font-medium block mt-1">
-                * Secret key masked. Admin role required to view or rotate API credentials.
-              </span>
-            )}
+            <span className="text-xs text-slate-500 font-medium block mt-1">
+              * Single API key shared across all workspaces (tenants). Configure via server environment variables.
+            </span>
           </div>
 
           <div>
