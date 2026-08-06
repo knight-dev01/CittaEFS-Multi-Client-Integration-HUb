@@ -51,7 +51,7 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
             <span>Operational Integration Engine Control Center</span>
           </div>
           <p className="text-slate-400 text-xs mt-1">
-            Middleware Routing • Active Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong> ({activeTenant.id})
+            Middleware Routing • Active Workspace: <strong className="text-white font-medium">{activeTenant?.name || 'No Workspace'}</strong> ({activeTenant?.id || 'N/A'})
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -189,7 +189,7 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
       <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
         <div className="px-5 py-4 bg-slate-50/50 border-b border-slate-100 font-bold text-slate-900 flex justify-between items-center text-xs">
           <span>Recent Ingestion & Regulatory Lifecycle Invoices</span>
-          <span className="text-slate-500 font-normal">Active Workspace: {activeTenant.name}</span>
+          <span className="text-slate-500 font-normal">Active Workspace: {activeTenant?.name || 'No Workspace'}</span>
         </div>
 
         <div className="overflow-x-auto">

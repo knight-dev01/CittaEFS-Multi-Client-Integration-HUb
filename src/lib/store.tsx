@@ -141,7 +141,16 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [metrics, setMetrics] = useState<SystemMetrics>(INITIAL_METRICS);
 
-  const activeTenant = tenants.find(t => t.id === activeTenantId) || null;
+  // Auto-select first tenant if none selected and tenants exist
+  const effectiveTenantId = tenants.length > 0 && !activeTenantId ? tenants[0].id : activeTenantId;
+  const activeTenant = tenants.find(t => t.id === effectiveTenantId) || tenants[0] || null;
+
+  // Effect to auto-select first tenant when tenants are loaded
+  useEffect(() => {
+    if (tenants.length > 0 && !activeTenantId) {
+      setActiveTenantId(tenants[0].id);
+    }
+  }, [tenants, activeTenantId, setActiveTenantId]);
 
   const [activeRequests, setActiveRequests] = useState(0);
   const isBgRefreshing = activeRequests > 0;

@@ -282,7 +282,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         <div className="flex items-center space-x-2">
           {/* Active Tenant Code Badge */}
           <span className="text-[11px] bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700 font-medium text-slate-200 max-w-[120px] truncate">
-            {activeTenant.name}
+            {activeTenant?.name || 'No Workspace'}
           </span>
           <button
             onClick={handleRefresh}
