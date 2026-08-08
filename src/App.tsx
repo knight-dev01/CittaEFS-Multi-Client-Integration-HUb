@@ -32,35 +32,28 @@ function HubMainContent() {
   const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
 
-  // Mark as initialized after initial render and load saved tab
+  // Load saved tab from localStorage after mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      // Load saved tab from localStorage
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('citta_active_tab');
-        if (saved) {
-          setActiveTabState(saved);
-        }
-        const params = new URLSearchParams(window.location.search);
-        const path = window.location.pathname;
-        if (
-          path === '/connect-quickbooks' || 
-          params.get('tab') === 'connectors' || 
-          params.get('qbo') === 'disconnected' || 
-          params.get('connect') === 'qbo'
-        ) {
-          setActiveTabState('connectors');
-        }
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('citta_active_tab');
+      if (saved) {
+        setActiveTabState(saved);
       }
-      setIsInitializing(false);
-    }, 100);
+      const params = new URLSearchParams(window.location.search);
+      const path = window.location.pathname;
+      if (
+        path === '/connect-quickbooks' || 
+        params.get('tab') === 'connectors' || 
+        params.get('qbo') === 'disconnected' || 
+        params.get('connect') === 'qbo'
+      ) {
+        setActiveTabState('connectors');
+      }
+    }
+    // Small delay to ensure smooth transition
+    const timer = setTimeout(() => setIsInitializing(false), 50);
     return () => clearTimeout(timer);
   }, []);
-
-  // Show loading screen during initialization
-  if (isInitializing) {
-    return <LoadingScreen />;
-  }
 
   const setActiveTab = (tab: string) => {
     setActiveTabState(tab);
@@ -68,6 +61,11 @@ function HubMainContent() {
       localStorage.setItem('citta_active_tab', tab);
     }
   };
+
+  // Show loading screen only if initializing AND we have a user (authenticated state)
+  if (isInitializing && currentUser) {
+    return <LoadingScreen />;
+  }
 
   // Show login if not authenticated
   if (!currentUser) {
