@@ -62,6 +62,17 @@ function HubMainContent() {
     }
   };
 
+  // Force open onboarding modal if no tenants exist after login
+  const hasTenant = tenants && tenants.length > 0;
+
+  // Show onboarding modal if no tenants exist
+  // (must run on every render, before any conditional early return, per Rules of Hooks)
+  useEffect(() => {
+    if (!hasTenant && currentUser) {
+      setIsOnboardModalOpen(true);
+    }
+  }, [hasTenant, currentUser]);
+
   // Show loading screen only if initializing AND we have a user (authenticated state)
   if (isInitializing && currentUser) {
     return <LoadingScreen />;
@@ -71,16 +82,6 @@ function HubMainContent() {
   if (!currentUser) {
     return <LoginScreen onLogin={login} />;
   }
-
-  // Force open onboarding modal if no tenants exist after login
-  const hasTenant = tenants && tenants.length > 0;
-
-  // Show onboarding modal if no tenants exist
-  useEffect(() => {
-    if (!hasTenant && currentUser) {
-      setIsOnboardModalOpen(true);
-    }
-  }, [hasTenant, currentUser]);
 
   // Enforce role-based tab routing restrictions:
   // Admin: Full access to all tabs
