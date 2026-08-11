@@ -16,7 +16,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
   const [type, setType] = useState<'STANDARD' | 'CREDIT_NOTE' | 'DEBIT_NOTE'>('STANDARD');
   const [custName, setCustName] = useState('');
   const [custTin, setCustTin] = useState('P019283746Z');
-  
+
   const [lineItems, setLineItems] = useState([
     {
       itemCode: 'SKU-LAP-DELL15',
@@ -81,7 +81,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto font-sans text-xs">
       <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-4 rounded-2xl border border-slate-200 shadow-xl relative">
-        
+
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -101,7 +101,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-medium text-slate-700 mb-1">Client Invoice # *</label>
@@ -203,7 +203,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-slate-500 font-medium block mb-1">Unit Price (KES)</label>
+                    <label className="text-[11px] text-slate-500 font-medium block mb-1">Unit Price (NGN)</label>
                     <input
                       type="number"
                       value={item.unitPrice}
@@ -262,9 +262,8 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
           </div>
 
           {responseResult && (
-            <div className={`p-4 rounded-xl border text-xs space-y-1 shadow-sm ${
-              responseResult.success ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-medium' : 'bg-rose-50 text-rose-900 border-rose-200 font-medium'
-            }`}>
+            <div className={`p-4 rounded-xl border text-xs space-y-1 shadow-sm ${responseResult.success ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-medium' : 'bg-rose-50 text-rose-900 border-rose-200 font-medium'
+              }`}>
               <div className="flex items-center space-x-2 font-semibold">
                 {responseResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
                 <span>{responseResult.message || 'Gateway Response Returned'}</span>

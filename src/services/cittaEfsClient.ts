@@ -1,20 +1,19 @@
-import 'dotenv/config';
-import https from 'https';
+import "dotenv/config";
+import https from "https";
 
 function getCittaEfsApiKey(): string {
   const key = process.env.CITTAEFS_API_KEY;
   if (!key) {
-    throw new Error('CITTAEFS_API_KEY environment variable is required.');
+    throw new Error("CITTAEFS_API_KEY environment variable is required.");
   }
   return key;
 }
 
-
 export interface CittaEfsRequestPayload {
   tenantId: string;
   clientInvoiceNumber: string;
-  invoiceType: 'STANDARD' | 'CREDIT_NOTE' | 'DEBIT_NOTE' | 'CANCELLATION';
-  invoiceKind: 'B2B' | 'B2C';
+  invoiceType: "STANDARD" | "CREDIT_NOTE" | "DEBIT_NOTE" | "CANCELLATION";
+  invoiceKind: "B2B" | "B2C";
   customerName: string;
   customerTin?: string;
   lineItems: Array<{
@@ -56,11 +55,16 @@ export interface BulkEInvoiceResultDto {
 function httpsRequest(
   url: string,
   options: {
-    method: 'GET' | 'POST' | 'PATCH' | 'PUT';
+    method: "GET" | "POST" | "PATCH" | "PUT";
     headers: Record<string, string>;
     body?: string;
-  }
-): Promise<{ ok: boolean; status: number; text: string; json: <T = any>() => T }> {
+  },
+): Promise<{
+  ok: boolean;
+  status: number;
+  text: string;
+  json: <T = any>() => T;
+}> {
   return new Promise((resolve, reject) => {
     try {
       const parsedUrl = new URL(url);
@@ -71,17 +75,21 @@ function httpsRequest(
         method: options.method,
         headers: {
           ...options.headers,
-          'Content-Length': options.body ? Buffer.byteLength(options.body).toString() : '0'
-        }
+          "Content-Length": options.body
+            ? Buffer.byteLength(options.body).toString()
+            : "0",
+        },
       };
 
       const req = https.request(reqOptions, (res) => {
-        let data = '';
-        res.on('data', (chunk) => {
+        let data = "";
+        res.on("data", (chunk) => {
           data += chunk;
         });
-        res.on('end', () => {
-          const ok = res.statusCode ? (res.statusCode >= 200 && res.statusCode < 300) : false;
+        res.on("end", () => {
+          const ok = res.statusCode
+            ? res.statusCode >= 200 && res.statusCode < 300
+            : false;
           resolve({
             ok,
             status: res.statusCode || 0,
@@ -92,12 +100,12 @@ function httpsRequest(
               } catch {
                 return {} as any;
               }
-            }
+            },
           });
         });
       });
 
-      req.on('error', (err) => {
+      req.on("error", (err) => {
         reject(err);
       });
 
@@ -115,24 +123,34 @@ export class CittaEfsClient {
   private gatewayBaseUrl: string;
 
   constructor() {
-    this.gatewayBaseUrl = 'https://ei-api.azurewebsites.net';
+    this.gatewayBaseUrl = "https://ei-api.azurewebsites.net";
   }
 
   /**
    * Signs and stamps invoice via CittaEFS Gateway API (POST /api/integration/gen/invoices)
    */
-  public async signAndStampInvoice(payload: CittaEfsRequestPayload): Promise<CittaEfsResponse> {
+  public async signAndStampInvoice(
+    payload: CittaEfsRequestPayload,
+  ): Promise<CittaEfsResponse> {
     const decryptedApiKey = getCittaEfsApiKey();
 
     const invoiceNumber = payload.clientInvoiceNumber;
     const issueDate = payload.issueDate;
-    const customerCode = (payload as any).customerCode || 'CUST-OTC-GENERIC';
+    const customerCode = (payload as any).customerCode || "CUST-OTC-GENERIC";
     const originalIrn = payload.originalIrn;
-    const invoiceTypeCode = payload.invoiceType === 'STANDARD' ? '388' : (payload.invoiceType === 'CREDIT_NOTE' ? '381' : (payload.invoiceType === 'DEBIT_NOTE' ? '383' : '388'));
+    const invoiceTypeCode =
+      payload.invoiceType === "STANDARD"
+        ? "388"
+        : payload.invoiceType === "CREDIT_NOTE"
+          ? "381"
+          : payload.invoiceType === "DEBIT_NOTE"
+            ? "383"
+            : "388";
     const headerDiscount = (payload as any).headerDiscount || 0;
     const headerCharges = (payload as any).headerCharges || 0;
     const useStateTax = (payload as any).useStateTax || false;
-    const documentNumber = (payload as any).documentNumber || payload.clientInvoiceNumber;
+    const documentNumber =
+      (payload as any).documentNumber || payload.clientInvoiceNumber;
     const billingReferenceIrns = originalIrn ? [originalIrn] : [];
     const customFields = (payload as any).customFields || {};
     const metadata = (payload as any).metadata || {};
@@ -147,11 +165,11 @@ export class CittaEfsClient {
       unitPrice: item.unitPrice,
       taxAmount: item.vatAmount,
       taxableAmount: item.taxableAmount,
-      hsOrServiceCode: item.hsOrServiceCode || 'SERV-DEFAULT',
-      lineNum: (item as any).lineNum || (index + 1),
-      unitCode: (item as any).unitCode || 'PCS',
-      taxCategoryId: (item as any).taxCategoryId || '1',
-      currencyCode: (payload as any).currency || 'KES',
+      hsOrServiceCode: item.hsOrServiceCode || "SERV-DEFAULT",
+      lineNum: (item as any).lineNum || index + 1,
+      unitCode: (item as any).unitCode || "PCS",
+      taxCategoryId: (item as any).taxCategoryId || "1",
+      currencyCode: (payload as any).currency || "NGN",
       invoiceTypeCode,
       headerDiscount,
       headerCharges,
@@ -160,52 +178,62 @@ export class CittaEfsClient {
       documentNumber,
       billingReferenceIrns,
       customFields,
-      metadata
+      metadata,
     }));
 
     const url = `${this.gatewayBaseUrl}/api/integration/gen/invoices`;
     const res = await httpsRequest(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${decryptedApiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${decryptedApiKey}`,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(dtoArray)
+      body: JSON.stringify(dtoArray),
     });
 
     if (!res.ok) {
-      throw new Error(`CittaEFS Gateway error (${res.status}): ${res.text || 'Network error'}`);
+      throw new Error(
+        `CittaEFS Gateway error (${res.status}): ${res.text || "Network error"}`,
+      );
     }
 
     const result = res.json<BulkEInvoiceResultDto>();
 
     if (result.failedCount > 0 || result.successCount === 0) {
-      const errorDetails = result.errors ? JSON.stringify(result.errors) : 'Bulk processing failed';
+      const errorDetails = result.errors
+        ? JSON.stringify(result.errors)
+        : "Bulk processing failed";
       throw new Error(`CittaEFS Gateway processing failed: ${errorDetails}`);
     }
 
     // Extract IRN / CSID / QR URL if available inside the response body
     const resData: any = result;
-    let irn = '';
-    let qrCodeUrl = '';
-    let csid = '';
+    let irn = "";
+    let qrCodeUrl = "";
+    let csid = "";
 
     if (resData.items && resData.items[0]) {
-      irn = resData.items[0].irn || resData.items[0].Irn || '';
-      qrCodeUrl = resData.items[0].qrCodeUrl || resData.items[0].QrCodeUrl || resData.items[0].qrUrl || '';
-      csid = resData.items[0].csid || resData.items[0].Csid || '';
+      irn = resData.items[0].irn || resData.items[0].Irn || "";
+      qrCodeUrl =
+        resData.items[0].qrCodeUrl ||
+        resData.items[0].QrCodeUrl ||
+        resData.items[0].qrUrl ||
+        "";
+      csid = resData.items[0].csid || resData.items[0].Csid || "";
     } else if (resData.invoices && resData.invoices[0]) {
-      irn = resData.invoices[0].irn || resData.invoices[0].Irn || '';
-      qrCodeUrl = resData.invoices[0].qrCodeUrl || resData.invoices[0].QrCodeUrl || '';
-      csid = resData.invoices[0].csid || resData.invoices[0].Csid || '';
+      irn = resData.invoices[0].irn || resData.invoices[0].Irn || "";
+      qrCodeUrl =
+        resData.invoices[0].qrCodeUrl || resData.invoices[0].QrCodeUrl || "";
+      csid = resData.invoices[0].csid || resData.invoices[0].Csid || "";
     }
 
     // Default identifier assignment if not explicitly provided in the response JSON to preserve downstream pipeline
     if (!irn) {
       const irnSuffix = Math.floor(100000 + Math.random() * 900000);
-      irn = payload.invoiceType === 'CREDIT_NOTE'
-        ? `IRN-CN-NRS-2026-${irnSuffix}`
-        : `IRN-NRS-2026-${irnSuffix}`;
+      irn =
+        payload.invoiceType === "CREDIT_NOTE"
+          ? `IRN-CN-NRS-2026-${irnSuffix}`
+          : `IRN-NRS-2026-${irnSuffix}`;
     }
     if (!csid) {
       csid = `CSID-SHA256-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
@@ -221,29 +249,37 @@ export class CittaEfsClient {
       csid,
       qrCodeUrl,
       nrsStampTimestamp: new Date().toISOString(),
-      message: 'Invoice successfully registered and stamped by NRS Gateway via CittaEFS.'
+      message:
+        "Invoice successfully registered and stamped by NRS Gateway via CittaEFS.",
     };
   }
 
   /**
    * Fetches the archived invoices from the Gateway
    */
-  public async getArchive(tenantId: string, fromDate?: string, toDate?: string, paymentStatus?: string): Promise<any[]> {
+  public async getArchive(
+    tenantId: string,
+    fromDate?: string,
+    toDate?: string,
+    paymentStatus?: string,
+  ): Promise<any[]> {
     const decryptedApiKey = getCittaEfsApiKey();
     const params = new URLSearchParams();
-    if (fromDate) params.append('fromDate', fromDate);
-    if (toDate) params.append('toDate', toDate);
-    if (paymentStatus) params.append('paymentStatus', paymentStatus);
+    if (fromDate) params.append("fromDate", fromDate);
+    if (toDate) params.append("toDate", toDate);
+    if (paymentStatus) params.append("paymentStatus", paymentStatus);
 
     const url = `${this.gatewayBaseUrl}/api/einvoice/archive?${params.toString()}`;
     const res = await httpsRequest(url, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${decryptedApiKey}`
-      }
+        Authorization: `Bearer ${decryptedApiKey}`,
+      },
     });
     if (!res.ok) {
-      throw new Error(`Failed to fetch CittaEFS invoice archive (${res.status})`);
+      throw new Error(
+        `Failed to fetch CittaEFS invoice archive (${res.status})`,
+      );
     }
     return res.json();
   }
@@ -251,18 +287,22 @@ export class CittaEfsClient {
   /**
    * Fetches validation errors
    */
-  public async getValidationErrors(tenantId: string, fromDate?: string, toDate?: string): Promise<any[]> {
+  public async getValidationErrors(
+    tenantId: string,
+    fromDate?: string,
+    toDate?: string,
+  ): Promise<any[]> {
     const decryptedApiKey = getCittaEfsApiKey();
     const params = new URLSearchParams();
-    if (fromDate) params.append('fromDate', fromDate);
-    if (toDate) params.append('toDate', toDate);
+    if (fromDate) params.append("fromDate", fromDate);
+    if (toDate) params.append("toDate", toDate);
 
     const url = `${this.gatewayBaseUrl}/api/einvoice/errors/validation?${params.toString()}`;
     const res = await httpsRequest(url, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${decryptedApiKey}`
-      }
+        Authorization: `Bearer ${decryptedApiKey}`,
+      },
     });
     if (!res.ok) {
       throw new Error(`Failed to fetch validation errors (${res.status})`);
@@ -273,18 +313,22 @@ export class CittaEfsClient {
   /**
    * Fetches signing errors
    */
-  public async getSignErrors(tenantId: string, fromDate?: string, toDate?: string): Promise<any[]> {
+  public async getSignErrors(
+    tenantId: string,
+    fromDate?: string,
+    toDate?: string,
+  ): Promise<any[]> {
     const decryptedApiKey = getCittaEfsApiKey();
     const params = new URLSearchParams();
-    if (fromDate) params.append('fromDate', fromDate);
-    if (toDate) params.append('toDate', toDate);
+    if (fromDate) params.append("fromDate", fromDate);
+    if (toDate) params.append("toDate", toDate);
 
     const url = `${this.gatewayBaseUrl}/api/einvoice/errors/sign?${params.toString()}`;
     const res = await httpsRequest(url, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${decryptedApiKey}`
-      }
+        Authorization: `Bearer ${decryptedApiKey}`,
+      },
     });
     if (!res.ok) {
       throw new Error(`Failed to fetch sign errors (${res.status})`);
@@ -295,18 +339,22 @@ export class CittaEfsClient {
   /**
    * Fetches transmit errors
    */
-  public async getTransmitErrors(tenantId: string, fromDate?: string, toDate?: string): Promise<any[]> {
+  public async getTransmitErrors(
+    tenantId: string,
+    fromDate?: string,
+    toDate?: string,
+  ): Promise<any[]> {
     const decryptedApiKey = getCittaEfsApiKey();
     const params = new URLSearchParams();
-    if (fromDate) params.append('fromDate', fromDate);
-    if (toDate) params.append('toDate', toDate);
+    if (fromDate) params.append("fromDate", fromDate);
+    if (toDate) params.append("toDate", toDate);
 
     const url = `${this.gatewayBaseUrl}/api/einvoice/errors/transmit?${params.toString()}`;
     const res = await httpsRequest(url, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${decryptedApiKey}`
-      }
+        Authorization: `Bearer ${decryptedApiKey}`,
+      },
     });
     if (!res.ok) {
       throw new Error(`Failed to fetch transmit errors (${res.status})`);
@@ -317,19 +365,24 @@ export class CittaEfsClient {
   /**
    * Updates payment status of an invoice
    */
-  public async updatePaymentStatus(tenantId: string, irn: string, status: string, reference?: string): Promise<any> {
+  public async updatePaymentStatus(
+    tenantId: string,
+    irn: string,
+    status: string,
+    reference?: string,
+  ): Promise<any> {
     const decryptedApiKey = getCittaEfsApiKey();
     const url = `${this.gatewayBaseUrl}/api/einvoice/update/${irn}`;
     const res = await httpsRequest(url, {
-      method: 'PATCH',
+      method: "PATCH",
       headers: {
-        'Authorization': `Bearer ${decryptedApiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${decryptedApiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         payment_status: status,
-        reference
-      })
+        reference,
+      }),
     });
     if (!res.ok) {
       throw new Error(`Failed to update payment status (${res.status})`);
@@ -342,17 +395,17 @@ export class CittaEfsClient {
    */
   public async bulkUpdatePaymentStatus(
     tenantId: string,
-    items: Array<{ irn: string; payment_status: string; reference?: string }>
+    items: Array<{ irn: string; payment_status: string; reference?: string }>,
   ): Promise<any> {
     const decryptedApiKey = getCittaEfsApiKey();
     const url = `${this.gatewayBaseUrl}/api/einvoice/bulk/update`;
     const res = await httpsRequest(url, {
-      method: 'PATCH',
+      method: "PATCH",
       headers: {
-        'Authorization': `Bearer ${decryptedApiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${decryptedApiKey}`,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ items })
+      body: JSON.stringify({ items }),
     });
     if (!res.ok) {
       throw new Error(`Failed to bulk update payment status (${res.status})`);
@@ -367,19 +420,21 @@ export class CittaEfsClient {
     tenantId: string,
     clientInvoiceNumber: string,
     irn: string,
-    qrCodeUrl: string
+    qrCodeUrl: string,
   ): Promise<{ synced: boolean; message: string }> {
     try {
-      const { PrismaClient } = await import('@prisma/client');
-      const { getDatabaseUrl } = await import('../config/dbConfig');
-      const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
+      const { PrismaClient } = await import("@prisma/client");
+      const { getDatabaseUrl } = await import("../config/dbConfig");
+      const prisma = new PrismaClient({
+        datasources: { db: { url: getDatabaseUrl() } },
+      });
       const integration = await prisma.integration.findUnique({
         where: {
           tenantId_sourceSystem: {
             tenantId,
-            sourceSystem: 'QUICKBOOKS_ONLINE'
-          }
-        }
+            sourceSystem: "QUICKBOOKS_ONLINE",
+          },
+        },
       });
 
       if (integration) {
@@ -389,26 +444,31 @@ export class CittaEfsClient {
             tenantId,
             OR: [
               { clientInvoiceId: clientInvoiceNumber },
-              { id: clientInvoiceNumber }
-            ]
-          }
+              { id: clientInvoiceNumber },
+            ],
+          },
         });
-        const targetInvoiceId = invoice ? invoice.clientInvoiceId : clientInvoiceNumber;
+        const targetInvoiceId = invoice
+          ? invoice.clientInvoiceId
+          : clientInvoiceNumber;
 
-        const { writebackToQbo } = await import('./qboService');
+        const { writebackToQbo } = await import("./qboService");
         await writebackToQbo(tenantId, targetInvoiceId, irn, qrCodeUrl);
         return {
           synced: true,
-          message: `QuickBooks Online ledger updated for invoice ${targetInvoiceId} with IRN: ${irn}`
+          message: `QuickBooks Online ledger updated for invoice ${targetInvoiceId} with IRN: ${irn}`,
         };
       }
     } catch (err: any) {
-      console.error(`[Writeback Error] Failed to execute QBO writeback for invoice ${clientInvoiceNumber}:`, err);
+      console.error(
+        `[Writeback Error] Failed to execute QBO writeback for invoice ${clientInvoiceNumber}:`,
+        err,
+      );
     }
 
     return {
       synced: true,
-      message: `Client ledger (${tenantId}) invoice ${clientInvoiceNumber} successfully updated with IRN: ${irn} and QR URL.`
+      message: `Client ledger (${tenantId}) invoice ${clientInvoiceNumber} successfully updated with IRN: ${irn} and QR URL.`,
     };
   }
 }

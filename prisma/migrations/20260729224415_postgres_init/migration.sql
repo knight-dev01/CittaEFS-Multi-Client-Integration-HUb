@@ -63,7 +63,7 @@ CREATE TABLE "invoices" (
     "customer_code" TEXT NOT NULL,
     "customer_name" TEXT NOT NULL,
     "customer_tin" TEXT,
-    "currency" TEXT NOT NULL DEFAULT 'KES',
+    "currency" TEXT NOT NULL DEFAULT 'NGN',
     "subtotal" DOUBLE PRECISION NOT NULL,
     "tax_amount" DOUBLE PRECISION NOT NULL,
     "total_amount" DOUBLE PRECISION NOT NULL,

@@ -3,23 +3,18 @@ import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { useHub } from '../lib/store';
 import { ExcelDocumentViewer } from './ExcelDocumentViewer';
 import { 
-  FileSpreadsheet, 
-  Zap, 
-  CheckCircle2, 
-  AlertCircle, 
-  Play, 
-  Users, 
-  Tag, 
-  FileText, 
-  RefreshCw, 
+  FileSpreadsheet,
+  Zap,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
   ChevronRight,
   ShieldCheck,
-  Building2,
   Server
 } from 'lucide-react';
 
 export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
-  const { activeTenant, transmitInvoice, addCustomer, addItemMapping, refreshAll } = useHub();
+  const { activeTenant, customers, itemMappings, invoices, refreshAll } = useHub();
 
   // Selected ingestion source: 'excel' | 'qbo'
   const [selectedSource, setSelectedSourceState] = useState<'excel' | 'qbo'>(() => {
@@ -38,15 +33,21 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
   };
 
   // QuickBooks Action State
-  const [qboConnected, setQboConnected] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [qboStatusMsg, setQboStatusMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Sync Data Counters
-  const [syncedCustomers, setSyncedCustomers] = useState(2);
-  const [syncedProducts, setSyncedProducts] = useState(2);
-  const [pendingInvoices, setPendingInvoices] = useState(1);
-  const [lastSyncTime, setLastSyncTime] = useState<string>('Just now');
+  if (!activeTenant) {
+    return <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>;
+  }
+
+  // Real Sync Data Counters, derived from actual DB-backed state for the active tenant
+  const tenantCustomers = customers.filter(c => c.tenantId === activeTenant.id);
+  const tenantItems = itemMappings.filter(m => m.tenantId === activeTenant.id);
+  const tenantInvoices = invoices.filter(i => i.tenantId === activeTenant.id);
+  const syncedCustomers = tenantCustomers.length;
+  const syncedProducts = tenantItems.length;
+  const pendingInvoices = tenantInvoices.filter(i => i.status === 'PENDING_NRS_STAMP' || i.status === 'QUEUED').length;
+  const lastSyncTime = activeTenant.lastSyncAt ? new Date(activeTenant.lastSyncAt).toLocaleString() : 'Never';
 
   // QuickBooks Direct Actions
   const handleTestQboConnection = async () => {
@@ -57,90 +58,50 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
       const res = await fetchWithAuth('/api/connectors/qbo/test-live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment: 'SANDBOX' })
+        body: JSON.stringify({ tenantId: activeTenant.id })
       });
       const data = await parseJsonResponse(res);
 
       if (data.success) {
-        setQboConnected(true);
         setQboStatusMsg({ text: `✓ Connection Active! QuickBooks Online API responder latency: ${data.latencyMs || 45}ms.`, type: 'success' });
       } else {
-        setQboStatusMsg({ text: `Connection Notice: ${data.error || 'Using active sandbox OAuth session.'}`, type: 'info' });
-        setQboConnected(true);
+        setQboStatusMsg({ text: `Connection Notice: ${data.error || 'Unable to verify QuickBooks connection.'}`, type: 'error' });
       }
-    } catch {
-      setQboStatusMsg({ text: '✓ QuickBooks Online OAuth2 Session Ready (Sandbox Environment)', type: 'success' });
-      setQboConnected(true);
+    } catch (err: any) {
+      setQboStatusMsg({ text: `Connection Test Error: ${err.message || 'Unable to reach the QuickBooks test endpoint.'}`, type: 'error' });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleSyncQboMasterData = async () => {
+  // Real historical sync: pulls actual invoices from QuickBooks (paginated), ingests them
+  // (upserting Customers & Items along the way), and queues each new one for NRS stamping.
+  const handleSyncFromQuickBooks = async () => {
     setIsProcessing(true);
-    setQboStatusMsg({ text: 'Pulling Customers & Product SKU catalog from QuickBooks Online...', type: 'info' });
-
-    setTimeout(async () => {
-      // Seed Customers
-      await addCustomer({
-        clientCustomerCode: 'QBO-CUST-1092',
-        name: 'Zenith Logistics Ltd',
-        tin: 'P019283746Z',
-        email: 'billing@zenith.co.ke',
-        address: 'Nairobi Gate Park, Unit 4',
-        city: 'Nairobi',
-        isB2B: true
-      });
-
-      // Seed SKU Mappings
-      await addItemMapping({
-        clientSku: 'SKU-LAP-DELL15',
-        description: 'Dell XPS 15 Business Laptop',
-        hsOrServiceCode: 'HS-8471.30',
-        category: 'Hardware',
-        codeType: 'HS_CODE',
-        codeDescription: 'Computers & Laptops',
-        defaultVatRate: 16,
-        status: 'MAPPED'
-      });
-
-      setSyncedCustomers(prev => prev + 1);
-      setSyncedProducts(prev => prev + 1);
-      setLastSyncTime(new Date().toLocaleTimeString());
-      setIsProcessing(false);
-      setQboStatusMsg({ text: '✓ Successfully synchronized QuickBooks Master Data with CittaEFS Directory.', type: 'success' });
-      await refreshAll();
-    }, 600);
-  };
-
-  const handlePullAndTransmitQboInvoices = async () => {
-    setIsProcessing(true);
-    setQboStatusMsg({ text: 'Extracting unsubmitted QuickBooks invoices & transmitting to CittaEFS Gateway...', type: 'info' });
+    setQboStatusMsg({ text: 'Pulling invoices, customers, and items from QuickBooks Online...', type: 'info' });
 
     try {
-      const sampleInv = {
-        clientInvoiceNumber: `QBO-INV-${Math.floor(1000 + Math.random() * 9000)}`,
-        invoiceKind: 'B2B',
-        issueDate: new Date().toISOString().substring(0, 10),
-        customerCode: 'QBO-CUST-1092',
-        customerName: 'Zenith Logistics Ltd',
-        customerTin: 'P019283746Z',
-        lineItems: [
-          { itemCode: 'SKU-LAP-DELL15', description: 'Dell XPS 15 Business Laptop', quantity: 2, unitPrice: 120000, hsOrServiceCode: 'HS-8471.30', vatRate: 16 }
-        ]
-      };
-
-      const res = await transmitInvoice(sampleInv);
+      const res = await fetchWithAuth('/api/integrations/qbo/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: activeTenant.id })
+      });
+      const data = await parseJsonResponse(res);
       setIsProcessing(false);
-      setPendingInvoices(0);
-      setQboStatusMsg({ 
-        text: `🎉 Successfully fiscalized QuickBooks Invoice #${sampleInv.clientInvoiceNumber}! Issued IRN: ${res.cittaResponse?.irn || 'IRN-STAMPED-OK'}.`, 
-        type: 'success' 
+      setQboStatusMsg({
+        text: `✓ Sync complete! Found ${data.totalFound} QuickBooks invoices — ${data.newSynced} newly ingested & queued for NRS stamping, ${data.alreadySynced} already on file.`,
+        type: 'success'
       });
       await refreshAll();
     } catch (e: any) {
       setIsProcessing(false);
-      setQboStatusMsg({ text: `Transmission Notice: ${e.message}`, type: 'error' });
+      const isReauth = e.message?.toLowerCase().includes('reauthorization');
+      setQboStatusMsg({
+        text: isReauth
+          ? `${e.message} Reconnect QuickBooks from the Connectors tab, then sync again.`
+          : `Sync Failed: ${e.message}`,
+        type: 'error'
+      });
     }
   };
 
@@ -304,8 +265,8 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
           )}
 
           {/* Action Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
             <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-200/70 space-y-4 flex flex-col justify-between">
               <div>
                 <span className="text-[10px] text-slate-400 font-semibold uppercase block">Action 1</span>
@@ -331,41 +292,20 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
               <div>
                 <span className="text-[10px] text-slate-400 font-semibold uppercase block">Action 2</span>
                 <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 mt-0.5">
-                  <Users className="w-4 h-4 text-indigo-600" />
-                  Sync Customers & SKUs
+                  <RefreshCw className="w-4 h-4 text-emerald-600" />
+                  Sync from QuickBooks
                 </h4>
                 <p className="text-xs text-slate-500 mt-1">
-                  Pulls party directory & SKU mappings directly into Master Data tables.
+                  Pulls real invoices (paginated), upserts customers & items into Master Data, and queues each new invoice for NRS stamping.
                 </p>
               </div>
               <button
-                onClick={handleSyncQboMasterData}
-                disabled={isProcessing}
-                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center justify-center gap-2 transition-all shadow-sm"
-              >
-                <Tag className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Sync Master Data</span>
-              </button>
-            </div>
-
-            <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-200/70 space-y-4 flex flex-col justify-between">
-              <div>
-                <span className="text-[10px] text-slate-400 font-semibold uppercase block">Action 3</span>
-                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 mt-0.5">
-                  <Play className="w-4 h-4 text-emerald-600" />
-                  Transmit Invoices to Gateway
-                </h4>
-                <p className="text-xs text-slate-500 mt-1">
-                  Pulls pending QuickBooks invoices and submits to Gateway for IRN stamping.
-                </p>
-              </div>
-              <button
-                onClick={handlePullAndTransmitQboInvoices}
+                onClick={handleSyncFromQuickBooks}
                 disabled={isProcessing}
                 className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center justify-center gap-2 transition-all shadow-sm"
               >
-                <Play className="w-3.5 h-3.5 text-emerald-200" />
-                <span>Transmit Invoices</span>
+                <RefreshCw className={`w-3.5 h-3.5 text-emerald-200 ${isProcessing ? 'animate-spin' : ''}`} />
+                <span>Sync from QuickBooks</span>
               </button>
             </div>
 

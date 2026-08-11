@@ -48,6 +48,7 @@ interface HubContextType {
   addItemMapping: (mapping: Partial<ItemCodeMapping>) => Promise<any>;
   ingestCsvInvoices: (parsedInvoices: any[]) => Promise<any>;
   onboardTenant: (tenantData: any) => Promise<Tenant>;
+  updateTenant: (tenantId: string, tenantData: any) => Promise<Tenant>;
   purgeDemoData: () => Promise<any>;
 }
 
@@ -456,6 +457,24 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const updateTenant = async (tenantId: string, tenantData: any): Promise<Tenant> => {
+    return withLoading(async () => {
+      try {
+        const res = await fetchWithAuth(`/api/tenants/${tenantId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tenantData)
+        });
+        const data: Tenant = await parseJsonResponse(res);
+        await refreshAll();
+        return data;
+      } catch (e) {
+        console.error('Update tenant error:', e);
+        throw e;
+      }
+    });
+  };
+
   const purgeDemoData = async () => {
     return withLoading(async () => {
       try {
@@ -497,6 +516,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         addItemMapping,
         ingestCsvInvoices,
         onboardTenant,
+        updateTenant,
         purgeDemoData
       }}
     >

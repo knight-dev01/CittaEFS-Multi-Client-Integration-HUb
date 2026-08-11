@@ -47,7 +47,7 @@ model Customer {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([tenantId, clientSystemCustId])
@@ -55,18 +55,18 @@ model Customer {
 }
 
 model Item {
-  id               String   @id @default(uuid())
-  tenantId         String   @map("tenant_id")
-  clientSku        String   @map("client_sku")
-  description      String
-  unitPrice        Float    @map("unit_price")
-  hsOrServiceCode  String   @map("hs_or_service_code")
-  categoryType     String   @default("GOODS") @map("category_type")
-  defaultVatRate   Float    @default(16.00) @map("default_vat_rate")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  clientSku       String   @map("client_sku")
+  description     String
+  unitPrice       Float    @map("unit_price")
+  hsOrServiceCode String   @map("hs_or_service_code")
+  categoryType    String   @default("GOODS") @map("category_type")
+  defaultVatRate  Float    @default(16.00) @map("default_vat_rate")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([tenantId, clientSku])
@@ -74,32 +74,32 @@ model Item {
 }
 
 model Invoice {
-  id                   String        @id @default(uuid())
-  tenantId             String        @map("tenant_id")
-  clientInvoiceId      String        @map("client_invoice_id")
-  invoiceType          String        @default("STANDARD") @map("invoice_type")
-  invoiceKind          String        @default("B2B") @map("invoice_kind")
-  issueDate            DateTime      @map("issue_date")
-  dueDate              DateTime?     @map("due_date")
-  customerCode         String        @map("customer_code")
-  customerName         String        @map("customer_name")
-  customerTin          String?       @map("customer_tin")
-  currency             String        @default("KES")
-  subtotal             Float
-  taxAmount            Float         @map("tax_amount")
-  totalAmount          Float         @map("total_amount")
-  status               String        @default("PENDING_NRS_STAMP")
-  irn                  String?       @unique
-  csid                 String?
-  qrCodeUrl            String?       @map("qr_code_url")
-  pdfSignedUrl         String?       @map("pdf_signed_url")
-  rawPayloadHash       String?       @map("raw_payload_hash")
-  ledgerWritebackStatus String       @default("PENDING") @map("ledger_writeback_status")
-  createdAt            DateTime      @default(now()) @map("created_at")
-  updatedAt            DateTime      @updatedAt @map("updated_at")
+  id                    String    @id @default(uuid())
+  tenantId              String    @map("tenant_id")
+  clientInvoiceId       String    @map("client_invoice_id")
+  invoiceType           String    @default("STANDARD") @map("invoice_type")
+  invoiceKind           String    @default("B2B") @map("invoice_kind")
+  issueDate             DateTime  @map("issue_date")
+  dueDate               DateTime? @map("due_date")
+  customerCode          String    @map("customer_code")
+  customerName          String    @map("customer_name")
+  customerTin           String?   @map("customer_tin")
+  currency              String    @default("NGN")
+  subtotal              Float
+  taxAmount             Float     @map("tax_amount")
+  totalAmount           Float     @map("total_amount")
+  status                String    @default("PENDING_NRS_STAMP")
+  irn                   String?   @unique
+  csid                  String?
+  qrCodeUrl             String?   @map("qr_code_url")
+  pdfSignedUrl          String?   @map("pdf_signed_url")
+  rawPayloadHash        String?   @map("raw_payload_hash")
+  ledgerWritebackStatus String    @default("PENDING") @map("ledger_writeback_status")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  lineItems            InvoiceLineItem[]
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lineItems InvoiceLineItem[]
 
   @@index([tenantId])
   @@index([tenantId, clientInvoiceId])
@@ -108,19 +108,19 @@ model Invoice {
 }
 
 model InvoiceLineItem {
-  id              String   @id @default(uuid())
-  invoiceId       String   @map("invoice_id")
-  itemCode        String   @map("item_code")
+  id              String @id @default(uuid())
+  invoiceId       String @map("invoice_id")
+  itemCode        String @map("item_code")
   description     String
   quantity        Float
-  unitPrice       Float    @map("unit_price")
-  taxableAmount   Float    @map("taxable_amount")
-  vatRate         Float    @map("vat_rate")
-  vatAmount       Float    @map("vat_amount")
-  totalAmount     Float    @map("total_amount")
-  hsOrServiceCode String   @map("hs_or_service_code")
+  unitPrice       Float  @map("unit_price")
+  taxableAmount   Float  @map("taxable_amount")
+  vatRate         Float  @map("vat_rate")
+  vatAmount       Float  @map("vat_amount")
+  totalAmount     Float  @map("total_amount")
+  hsOrServiceCode String @map("hs_or_service_code")
 
-  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@map("invoice_line_items")
 }
@@ -137,7 +137,7 @@ model ValidationError {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("validation_errors")
@@ -155,7 +155,7 @@ model AuditLog {
   rawJson           String?  @map("raw_json")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([sha256PayloadHash])
@@ -173,29 +173,28 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@map("users")
 }
 
 model Integration {
-  id                   String   @id @default(uuid())
-  tenantId             String   @map("tenant_id")
-  sourceSystem         String   @map("source_system") // e.g. "QUICKBOOKS_ONLINE"
-  accessToken          String   @map("access_token")
-  refreshToken         String   @map("refresh_token")
-  companyId            String   @map("company_id")    // realmId
-  accessTokenExpiresAt DateTime @map("access_token_expires_at")
-  status               String   @default("CONNECTED") // "CONNECTED", "NEEDS_REAUTH", "DISCONNECTED"
+  id                   String    @id @default(uuid())
+  tenantId             String    @map("tenant_id")
+  sourceSystem         String    @map("source_system") // e.g. "QUICKBOOKS_ONLINE"
+  accessToken          String    @map("access_token")
+  refreshToken         String    @map("refresh_token")
+  companyId            String    @map("company_id") // realmId
+  accessTokenExpiresAt DateTime  @map("access_token_expires_at")
+  status               String    @default("CONNECTED") // "CONNECTED", "NEEDS_REAUTH", "DISCONNECTED"
   lastSyncAt           DateTime? @map("last_sync_at")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId])
   @@unique([tenantId, sourceSystem])
+  @@index([tenantId])
   @@map("integrations")
 }
-

@@ -1,21 +1,21 @@
 import { useState } from 'react';
 import { useHub } from '../lib/store';
 import { Invoice, InvoiceType, InvoiceKind, InvoiceStatus } from '../types';
-import { 
-  FileText, 
-  Search, 
-  Filter, 
-  ChevronDown, 
-  ChevronRight, 
-  QrCode, 
-  ExternalLink, 
-  CheckCircle2, 
-  AlertCircle, 
-  XCircle, 
-  RotateCcw, 
-  FileCode, 
-  PlusCircle, 
-  DollarSign, 
+import {
+  FileText,
+  Search,
+  Filter,
+  ChevronDown,
+  ChevronRight,
+  QrCode,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
+  RotateCcw,
+  FileCode,
+  PlusCircle,
+  DollarSign,
   ArrowLeftRight,
   Send,
   Eye
@@ -43,11 +43,11 @@ export function InvoicesTab() {
   const tenantInvoices = invoices.filter(inv => inv.tenantId === activeTenant.id);
 
   const filteredInvoices = tenantInvoices.filter(inv => {
-    const matchesSearch = 
+    const matchesSearch =
       inv.clientInvoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inv.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (inv.irn && inv.irn.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
     const matchesType = typeFilter === 'ALL' || inv.invoiceType === typeFilter;
 
@@ -92,10 +92,10 @@ export function InvoicesTab() {
 
   return (
     <div className="space-y-6">
-      
+
       {/* Top Action Bar & Filters */}
       <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans">
-        
+
         {/* Search */}
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -110,7 +110,7 @@ export function InvoicesTab() {
 
         {/* Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-3 font-sans">
-          
+
           <div className="flex items-center space-x-2 text-xs text-slate-600">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
             <span className="font-medium">Status:</span>
@@ -204,11 +204,10 @@ export function InvoicesTab() {
 
                       <td className="py-3 px-4">
                         <div className="flex flex-col space-y-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full w-max ${
-                            inv.invoiceType === 'CREDIT_NOTE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                            inv.invoiceType === 'DEBIT_NOTE' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full w-max ${inv.invoiceType === 'CREDIT_NOTE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                              inv.invoiceType === 'DEBIT_NOTE' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                'bg-slate-100 text-slate-700'
+                            }`}>
                             {inv.invoiceType}
                           </span>
                           <span className="text-[11px] text-slate-400">Kind: {inv.invoiceKind}</span>
@@ -225,8 +224,8 @@ export function InvoicesTab() {
                       </td>
 
                       <td className="py-3 px-4 font-semibold text-slate-900">
-                        KES {inv.grandTotal.toLocaleString()}
-                        <div className="text-[11px] text-slate-400 font-normal mt-0.5">VAT: KES {inv.totalVat.toLocaleString()}</div>
+                        NGN {inv.grandTotal.toLocaleString()}
+                        <div className="text-[11px] text-slate-400 font-normal mt-0.5">VAT: NGN {inv.totalVat.toLocaleString()}</div>
                       </td>
 
                       <td className="py-3 px-4 font-mono text-[11px]">
@@ -252,12 +251,11 @@ export function InvoicesTab() {
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${
-                          inv.status === 'SIGNED' || inv.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                          inv.status === 'PENDING_NRS_STAMP' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                          inv.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                          'bg-slate-100 text-slate-700'
-                        }`}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${inv.status === 'SIGNED' || inv.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            inv.status === 'PENDING_NRS_STAMP' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                              inv.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                                'bg-slate-100 text-slate-700'
+                          }`}>
                           {inv.status === 'SIGNED' || inv.status === 'APPROVED' ? (
                             <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />
                           ) : inv.status === 'REJECTED' ? (
@@ -268,17 +266,16 @@ export function InvoicesTab() {
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${
-                          inv.ledgerWritebackStatus === 'SYNCED' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
-                          'bg-slate-100 text-slate-600'
-                        }`}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${inv.ledgerWritebackStatus === 'SYNCED' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                            'bg-slate-100 text-slate-600'
+                          }`}>
                           {inv.ledgerWritebackStatus === 'SYNCED' ? 'Synced to ERP' : 'Pending Writeback'}
                         </span>
                       </td>
 
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end space-x-1.5">
-                          
+
                           {/* Inspect CittaEFS JSON Payload */}
                           <button
                             onClick={() => setSelectedPayloadInvoice(inv)}
@@ -361,18 +358,17 @@ export function InvoicesTab() {
                       <td className="py-2 px-3 font-mono font-black text-amber-400 border-r border-slate-800">{li.itemCode}</td>
                       <td className="py-2 px-3 border-r border-slate-800">{li.description}</td>
                       <td className="py-2 px-3 border-r border-slate-800">{li.quantity}</td>
-                      <td className="py-2 px-3 border-r border-slate-800">KES {li.unitPrice.toLocaleString()}</td>
-                      <td className="py-2 px-3 border-r border-slate-800">KES {li.taxableAmount.toLocaleString()}</td>
+                      <td className="py-2 px-3 border-r border-slate-800">NGN {li.unitPrice.toLocaleString()}</td>
+                      <td className="py-2 px-3 border-r border-slate-800">NGN {li.taxableAmount.toLocaleString()}</td>
                       <td className="py-2 px-3 border-r border-slate-800">{li.vatRate}%</td>
                       <td className="py-2 px-3 font-mono border-r border-slate-800">
-                        <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black border ${
-                          li.hsOrServiceCode === 'UNMAPPED' ? 'bg-red-950 text-red-300 border-red-800' : 'bg-emerald-400 text-slate-950 border-slate-900'
-                        }`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black border ${li.hsOrServiceCode === 'UNMAPPED' ? 'bg-red-950 text-red-300 border-red-800' : 'bg-emerald-400 text-slate-950 border-slate-900'
+                          }`}>
                           {li.hsOrServiceCode} ({li.codeType})
                         </span>
                       </td>
                       <td className="py-2 px-3 text-right font-black text-white">
-                        KES {li.totalAmount.toLocaleString()}
+                        NGN {li.totalAmount.toLocaleString()}
                       </td>
                     </tr>
                   ))}
@@ -502,7 +498,7 @@ export function InvoicesTab() {
             <div className="space-y-3 text-xs">
               <div>
                 <label className="block font-black text-slate-900 uppercase mb-1">
-                  Credit Adjustment Amount (KES)
+                  Credit Adjustment Amount (NGN)
                 </label>
                 <input
                   type="number"

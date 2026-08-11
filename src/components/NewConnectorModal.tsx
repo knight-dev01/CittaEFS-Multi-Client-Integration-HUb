@@ -112,8 +112,8 @@ export function NewConnectorModal({ isOpen, onClose, tenantId, tenantName, onAdd
     try {
       const isQbo = selectedPlatform.id === 'QuickBooks Online';
       const url = isQbo ? '/api/connectors/qbo/test-live' : '/api/connectors/test';
-      const body = isQbo 
-        ? { realmId: clientId || '9130351112', accessToken: clientSecret, environment, endpointUrl }
+      const body = isQbo
+        ? { tenantId, environment, endpointUrl }
         : { platform: selectedPlatform.name, config: { endpointUrl, authType: authScheme } };
 
       const res = await fetchWithAuth(url, {

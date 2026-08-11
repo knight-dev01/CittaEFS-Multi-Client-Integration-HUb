@@ -1,18 +1,18 @@
 import { useState, ChangeEvent } from 'react';
 import * as XLSX from 'xlsx';
 import { useHub } from '../lib/store';
-import { 
-  FileSpreadsheet, 
-  Upload, 
-  Plus, 
-  Trash2, 
-  Download, 
-  CheckCircle2, 
-  AlertCircle, 
-  Sparkles, 
-  Play, 
-  Users, 
-  Tag, 
+import {
+  FileSpreadsheet,
+  Upload,
+  Plus,
+  Trash2,
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  Play,
+  Users,
+  Tag,
   RefreshCw,
   FileCode,
   ShieldCheck,
@@ -105,10 +105,10 @@ export function ExcelDocumentViewer() {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch {}
+        } catch { }
       }
     }
-    return DEFAULT_SAMPLE_ROWS;
+    return;
   });
 
   const setRows = (newRowsOrFn: SpreadsheetRow[] | ((prev: SpreadsheetRow[]) => SpreadsheetRow[])) => {
@@ -117,7 +117,7 @@ export function ExcelDocumentViewer() {
       if (typeof window !== 'undefined') {
         try {
           localStorage.setItem('citta_excel_grid_rows', JSON.stringify(nextRows));
-        } catch {}
+        } catch { }
       }
       return nextRows;
     });
@@ -272,6 +272,22 @@ export function ExcelDocumentViewer() {
     }
   };
 
+  // XLSX auto-detects date-looking cell values (even from CSV) and returns them as
+  // Excel serial-date numbers instead of strings. Convert those back to YYYY-MM-DD
+  // so the date input and downstream validation both get a real date string.
+  const normalizeIssueDate = (value: any): string => {
+    if (typeof value === 'number') {
+      const d = XLSX.SSF.parse_date_code(value);
+      if (d) {
+        return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+      }
+    }
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+      return value.trim();
+    }
+    return new Date().toISOString().substring(0, 10);
+  };
+
   const parseAndLoadRows = (rawData: any[], fileName: string) => {
     if (!rawData || rawData.length === 0) {
       setIsProcessing(false);
@@ -288,7 +304,7 @@ export function ExcelDocumentViewer() {
         id: `row_up_${i}_${Date.now()}`,
         clientInvoiceNumber: r.clientInvoiceNumber || r.InvoiceNumber || r.invoiceNumber || `EXCEL-${i + 1}`,
         invoiceKind: (r.invoiceKind || r.Kind || 'B2B').toUpperCase() as any,
-        issueDate: r.issueDate || r.Date || new Date().toISOString().substring(0, 10),
+        issueDate: normalizeIssueDate(r.issueDate ?? r.Date),
         customerCode: cCode,
         customerName: r.customerName || r.CustomerName || 'Uploaded Customer Entity',
         customerTin: cTin,
@@ -306,9 +322,9 @@ export function ExcelDocumentViewer() {
     setRows(loadedRows);
     setIsProcessing(false);
     setIsNormalized(false);
-    setStatusMsg({ 
-      text: `Loaded ${loadedRows.length} spreadsheet rows from '${fileName}'. You can now review, edit, and normalize all items and customers against master data before submission.`, 
-      type: 'success' 
+    setStatusMsg({
+      text: `Loaded ${loadedRows.length} spreadsheet rows from '${fileName}'. You can now review, edit, and normalize all items and customers against master data before submission.`,
+      type: 'success'
     });
   };
 
@@ -358,9 +374,9 @@ export function ExcelDocumentViewer() {
       setRows(updatedRows);
       setIsNormalized(true);
       setIsProcessing(false);
-      setStatusMsg({ 
-        text: `Master Data Normalization Complete! All ${updatedRows.length} rows cross-referenced & registered in Party Directory and SKU Item Classification Taxonomy.`, 
-        type: 'success' 
+      setStatusMsg({
+        text: `Master Data Normalization Complete! All ${updatedRows.length} rows cross-referenced & registered in Party Directory and SKU Item Classification Taxonomy.`,
+        type: 'success'
       });
       await refreshAll();
     } catch (e: any) {
@@ -437,9 +453,9 @@ export function ExcelDocumentViewer() {
       await ingestCsvInvoices(parsedInvoices);
 
       setIsProcessing(false);
-      setStatusMsg({ 
-        text: `🎉 Batch Transmission Complete! Transmitted ${parsedInvoices.length} fiscal invoices (${rows.length} total line items) to CittaEFS Gateway with IRN stamps & QR codes generated.`, 
-        type: 'success' 
+      setStatusMsg({
+        text: `🎉 Batch Transmission Complete! Transmitted ${parsedInvoices.length} fiscal invoices (${rows.length} total line items) to CittaEFS Gateway with IRN stamps & QR codes generated.`,
+        type: 'success'
       });
       await refreshAll();
     } catch (e: any) {
@@ -469,7 +485,7 @@ export function ExcelDocumentViewer() {
 
   return (
     <div className="space-y-6 font-sans text-xs">
-      
+
       {/* Top Banner Toolbar */}
       <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-5 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -529,10 +545,9 @@ export function ExcelDocumentViewer() {
 
         {/* Status Notification Banner */}
         {statusMsg && (
-          <div className={`p-3.5 rounded-lg border text-xs font-medium flex items-center gap-2.5 ${
-            statusMsg.type === 'error' ? 'bg-rose-50 text-rose-800 border-rose-200' :
-            statusMsg.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-slate-50 text-slate-800 border-slate-200'
-          }`}>
+          <div className={`p-3.5 rounded-lg border text-xs font-medium flex items-center gap-2.5 ${statusMsg.type === 'error' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+              statusMsg.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-slate-50 text-slate-800 border-slate-200'
+            }`}>
             {statusMsg.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />}
             <span>{statusMsg.text}</span>
           </div>
@@ -554,17 +569,17 @@ export function ExcelDocumentViewer() {
 
           <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
             <span className="text-[10px] text-slate-400 font-semibold uppercase block">Subtotal (Excl. VAT)</span>
-            <span className="font-semibold text-slate-800 mt-0.5 block">KES {totalSubtotal.toLocaleString()}</span>
+            <span className="font-semibold text-slate-800 mt-0.5 block">NGN {totalSubtotal.toLocaleString()}</span>
           </div>
 
           <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
             <span className="text-[10px] text-slate-400 font-semibold uppercase block">Tax Amount (VAT)</span>
-            <span className="font-semibold text-amber-600 mt-0.5 block">KES {totalVat.toLocaleString()}</span>
+            <span className="font-semibold text-amber-600 mt-0.5 block">NGN {totalVat.toLocaleString()}</span>
           </div>
 
           <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70 col-span-2 sm:col-span-1">
             <span className="text-[10px] text-slate-400 font-semibold uppercase block">Grand Total</span>
-            <span className="font-bold text-emerald-600 mt-0.5 block">KES {grandTotal.toLocaleString()}</span>
+            <span className="font-bold text-emerald-600 mt-0.5 block">NGN {grandTotal.toLocaleString()}</span>
           </div>
         </div>
 
@@ -622,11 +637,11 @@ export function ExcelDocumentViewer() {
               <th className="p-3 w-32">Customer TIN</th>
               <th className="p-3 min-w-[160px]">Item SKU</th>
               <th className="p-3 min-w-[200px]">Line Description</th>
-              <th className="p-3 w-16 text-right">Qty</th>
-              <th className="p-3 w-24 text-right">Unit Price</th>
+              <th className="p-3 w-20 text-right">Qty</th>
+              <th className="p-3 w-28 text-right">Unit Price</th>
               <th className="p-3 w-28 text-right">Subtotal</th>
               <th className="p-3 w-28">HS / Service Code</th>
-              <th className="p-3 w-16 text-right">VAT%</th>
+              <th className="p-3 w-20 text-right">VAT%</th>
               <th className="p-3 text-center w-12 font-normal">Del</th>
             </tr>
           </thead>
@@ -645,7 +660,7 @@ export function ExcelDocumentViewer() {
 
                 return (
                   <tr key={row.id} className="hover:bg-indigo-50/30 transition-colors">
-                    
+
                     {/* Index */}
                     <td className="p-2.5 text-center font-semibold text-slate-400">
                       {idx + 1}
@@ -828,7 +843,7 @@ export function ExcelDocumentViewer() {
                         min="1"
                         value={row.quantity}
                         onChange={(e) => handleCellChange(row.id, 'quantity', Number(e.target.value))}
-                        className="w-full px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs"
+                        className="w-20 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
 
@@ -839,7 +854,7 @@ export function ExcelDocumentViewer() {
                         min="0"
                         value={row.unitPrice}
                         onChange={(e) => handleCellChange(row.id, 'unitPrice', Number(e.target.value))}
-                        className="w-full px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs"
+                        className="w-28 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
 
@@ -864,7 +879,7 @@ export function ExcelDocumentViewer() {
                         type="number"
                         value={row.vatRate}
                         onChange={(e) => handleCellChange(row.id, 'vatRate', Number(e.target.value))}
-                        className="w-full px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs"
+                        className="w-16 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
 

@@ -24,7 +24,7 @@ function LoadingScreen() {
 }
 
 function HubMainContent() {
-  const { currentUser, login, isBgRefreshing, tenants } = useHub();
+  const { currentUser, login, isBgRefreshing, tenants, activeTenant } = useHub();
   const [isInitializing, setIsInitializing] = useState(true);
 
   // All useState calls must be at the top (React Rules of Hooks)
@@ -129,18 +129,24 @@ function HubMainContent() {
           
           {/* Render Tab Content */}
           <div className="transition-all duration-150">
-            {activeTab === 'clients' && (
-              <OverviewTab onOpenOnboardModal={() => setIsOnboardModalOpen(true)} />
+            {!activeTenant ? (
+              <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>
+            ) : (
+              <>
+                {activeTab === 'clients' && (
+                  <OverviewTab onOpenOnboardModal={() => setIsOnboardModalOpen(true)} />
+                )}
+                {activeTab === 'connectors' && <ConnectorsTab />}
+                {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
+                {activeTab === 'invoices' && <InvoicesTab />}
+                {activeTab === 'validation' && <ValidationErrorsTab />}
+                {activeTab === 'settings' && <SettingsTab />}
+
+                {/* Secondary Modules */}
+                {activeTab === 'customers' && <CustomerSyncTab />}
+                {activeTab === 'items' && <ItemDictionaryTab />}
+              </>
             )}
-            {activeTab === 'connectors' && <ConnectorsTab />}
-            {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
-            {activeTab === 'invoices' && <InvoicesTab />}
-            {activeTab === 'validation' && <ValidationErrorsTab />}
-            {activeTab === 'settings' && <SettingsTab />}
-            
-            {/* Secondary Modules */}
-            {activeTab === 'customers' && <CustomerSyncTab />}
-            {activeTab === 'items' && <ItemDictionaryTab />}
           </div>
 
         </main>

@@ -1,6 +1,9 @@
-import { invoiceQueue, QueueJob } from '../queues/invoiceQueue';
-import { ValidatedInvoiceIngestion } from '../schemas/invoice.schema';
+import { PrismaClient } from '@prisma/client';
+import { getDatabaseUrl } from '../config/dbConfig';
+import { invoiceQueue, QueueJob, QueueablePayload } from '../queues/invoiceQueue';
 import { cittaEfsClient, CittaEfsResponse } from '../services/cittaEfsClient';
+
+const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
 export interface ProcessingResult {
   jobId: string;
@@ -16,7 +19,7 @@ export interface ProcessingResult {
  * Routes permanently failing jobs to Dead Letter Queue (DLQ).
  */
 export async function processInvoiceJob(
-  job: QueueJob<ValidatedInvoiceIngestion>
+  job: QueueJob<QueueablePayload>
 ): Promise<ProcessingResult> {
   job.status = 'PROCESSING';
   job.attempts += 1;
@@ -39,7 +42,21 @@ export async function processInvoiceJob(
     if (response.success && response.irn) {
       job.status = 'COMPLETED';
       job.updatedAt = new Date().toISOString();
-      
+
+      // Persist the real gateway result onto the DB invoice row
+      await prisma.invoice.update({
+        where: { id: job.data.dbInvoiceId },
+        data: {
+          status: 'APPROVED',
+          irn: response.irn,
+          csid: response.csid || null,
+          qrCodeUrl: response.qrCodeUrl || null,
+          rawPayloadHash: job.data.rawPayloadHash || null
+        }
+      }).catch((e: any) => {
+        console.error(`[Worker] Failed to persist gateway result for invoice ${job.data.dbInvoiceId}:`, e.message);
+      });
+
       // Perform Inbound Writeback to Client System (e.g. QuickBooks / NetSuite)
       await cittaEfsClient.executeClientLedgerWriteback(
         job.tenantId,
@@ -60,6 +77,10 @@ export async function processInvoiceJob(
     // Check if max retries exceeded
     if (job.attempts >= job.maxRetries) {
       invoiceQueue.moveToDLQ(job, `Exceeded max retries (${job.maxRetries}). Error: ${errorMsg}`);
+      await prisma.invoice.update({
+        where: { id: job.data.dbInvoiceId },
+        data: { status: 'REJECTED' }
+      }).catch(() => {});
       return {
         jobId: job.id,
         success: false,
@@ -71,6 +92,7 @@ export async function processInvoiceJob(
     // Schedule next attempt with exponential backoff delay
     job.status = 'QUEUED';
     const backoffDelay = job.backoffMs[Math.min(job.attempts - 1, job.backoffMs.length - 1)];
+    job.nextAttemptAt = new Date(Date.now() + backoffDelay).toISOString();
     console.warn(`[Worker] Job ${job.id} failed attempt ${job.attempts}/${job.maxRetries}. Retrying in ${backoffDelay}ms. Error: ${errorMsg}`);
     
     return {
