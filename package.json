@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node scripts/checkNoFallbacks.js && prisma generate && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "npm run db:migrate && node scripts/checkNoFallbacks.js && prisma generate && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node start.cjs",
     "test": "node scripts/checkNoFallbacks.js && tsx src/test/verifyAll.ts",
     "seed": "tsx prisma/seed.ts",
     "clean": "rm -rf dist server.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
