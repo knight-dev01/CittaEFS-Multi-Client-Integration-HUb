@@ -19,13 +19,9 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
-  // Default admin credentials - change these via environment variables in production
-  const [email, setEmail] = useState(
-    import.meta.env.VITE_ADMIN_EMAIL || 'admin@cittaefs.com'
-  );
-  const [password, setPassword] = useState(
-    import.meta.env.VITE_ADMIN_PASSWORD || 'Admin123!'
-  );
+  // Do not prefill credentials in the UI — start with empty fields.
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -70,7 +66,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       
       {/* Background Subtle Gradient & Mesh Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-slate-950 pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#334155_1px,transparent_1px),linear-gradient(to_bottom,#334155_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-10 pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#334155_1px,transparent_1px),linear-gradient(to_bottom,#334155_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(closest-side,_transparent,_black)] opacity-30 pointer-events-none" />
 
       <div className="max-w-md w-full bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl relative z-10 space-y-6 p-7 sm:p-8">
         
@@ -121,7 +117,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@example.com"
-              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
+              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none"
             />
           </div>
 
@@ -136,14 +132,14 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
+              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-lg text-xs shadow-lg shadow-indigo-600/20 transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+            className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-lg text-xs shadow-lg shadow-indigo-600/20 transition flex items-center justify-center space-x-2"
           >
             <span>{isSubmitting ? 'Signing in...' : 'Sign In'}</span>
             <ArrowRight className="w-4 h-4" />
@@ -159,4 +155,3 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     </div>
   );
 }
-
