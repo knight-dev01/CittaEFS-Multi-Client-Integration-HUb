@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
  fix/render-bootstrap-admin-seed-and-api-routing
 const { execFileSync } = require('child_process');
-=======
+
 const { spawnSync } = require('child_process');
 main
 
