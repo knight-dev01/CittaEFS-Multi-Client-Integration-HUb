@@ -1,14 +1,22 @@
 export function getApiBaseUrl(): string {
+  // Canonical config: set VITE_API_BASE_URL to the backend origin in the Vercel
+  // project environment (e.g. https://cittaefs-multi-client-integration-hub.onrender.com).
   const envUrl = (import.meta as any).env?.VITE_API_BASE_URL as string | undefined;
   if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
-  
-  // When running on Vercel frontend pointing to external Render API
+
+  // Secondary resolution for *.vercel.app preview/production hosts that have
+  // not set VITE_API_BASE_URL: call the Render backend directly. All API,
+  // WebSocket (/api/ws-events) and SSE (/api/events) traffic goes cross-origin
+  // to Render, which the backend's CORS middleware reflects back per-request.
+  // Do NOT route /api through a Vercel rewrite — Vercel rewrites are HTTP-only
+  // and would break the WebSocket upgrade used for live telemetry.
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
     return 'https://cittaefs-multi-client-integration-hub.onrender.com';
   }
-  
+
+  // Same-origin (local dev served by the Express+Vite server, or any same-host deploy).
   return '';
 }
 
