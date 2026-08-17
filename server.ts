@@ -273,7 +273,7 @@ function renderOAuthBridgeHtml(payload: {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT;
 
   app.use(
     express.json({
