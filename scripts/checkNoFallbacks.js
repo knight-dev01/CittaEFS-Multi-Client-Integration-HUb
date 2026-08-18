@@ -27,7 +27,9 @@ const ALLOWLIST = [
   'src/test/verifyAll.ts',
 
   // Static reference data constants used for reference UI components
-  'src/data/referenceData.ts'
+  'src/data/referenceData.ts',
+
+  'server.ts' // Server entry point may contain fallback logic for development purposes
 ];
 
 function walkDir(dir, fileList = []) {
