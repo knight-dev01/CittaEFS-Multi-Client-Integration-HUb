@@ -20,7 +20,11 @@ export function getApiBaseUrl(): string {
   return '';
 }
 
-export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+function isApiRequest(url: string): boolean {
+  return url.startsWith('/api/') || url.includes('/api/');
+}
+
+function resolveApiInput(input: RequestInfo | URL): { url: string; finalInput: RequestInfo | URL } {
   let url = '';
   if (typeof input === 'string') {
     url = input;
@@ -31,24 +35,73 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
   }
 
   const baseUrl = getApiBaseUrl();
-  let finalInput: RequestInfo | URL = input;
+  const finalInput = baseUrl && url.startsWith('/api/') ? `${baseUrl}${url}` : input;
+  return { url, finalInput };
+}
 
-  if (url.startsWith('/api/') || url.includes('/api/')) {
-    if (baseUrl && url.startsWith('/api/')) {
-      finalInput = `${baseUrl}${url}`;
-    }
-    const token = localStorage.getItem('citta_jwt_token');
-    if (token) {
-      init = init || {};
-      const headers = new Headers(init.headers || {});
-      if (!headers.has('Authorization')) {
-        headers.set('Authorization', `Bearer ${token}`);
-        init.headers = headers;
-      }
-    }
+function withBearerToken(init?: RequestInit, token?: string | null): RequestInit | undefined {
+  if (!token) return init;
+  const nextInit = { ...(init || {}) };
+  const headers = new Headers(nextInit.headers || {});
+  headers.set('Authorization', `Bearer ${token}`);
+  nextInit.headers = headers;
+  return nextInit;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('citta_refresh_token');
+  if (!refreshToken) return null;
+
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken })
+  });
+
+  if (!res.ok) {
+    localStorage.removeItem('citta_jwt_token');
+    localStorage.removeItem('citta_refresh_token');
+    localStorage.removeItem('cittaefs_user_session');
+    return null;
   }
 
-  return fetch(finalInput, init);
+  const data = await res.json();
+  if (!data?.success || !data.token) return null;
+
+  localStorage.setItem('citta_jwt_token', data.token);
+  if (data.refreshToken) {
+    localStorage.setItem('citta_refresh_token', data.refreshToken);
+  }
+  return data.token;
+}
+
+export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const { url, finalInput } = resolveApiInput(input);
+
+  if (!isApiRequest(url)) {
+    return fetch(finalInput, init);
+  }
+
+  const isAuthEndpoint =
+    url.includes('/api/auth/login') ||
+    url.includes('/api/auth/logout') ||
+    url.includes('/api/auth/refresh');
+
+  const token = localStorage.getItem('citta_jwt_token');
+  const authedInit = withBearerToken(init, token);
+  const firstRes = await fetch(finalInput, authedInit);
+
+  if (firstRes.status !== 401 || isAuthEndpoint) {
+    return firstRes;
+  }
+
+  const refreshedToken = await refreshAccessToken();
+  if (!refreshedToken) {
+    return firstRes;
+  }
+
+  return fetch(finalInput, withBearerToken(init, refreshedToken));
 }
 
 export async function parseJsonResponse<T = any>(res: Response): Promise<T> {

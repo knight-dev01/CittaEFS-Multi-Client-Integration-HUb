@@ -21,6 +21,14 @@ interface OnboardClientModalProps {
 
 type QboConnectState = 'idle' | 'connecting' | 'connected' | 'syncing' | 'synced' | 'error';
 
+interface QboOAuthResult {
+  type: 'qbo-oauth-result';
+  success: boolean;
+  tenantId?: string;
+  realmId?: string;
+  error?: string;
+}
+
 // Kenyan KRA PIN format: one letter, 9 digits, one letter (e.g. P051123456Z)
 const TIN_PATTERN = /^[A-Z]\d{9}[A-Z]$/;
 
@@ -66,6 +74,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
   const [qboSyncStats, setQboSyncStats] = useState<{ totalFound: number; newSynced: number; alreadySynced: number } | null>(null);
   const popupRef = useRef<Window | null>(null);
   const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qboSyncStartedRef = useRef(false);
 
   const clearPopupPoll = () => {
     if (popupPollRef.current) {
@@ -75,6 +84,8 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
   };
 
   const runInitialQboSync = async (tenantId: string) => {
+    if (qboSyncStartedRef.current) return;
+    qboSyncStartedRef.current = true;
     setQboState('syncing');
     try {
       const res = await fetchWithAuth('/api/integrations/qbo/sync', {
@@ -93,39 +104,96 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
     } catch (err: any) {
       setQboState('error');
       setQboError(err.message || 'Initial QuickBooks sync failed.');
+      qboSyncStartedRef.current = false;
     }
   };
 
-  // Listen for the OAuth popup bridge page posting back its result
+  const handleQboOAuthResult = (result: QboOAuthResult) => {
+    if (!tenant || result.type !== 'qbo-oauth-result') return;
+    if (result.tenantId && result.tenantId !== tenant.id) return;
+
+    clearPopupPoll();
+
+    if (result.success) {
+      setQboError(null);
+      setQboState('connected');
+      runInitialQboSync(tenant.id);
+    } else {
+      setQboState('error');
+      setQboError(result.error || 'QuickBooks authorization failed.');
+    }
+  };
+
+  // Listen for the OAuth bridge page through message, BroadcastChannel, and storage.
   useEffect(() => {
     if (step !== 2 || platformType !== 'QuickBooks Online' || !tenant) return;
 
     const handler = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (!event.data || event.data.type !== 'qbo-oauth-result') return;
-
-      clearPopupPoll();
-
-      if (event.data.success) {
-        setQboState('connected');
-        runInitialQboSync(tenant.id);
-      } else {
-        setQboState('error');
-        setQboError(event.data.error || 'QuickBooks authorization failed.');
-      }
+      handleQboOAuthResult(event.data);
     };
 
+    const storageHandler = (event: StorageEvent) => {
+      if (event.key !== 'citta_qbo_oauth_result' || !event.newValue) return;
+      try {
+        handleQboOAuthResult(JSON.parse(event.newValue));
+      } catch {}
+    };
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        channel = new BroadcastChannel('citta_qbo_oauth');
+        channel.onmessage = (event) => handleQboOAuthResult(event.data);
+      }
+    } catch {}
+
+    try {
+      const savedResult = localStorage.getItem('citta_qbo_oauth_result');
+      if (savedResult) handleQboOAuthResult(JSON.parse(savedResult));
+    } catch {}
+
     window.addEventListener('message', handler);
+    window.addEventListener('storage', storageHandler);
     return () => {
       window.removeEventListener('message', handler);
+      window.removeEventListener('storage', storageHandler);
+      channel?.close();
       clearPopupPoll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, platformType, tenant]);
 
+  useEffect(() => {
+    if (step !== 2 || platformType !== 'QuickBooks Online' || !tenant || qboState !== 'connecting') return;
+
+    const pollStatus = async () => {
+      try {
+        const res = await fetchWithAuth(`/api/integrations/qbo/status?tenantId=${encodeURIComponent(tenant.id)}`);
+        const data = await parseJsonResponse(res);
+        if (data.connected) {
+          handleQboOAuthResult({
+            type: 'qbo-oauth-result',
+            success: true,
+            tenantId: tenant.id,
+            realmId: data.companyId || undefined
+          });
+        }
+      } catch {}
+    };
+
+    pollStatus();
+    const statusPoll = setInterval(pollStatus, 1500);
+    return () => clearInterval(statusPoll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, platformType, tenant, qboState]);
+
   const handleConnectQuickBooks = () => {
     if (!tenant) return;
     setQboError(null);
+    setQboSyncStats(null);
+    qboSyncStartedRef.current = false;
     setQboState('connecting');
 
     const base = getApiBaseUrl();

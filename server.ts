@@ -14,6 +14,11 @@ import { getDatabaseUrl } from "./src/config/dbConfig.ts";
 process.env.DATABASE_URL = getDatabaseUrl(false);
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "citta_efs_jwt_secret_998";
+const JWT_REFRESH_SECRET =
+  process.env.JWT_REFRESH_SECRET ||
+  `${JWT_SECRET}_refresh`;
+const ACCESS_TOKEN_MAX_AGE_MS = 8 * 3600 * 1000;
+const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 
 import { invoiceIngestionSchema } from "./src/schemas/invoice.schema";
 import { invoiceQueue } from "./src/queues/invoiceQueue";
@@ -89,21 +94,46 @@ function validateAndSerializeAuditRawJson(rawJson: any): string | null {
 async function safeAuditLogCreate(
   prismaClient: any,
   data: {
-    tenantId: string;
+    tenantId?: string | null;
     action: string;
     entityType: string;
     entityRef: string;
     details: string;
-    sha256PayloadHash: string;
-    performedBy: string;
+    sha256PayloadHash?: string;
+    performedBy?: string;
     rawJson?: any;
   },
 ) {
   try {
-    const tenantId =
-      typeof data.tenantId === "string" && data.tenantId.trim()
-        ? data.tenantId
-        : "tenant_qbo_smb";
+    let resolvedTenantId: string | null = null;
+
+    // Check if provided tenantId exists in DB
+    if (data.tenantId && typeof data.tenantId === "string" && data.tenantId.trim()) {
+      const tenant = await prismaClient.tenant.findUnique({
+        where: { id: data.tenantId.trim() },
+        select: { id: true },
+      });
+      if (tenant) {
+        resolvedTenantId = tenant.id;
+      }
+    }
+
+    // If not found or not provided, try to find any existing tenant in DB as fallback
+    if (!resolvedTenantId) {
+      const anyTenant = await prismaClient.tenant.findFirst({
+        select: { id: true },
+      });
+      if (anyTenant) {
+        resolvedTenantId = anyTenant.id;
+      }
+    }
+
+    // If still no tenant exists in DB (e.g. before first tenant onboarded),
+    // skip writing to the audit_logs table due to FK constraint.
+    if (!resolvedTenantId) {
+      return null;
+    }
+
     const action =
       typeof data.action === "string" && data.action.trim()
         ? data.action
@@ -134,7 +164,7 @@ async function safeAuditLogCreate(
 
     return await prismaClient.auditLog.create({
       data: {
-        tenantId,
+        tenantId: resolvedTenantId,
         action,
         entityType,
         entityRef,
@@ -145,28 +175,8 @@ async function safeAuditLogCreate(
       },
     });
   } catch (e: any) {
-    console.error("[AuditLog Error] Validation or database write failed:", e);
-    try {
-      return await prismaClient.auditLog.create({
-        data: {
-          tenantId: data.tenantId || "tenant_qbo_smb",
-          action: data.action || "FAILSAFE_ACTION",
-          entityType: data.entityType || "GENERAL",
-          entityRef: data.entityRef || "FAILSAFE_REF",
-          details: `Fail-safe audit log due to error: ${e.message}`,
-          sha256PayloadHash:
-            data.sha256PayloadHash || generateSha256("failsafe"),
-          performedBy: data.performedBy || "System",
-          rawJson: null,
-        },
-      });
-    } catch (failsafeErr) {
-      console.error(
-        "[AuditLog Critical Error] Fail-safe audit log creation also failed:",
-        failsafeErr,
-      );
-      return null;
-    }
+    console.error("[AuditLog Error] Database write failed:", e.message);
+    return null;
   }
 }
 
@@ -249,21 +259,96 @@ function renderOAuthBridgeHtml(payload: {
     error: payload.error,
   });
   const message = payload.success
-    ? "QuickBooks connected. You can close this window..."
+    ? "QuickBooks Online authorization successful! Completing setup..."
     : `Connection failed: ${payload.error || "Unknown error"}`;
   return `<!doctype html>
 <html>
-<head><meta charset="utf-8"><title>QuickBooks Connection</title></head>
-<body style="font-family: system-ui, sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; background:#0f172a; color:#e2e8f0; font-size:14px;">
-  <div>${message}</div>
+<head>
+  <meta charset="utf-8">
+  <title>QuickBooks Connection</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 14px;
+      text-align: center;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      padding: 24px 32px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      max-width: 420px;
+    }
+    .status {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: ${payload.success ? "#34d399" : "#f87171"};
+    }
+    .sub {
+      color: #94a3b8;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="status">${payload.success ? "✓ Authorization Successful" : "✗ Authorization Failed"}</div>
+    <div class="sub">${message}</div>
+  </div>
   <script>
     (function () {
       var result = ${result};
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage(result, window.location.origin);
-        window.close();
+
+      // 1. BroadcastChannel cross-window sync
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          var bc = new BroadcastChannel('citta_qbo_oauth');
+          bc.postMessage(result);
+        }
+      } catch (e) {}
+
+      // 2. Storage event cross-window sync
+      try {
+        localStorage.setItem('citta_qbo_oauth_result', JSON.stringify({
+          type: result.type,
+          success: result.success,
+          tenantId: result.tenantId,
+          realmId: result.realmId,
+          error: result.error,
+          _ts: Date.now()
+        }));
+      } catch (e) {}
+
+      // 3. Post to opener if available
+      var postedToOpener = false;
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(result, window.location.origin);
+          postedToOpener = true;
+        }
+      } catch (e) {}
+
+      // 4. Close popup or fallback to top-level navigation
+      var isPopup = postedToOpener || window.name === 'qbo_oauth' || (typeof window.opener !== 'undefined' && window.opener !== null);
+      if (isPopup) {
+        setTimeout(function () {
+          try {
+            window.close();
+          } catch (e) {}
+        }, 800);
       } else {
-        window.location.href = '/?tab=connectors&${payload.redirectQs}';
+        setTimeout(function () {
+          window.location.href = '/?tab=connectors&${payload.redirectQs}';
+        }, 1200);
       }
     })();
   </script>
@@ -273,7 +358,7 @@ function renderOAuthBridgeHtml(payload: {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT;
+  const PORT = Number(process.env.PORT || 10000);
 
   app.use(
     express.json({
@@ -383,6 +468,7 @@ async function startServer() {
     if (
       req.method === "OPTIONS" ||
       p.startsWith("/api/auth/login") ||
+      p.startsWith("/api/auth/refresh") ||
       p.startsWith("/api/auth/register") ||
       p.startsWith("/api/health") ||
       p.startsWith("/api/webhooks") ||
@@ -394,11 +480,10 @@ async function startServer() {
       return next();
     }
 
-    const token =
-      req.cookies?.token ||
-      (req.headers.authorization?.startsWith("Bearer ")
-        ? req.headers.authorization.split(" ")[1]
-        : null);
+    const bearerToken = req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.split(" ")[1]
+      : null;
+    const token = bearerToken || req.cookies?.token || null;
     if (!token) {
       // Allow GET read operations under default tenant scoping
       (req as any).tenantId =
@@ -425,6 +510,7 @@ async function startServer() {
         return next();
       }
       return res
+        .clearCookie("token")
         .status(401)
         .json({ success: false, error: "Invalid or expired session token" });
     }
@@ -474,12 +560,23 @@ async function startServer() {
       };
 
       const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "8h" });
+      const refreshToken = jwt.sign(
+        { userId: user.id, type: "refresh" },
+        JWT_REFRESH_SECRET,
+        { expiresIn: "7d" },
+      );
 
       res.cookie("token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 8 * 3600 * 1000,
+        maxAge: ACCESS_TOKEN_MAX_AGE_MS,
+      });
+      res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: REFRESH_TOKEN_MAX_AGE_MS,
       });
 
       try {
@@ -497,6 +594,90 @@ async function startServer() {
       res.json({
         success: true,
         token,
+        refreshToken,
+        user: tokenPayload,
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post("/api/auth/refresh", async (req, res) => {
+    try {
+      const refreshToken =
+        req.cookies?.refreshToken ||
+        req.body?.refreshToken ||
+        (req.headers.authorization?.startsWith("Bearer ")
+          ? req.headers.authorization.split(" ")[1]
+          : null);
+
+      if (!refreshToken) {
+        return res
+          .status(401)
+          .json({ success: false, error: "Refresh token required" });
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+      } catch {
+        return res
+          .clearCookie("token")
+          .clearCookie("refreshToken")
+          .status(401)
+          .json({ success: false, error: "Invalid or expired refresh token" });
+      }
+
+      if (decoded.type !== "refresh" || !decoded.userId) {
+        return res
+          .status(401)
+          .json({ success: false, error: "Invalid refresh token" });
+      }
+
+      const user: any = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+      });
+      if (!user) {
+        return res
+          .clearCookie("token")
+          .clearCookie("refreshToken")
+          .status(401)
+          .json({ success: false, error: "User record not found" });
+      }
+
+      const tokenPayload = {
+        userId: user.id,
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        organization: user.organization,
+        tenantId: user.tenantId,
+      };
+      const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "8h" });
+      const nextRefreshToken = jwt.sign(
+        { userId: user.id, type: "refresh" },
+        JWT_REFRESH_SECRET,
+        { expiresIn: "7d" },
+      );
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: ACCESS_TOKEN_MAX_AGE_MS,
+      });
+      res.cookie("refreshToken", nextRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: REFRESH_TOKEN_MAX_AGE_MS,
+      });
+
+      res.json({
+        success: true,
+        token,
+        refreshToken: nextRefreshToken,
         user: tokenPayload,
       });
     } catch (e: any) {
@@ -506,6 +687,7 @@ async function startServer() {
 
   app.post("/api/auth/logout", (req, res) => {
     res.clearCookie("token");
+    res.clearCookie("refreshToken");
     res.json({ success: true, message: "Logged out successfully" });
   });
 
@@ -1417,7 +1599,7 @@ async function startServer() {
           success: true,
           tenantId,
           realmId: (realmId as string) || "",
-          redirectQs: `qbo=success&realmId=${realmId || ""}`,
+          redirectQs: `qbo=success&tenantId=${encodeURIComponent(tenantId)}&realmId=${encodeURIComponent((realmId as string) || "")}`,
         }),
       );
     } catch (e: any) {

@@ -4,6 +4,7 @@ import { useHub } from '../lib/store';
 import {
   Plug,
   AlertTriangle,
+  CheckCircle2,
   RefreshCw,
   Plus,
   ShieldCheck,
@@ -35,6 +36,9 @@ export function ConnectorsTab() {
   const [syncingQbo, setSyncingQbo] = useState(false);
 
   const queryParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const qboRedirectStatus = queryParams.get('qbo');
+  const qboRedirectRealmId = queryParams.get('realmId');
+  const qboRedirectError = queryParams.get('error') || queryParams.get('message');
   const isQboDisconnectedNotice = queryParams.get('qbo') === 'disconnected';
   const isQboConnectNotice = queryParams.get('connect') === 'qbo' || (typeof window !== 'undefined' && window.location.pathname === '/connect-quickbooks');
 
@@ -55,6 +59,13 @@ export function ConnectorsTab() {
     loadStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTenant.id]);
+
+  useEffect(() => {
+    if (qboRedirectStatus === 'success' || qboRedirectStatus === 'error') {
+      loadStatus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qboRedirectStatus]);
 
   const handleSyncQbo = async () => {
     setSyncingQbo(true);
@@ -135,6 +146,50 @@ export function ConnectorsTab() {
           <span>Add New Connector</span>
         </button>
       </div>
+
+      {/* QuickBooks OAuth Callback Result */}
+      {qboRedirectStatus === 'success' && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-4 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+          <div className="flex items-start space-x-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-semibold text-emerald-950">QuickBooks Online Connected Successfully</strong>
+              <p className="mt-0.5 text-emerald-800">
+                Authorization completed for <strong>{activeTenant.name}</strong>
+                {qboRedirectRealmId ? <>. Realm ID: <span className="font-mono">{qboRedirectRealmId}</span></> : '.'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleSyncQbo}
+            disabled={syncingQbo}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer text-xs shrink-0 transition-colors shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncingQbo ? 'animate-spin' : ''}`} />
+            <span>{syncingQbo ? 'Syncing...' : 'Sync Historical Data'}</span>
+          </button>
+        </div>
+      )}
+
+      {qboRedirectStatus === 'error' && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-900 rounded-xl p-4 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-semibold text-rose-950">QuickBooks Authorization Failed</strong>
+              <p className="mt-0.5 text-rose-800">{qboRedirectError || 'QuickBooks did not complete authorization. Please try again.'}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              window.location.href = `/api/integrations/qbo/connect?tenantId=${encodeURIComponent(activeTenant.id)}`;
+            }}
+            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-lg cursor-pointer text-xs shrink-0 transition-colors shadow-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
 
       {/* Intuit Disconnect Route Banner */}
       {isQboDisconnectedNotice && (

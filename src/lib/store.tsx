@@ -23,7 +23,7 @@ import {
 
 interface HubContextType {
   currentUser: UserSession | null;
-  login: (session: UserSession) => void;
+  login: (session: UserSession, token?: string, refreshToken?: string) => void;
   logout: () => void;
   activeTenantId: TenantId;
   setActiveTenantId: (id: TenantId) => void;
@@ -36,6 +36,7 @@ interface HubContextType {
   auditLogs: AuditLog[];
   metrics: SystemMetrics;
   isBgRefreshing: boolean;
+  isInitialized: boolean;
   
   // Actions
   refreshAll: () => Promise<void>;
@@ -88,16 +89,21 @@ export function HubProvider({ children }: { children: ReactNode }) {
             logout();
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          logout();
+        });
     }
   }, []);
 
-  const login = (session: UserSession, token?: string) => {
+  const login = (session: UserSession, token?: string, refreshToken?: string) => {
     setCurrentUser(session);
     try {
       localStorage.setItem('cittaefs_user_session', JSON.stringify(session));
       if (token) {
         localStorage.setItem('citta_jwt_token', token);
+      }
+      if (refreshToken) {
+        localStorage.setItem('citta_refresh_token', refreshToken);
       }
     } catch (e) {
       console.error('Could not save session to localStorage', e);
@@ -109,6 +115,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.removeItem('cittaefs_user_session');
       localStorage.removeItem('citta_jwt_token');
+      localStorage.removeItem('citta_refresh_token');
       localStorage.removeItem('citta_active_tenant_id');
       localStorage.removeItem('citta_active_tab');
     } catch (e) {
@@ -141,6 +148,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [validationErrors, setValidationErrors] = useState<ValidationErrorItem[]>(INITIAL_VALIDATION_ERRORS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [metrics, setMetrics] = useState<SystemMetrics>(INITIAL_METRICS);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Auto-select first tenant if none selected and tenants exist
   const effectiveTenantId = tenants.length > 0 && !activeTenantId ? tenants[0].id : activeTenantId;
@@ -183,8 +191,16 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
         if (Array.isArray(tenRes)) {
           setTenants(tenRes);
+          const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+          const urlTenantId = params?.get('tenantId');
           const savedId = typeof window !== 'undefined' ? localStorage.getItem('citta_active_tenant_id') : null;
-          if (savedId && tenRes.some((t: Tenant) => t.id === savedId)) {
+
+          if (urlTenantId && tenRes.some((t: Tenant) => t.id === urlTenantId)) {
+            setActiveTenantIdState(urlTenantId);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('citta_active_tenant_id', urlTenantId);
+            }
+          } else if (savedId && tenRes.some((t: Tenant) => t.id === savedId)) {
             setActiveTenantIdState(savedId);
           } else if (tenRes.length > 0) {
             setActiveTenantIdState(tenRes[0].id);
@@ -201,6 +217,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
         if (metRes && typeof metRes === 'object') setMetrics(metRes);
       } catch (e) {
         console.error('Backend refresh warning, preserving local state:', e);
+      } finally {
+        setIsInitialized(true);
       }
     });
   };
@@ -509,6 +527,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         auditLogs,
         metrics,
         isBgRefreshing,
+        isInitialized,
         refreshAll,
         transmitInvoice,
         cancelInvoice,
