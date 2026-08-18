@@ -6,6 +6,7 @@ export interface Tenant {
   companyName: string;
   tin: string;
   platformType: 'QuickBooks Online' | 'SAP S/4HANA' | 'Microsoft Dynamics 365' | 'Xero' | string;
+  region?: string;
   marketTier: 'Tier 1 (SMB)' | 'Tier 2 (Mid-Market)' | 'Tier 3 (Enterprise)' | string;
   cittaApiKey?: string;
   cittaApiSecretEncrypted?: string;

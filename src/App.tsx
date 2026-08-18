@@ -24,7 +24,7 @@ function LoadingScreen() {
 }
 
 function HubMainContent() {
-  const { currentUser, login, isBgRefreshing, tenants, activeTenant } = useHub();
+  const { currentUser, login, isBgRefreshing, isInitialized, tenants, activeTenant } = useHub();
   const [isInitializing, setIsInitializing] = useState(true);
 
   // All useState calls must be at the top (React Rules of Hooks)
@@ -44,6 +44,7 @@ function HubMainContent() {
       if (
         path === '/connect-quickbooks' || 
         params.get('tab') === 'connectors' || 
+        params.has('qbo') ||
         params.get('qbo') === 'disconnected' || 
         params.get('connect') === 'qbo'
       ) {
@@ -68,10 +69,16 @@ function HubMainContent() {
   // Show onboarding modal if no tenants exist
   // (must run on every render, before any conditional early return, per Rules of Hooks)
   useEffect(() => {
-    if (!hasTenant && currentUser) {
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const hasQboRedirect =
+      params?.has('qbo') ||
+      params?.get('tab') === 'connectors' ||
+      params?.get('connect') === 'qbo';
+
+    if (isInitialized && !hasTenant && currentUser && !hasQboRedirect) {
       setIsOnboardModalOpen(true);
     }
-  }, [hasTenant, currentUser]);
+  }, [isInitialized, hasTenant, currentUser]);
 
   // Show loading screen only if initializing AND we have a user (authenticated state)
   if (isInitializing && currentUser) {

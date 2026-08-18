@@ -40,6 +40,7 @@ export interface NormalizedEFSInvoiceLine {
   // Metadata
   metadata?: {
     sourceSystem: "QUICKBOOKS_ONLINE" | "EFS_TEMPLATE_EXCEL";
+    tenantId?: string;
     userId?: string;
     branchCode?: string;
     originalInvoiceId?: string;
