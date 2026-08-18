@@ -24,7 +24,7 @@ export const invoiceIngestionSchema = z
     invoiceType: z
       .enum(["STANDARD", "CREDIT_NOTE", "DEBIT_NOTE", "CANCELLATION"])
       .default("STANDARD"),
-    invoiceKind: z.enum(["B2B", "B2C"]).default("B2B"),
+    invoiceKind: z.enum(["B2B", "B2C", "EXPORT"]).default("B2B"),
     issueDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Issue date must be YYYY-MM-DD"),

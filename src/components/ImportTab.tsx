@@ -230,7 +230,7 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
       {/* Main Channel View */}
       {selectedSource === 'excel' ? (
         /* Excel & CSV Interactive Grid Component */
-        <ExcelDocumentViewer />
+        <ExcelDocumentViewer tenantId={activeTenant.id} startEmpty />
       ) : (
         /* QuickBooks Admin Action Panel */
         <div className="bg-white rounded-xl border border-slate-200/80 p-6 space-y-6 shadow-sm">

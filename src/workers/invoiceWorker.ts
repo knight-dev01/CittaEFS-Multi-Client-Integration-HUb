@@ -32,6 +32,7 @@ export async function processInvoiceJob(
       clientInvoiceNumber: job.data.clientInvoiceNumber,
       invoiceType: job.data.invoiceType,
       invoiceKind: job.data.invoiceKind,
+      customerCode: job.data.customerCode,
       customerName: job.data.customerName,
       customerTin: job.data.customerTin || undefined,
       lineItems: job.data.lineItems,
