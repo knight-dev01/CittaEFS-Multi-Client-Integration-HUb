@@ -453,7 +453,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
           </div>
         ) : (
           <div className="space-y-4">
-            <ExcelDocumentViewer />
+            <ExcelDocumentViewer tenantId={tenant?.id} />
             <div className="pt-1 flex justify-between items-center">
               <button
                 type="button"

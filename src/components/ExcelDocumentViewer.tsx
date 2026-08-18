@@ -41,6 +41,10 @@ export interface SpreadsheetRow {
   itemNormalized?: boolean;
 }
 
+interface ExcelDocumentViewerProps {
+  tenantId?: string;
+}
+
 const DEFAULT_SAMPLE_ROWS: SpreadsheetRow[] = [
   {
     id: 'row_1',
@@ -95,8 +99,9 @@ const DEFAULT_SAMPLE_ROWS: SpreadsheetRow[] = [
   }
 ];
 
-export function ExcelDocumentViewer() {
+export function ExcelDocumentViewer({ tenantId }: ExcelDocumentViewerProps = {}) {
   const { activeTenant, ingestCsvInvoices, customers, itemMappings, addCustomer, addItemMapping, refreshAll } = useHub();
+  const targetTenantId = tenantId || activeTenant?.id;
 
   const [rows, setRowsState] = useState<SpreadsheetRow[]>(() => {
     if (typeof window !== 'undefined') {
@@ -108,7 +113,7 @@ export function ExcelDocumentViewer() {
         } catch { }
       }
     }
-    return;
+    return DEFAULT_SAMPLE_ROWS;
   });
 
   const setRows = (newRowsOrFn: SpreadsheetRow[] | ((prev: SpreadsheetRow[]) => SpreadsheetRow[])) => {
@@ -350,7 +355,7 @@ export function ExcelDocumentViewer() {
             email: `billing@${row.customerCode.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
             address: 'Commercial Business Park',
             city: 'Nairobi'
-          });
+          }, targetTenantId);
         }
         row.partyNormalized = true;
 
@@ -366,7 +371,7 @@ export function ExcelDocumentViewer() {
             codeDescription: row.description,
             defaultVatRate: row.vatRate || 16,
             status: 'MAPPED'
-          });
+          }, targetTenantId);
         }
         row.itemNormalized = true;
       }
@@ -419,6 +424,11 @@ export function ExcelDocumentViewer() {
 
   // Transmit Normalized Invoices to Gateway
   const handleTransmitInvoices = async () => {
+    if (!targetTenantId) {
+      setStatusMsg({ text: 'Gateway Transmission Failure: no active client tenant is selected.', type: 'error' });
+      return;
+    }
+
     setIsProcessing(true);
     setStatusMsg({ text: 'Grouping multi-item invoices & transmitting to CittaEFS Gateway for IRN stamping...', type: 'info' });
 
@@ -450,7 +460,7 @@ export function ExcelDocumentViewer() {
       });
 
       const parsedInvoices = Array.from(groupedMap.values());
-      await ingestCsvInvoices(parsedInvoices);
+      await ingestCsvInvoices(parsedInvoices, targetTenantId);
 
       setIsProcessing(false);
       setStatusMsg({
