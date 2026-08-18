@@ -41,6 +41,11 @@ export interface SpreadsheetRow {
   itemNormalized?: boolean;
 }
 
+interface ExcelDocumentViewerProps {
+  tenantId?: string;
+  startEmpty?: boolean;
+}
+
 const DEFAULT_SAMPLE_ROWS: SpreadsheetRow[] = [
   {
     id: 'row_1',
@@ -95,11 +100,12 @@ const DEFAULT_SAMPLE_ROWS: SpreadsheetRow[] = [
   }
 ];
 
-export function ExcelDocumentViewer() {
+export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocumentViewerProps = {}) {
   const { activeTenant, ingestCsvInvoices, customers, itemMappings, addCustomer, addItemMapping, refreshAll } = useHub();
+  const targetTenantId = tenantId || activeTenant?.id;
 
   const [rows, setRowsState] = useState<SpreadsheetRow[]>(() => {
-    if (typeof window !== 'undefined') {
+    if (!startEmpty && typeof window !== 'undefined') {
       const saved = localStorage.getItem('citta_excel_grid_rows');
       if (saved) {
         try {
@@ -108,7 +114,7 @@ export function ExcelDocumentViewer() {
         } catch { }
       }
     }
-    return;
+    return startEmpty ? [] : DEFAULT_SAMPLE_ROWS;
   });
 
   const setRows = (newRowsOrFn: SpreadsheetRow[] | ((prev: SpreadsheetRow[]) => SpreadsheetRow[])) => {
@@ -330,6 +336,11 @@ export function ExcelDocumentViewer() {
 
   // Master Data Normalization Action
   const handleNormalizeMasterData = async () => {
+    if (rows.length === 0) {
+      setStatusMsg({ text: 'Upload an Excel or CSV file before normalizing master data.', type: 'error' });
+      return;
+    }
+
     setIsProcessing(true);
     setStatusMsg({ text: 'Normalizing row data against Master Party Directory & Item Classification Taxonomy...', type: 'info' });
 
@@ -350,7 +361,7 @@ export function ExcelDocumentViewer() {
             email: `billing@${row.customerCode.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
             address: 'Commercial Business Park',
             city: 'Nairobi'
-          });
+          }, targetTenantId);
         }
         row.partyNormalized = true;
 
@@ -366,7 +377,7 @@ export function ExcelDocumentViewer() {
             codeDescription: row.description,
             defaultVatRate: row.vatRate || 16,
             status: 'MAPPED'
-          });
+          }, targetTenantId);
         }
         row.itemNormalized = true;
       }
@@ -387,6 +398,11 @@ export function ExcelDocumentViewer() {
 
   // Download / Export Spreadsheet Workbook (.xlsx or .csv)
   const handleExportSpreadsheet = (format: 'xlsx' | 'csv') => {
+    if (rows.length === 0) {
+      setStatusMsg({ text: 'Upload an Excel or CSV file before exporting spreadsheet data.', type: 'error' });
+      return;
+    }
+
     const exportData = rows.map(r => ({
       clientInvoiceNumber: r.clientInvoiceNumber,
       invoiceKind: r.invoiceKind,
@@ -419,6 +435,16 @@ export function ExcelDocumentViewer() {
 
   // Transmit Normalized Invoices to Gateway
   const handleTransmitInvoices = async () => {
+    if (rows.length === 0) {
+      setStatusMsg({ text: 'Upload an Excel or CSV file before submitting invoices to the gateway.', type: 'error' });
+      return;
+    }
+
+    if (!targetTenantId) {
+      setStatusMsg({ text: 'Gateway Transmission Failure: no active client tenant is selected.', type: 'error' });
+      return;
+    }
+
     setIsProcessing(true);
     setStatusMsg({ text: 'Grouping multi-item invoices & transmitting to CittaEFS Gateway for IRN stamping...', type: 'info' });
 
@@ -450,7 +476,7 @@ export function ExcelDocumentViewer() {
       });
 
       const parsedInvoices = Array.from(groupedMap.values());
-      await ingestCsvInvoices(parsedInvoices);
+      await ingestCsvInvoices(parsedInvoices, targetTenantId);
 
       setIsProcessing(false);
       setStatusMsg({
@@ -525,7 +551,7 @@ export function ExcelDocumentViewer() {
 
             <button
               onClick={handleNormalizeMasterData}
-              disabled={isProcessing}
+              disabled={isProcessing || rows.length === 0}
               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center gap-2 shadow-sm transition-all"
             >
               <Sparkles className="w-4 h-4" />
@@ -534,7 +560,7 @@ export function ExcelDocumentViewer() {
 
             <button
               onClick={handleTransmitInvoices}
-              disabled={isProcessing}
+              disabled={isProcessing || rows.length === 0}
               className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center gap-2 shadow-sm transition-all"
             >
               <Play className="w-4 h-4 text-emerald-400" />
@@ -649,7 +675,9 @@ export function ExcelDocumentViewer() {
             {filteredRows.length === 0 ? (
               <tr>
                 <td colSpan={14} className="p-8 text-center text-slate-400 font-medium">
-                  No spreadsheet rows matched search term '{searchTerm}'.
+                  {rows.length === 0
+                    ? 'Upload an Excel or CSV file to preview invoice rows here.'
+                    : `No spreadsheet rows matched search term '${searchTerm}'.`}
                 </td>
               </tr>
             ) : (

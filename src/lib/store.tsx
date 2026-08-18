@@ -39,14 +39,14 @@ interface HubContextType {
   
   // Actions
   refreshAll: () => Promise<void>;
-  transmitInvoice: (payload: any) => Promise<any>;
+  transmitInvoice: (payload: any, tenantIdOverride?: TenantId) => Promise<any>;
   cancelInvoice: (invoiceId: string, reason: string) => Promise<any>;
   resolveValidationError: (errorId: string, hsOrServiceCode?: string, correctedTin?: string) => Promise<any>;
   runReconciliationCron: () => Promise<any>;
   autoMapItems: () => Promise<any>;
-  addCustomer: (cust: Partial<CustomerProfile>) => Promise<any>;
-  addItemMapping: (mapping: Partial<ItemCodeMapping>) => Promise<any>;
-  ingestCsvInvoices: (parsedInvoices: any[]) => Promise<any>;
+  addCustomer: (cust: Partial<CustomerProfile>, tenantIdOverride?: TenantId) => Promise<any>;
+  addItemMapping: (mapping: Partial<ItemCodeMapping>, tenantIdOverride?: TenantId) => Promise<any>;
+  ingestCsvInvoices: (parsedInvoices: any[], tenantIdOverride?: TenantId) => Promise<any>;
   onboardTenant: (tenantData: any) => Promise<Tenant>;
   updateTenant: (tenantId: string, tenantData: any) => Promise<Tenant>;
   purgeDemoData: () => Promise<any>;
@@ -308,13 +308,14 @@ export function HubProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const transmitInvoice = async (payload: any) => {
+  const transmitInvoice = async (payload: any, tenantIdOverride?: TenantId) => {
     return withLoading(async () => {
       try {
+        const targetTenantId = tenantIdOverride || activeTenantId;
         const res = await fetchWithAuth('/api/integration/gen/invoices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, tenantId: activeTenantId })
+          body: JSON.stringify({ ...payload, tenantId: targetTenantId })
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
@@ -394,13 +395,14 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const addCustomer = async (cust: Partial<CustomerProfile>) => {
+  const addCustomer = async (cust: Partial<CustomerProfile>, tenantIdOverride?: TenantId) => {
     return withLoading(async () => {
       try {
+        const targetTenantId = tenantIdOverride || activeTenantId;
         const res = await fetchWithAuth('/api/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...cust, tenantId: activeTenantId })
+          body: JSON.stringify({ ...cust, tenantId: targetTenantId })
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
@@ -412,13 +414,14 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const addItemMapping = async (mapping: Partial<ItemCodeMapping>) => {
+  const addItemMapping = async (mapping: Partial<ItemCodeMapping>, tenantIdOverride?: TenantId) => {
     return withLoading(async () => {
       try {
+        const targetTenantId = tenantIdOverride || activeTenantId;
         const res = await fetchWithAuth('/api/items/mappings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...mapping, tenantId: activeTenantId })
+          body: JSON.stringify({ ...mapping, tenantId: targetTenantId })
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
@@ -430,9 +433,9 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const ingestCsvInvoices = async (parsedInvoices: any[]) => {
+  const ingestCsvInvoices = async (parsedInvoices: any[], tenantIdOverride?: TenantId) => {
     for (const inv of parsedInvoices) {
-      await transmitInvoice(inv);
+      await transmitInvoice(inv, tenantIdOverride);
     }
   };
 

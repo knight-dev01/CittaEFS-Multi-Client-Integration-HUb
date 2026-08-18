@@ -179,11 +179,10 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
       }
       setIsSubmitting(false);
       setStep(2);
-    } catch (err) {
+    } catch (err: any) {
       setIsSubmitting(false);
-      alert(tenant
-        ? 'Failed to update client organization. Please check details and try again.'
-        : 'Failed to onboard client organization. Please check details and try again.');
+      const action = tenant ? 'update' : 'onboard';
+      alert(`Failed to ${action} client organization: ${err?.message || 'Please check details and try again.'}`);
     }
   };
 
@@ -453,7 +452,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
           </div>
         ) : (
           <div className="space-y-4">
-            <ExcelDocumentViewer />
+            <ExcelDocumentViewer tenantId={tenant?.id} startEmpty />
             <div className="pt-1 flex justify-between items-center">
               <button
                 type="button"

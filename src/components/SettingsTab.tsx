@@ -1,6 +1,7 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useHub } from '../lib/store';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
+import { getStoredCittaEndpoint, saveStoredCittaEndpoint } from '../lib/gatewaySettings';
 import { 
   Settings, 
   ShieldCheck, 
@@ -39,7 +40,7 @@ export function SettingsTab() {
 
   const [currentRole, setCurrentRole] = useState<'ADMIN' | 'OPERATOR'>('ADMIN');
   const [retryMax, setRetryMax] = useState(5);
-  const [cittaEndpoint, setCittaEndpoint] = useState('https://gateway.cittaefs.com/api/v1');
+  const [cittaEndpoint, setCittaEndpoint] = useState(getStoredCittaEndpoint);
   const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
   const [isSaved, setIsSaved] = useState(false);
 
@@ -84,6 +85,7 @@ export function SettingsTab() {
   };
 
   const handleSaveSettings = () => {
+    saveStoredCittaEndpoint(cittaEndpoint);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };

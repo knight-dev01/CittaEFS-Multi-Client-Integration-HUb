@@ -308,6 +308,7 @@ async function runAllTests() {
       clientInvoiceNumber: "INV-HMAC-TEST-01",
       invoiceType: "STANDARD" as const,
       invoiceKind: "B2B" as const,
+      customerCode: "CUST001",
       customerName: "Citta Test Client",
       customerTin: "P051123456Z",
       issueDate: "2026-07-29",

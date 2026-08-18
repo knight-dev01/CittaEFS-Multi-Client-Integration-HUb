@@ -782,6 +782,7 @@ export async function ingestQboInvoice(
     invoiceType: "STANDARD",
     invoiceKind: "B2B",
     issueDate: transformed.issueDate,
+    customerCode,
     customerName: transformed.customerName,
     customerTin: transformed.customerTin || undefined,
     lineItems: processedLineItems.map((li) => ({

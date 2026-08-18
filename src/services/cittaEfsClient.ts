@@ -13,7 +13,8 @@ export interface CittaEfsRequestPayload {
   tenantId: string;
   clientInvoiceNumber: string;
   invoiceType: "STANDARD" | "CREDIT_NOTE" | "DEBIT_NOTE" | "CANCELLATION";
-  invoiceKind: "B2B" | "B2C";
+  invoiceKind: "B2B" | "B2C" | "EXPORT";
+  customerCode: string;
   customerName: string;
   customerTin?: string;
   lineItems: Array<{
@@ -136,7 +137,7 @@ export class CittaEfsClient {
 
     const invoiceNumber = payload.clientInvoiceNumber;
     const issueDate = payload.issueDate;
-    const customerCode = (payload as any).customerCode || "CUST-OTC-GENERIC";
+    const customerCode = payload.customerCode;
     const originalIrn = payload.originalIrn;
     const invoiceTypeCode =
       payload.invoiceType === "STANDARD"
@@ -167,8 +168,8 @@ export class CittaEfsClient {
       taxableAmount: item.taxableAmount,
       hsOrServiceCode: item.hsOrServiceCode || "SERV-DEFAULT",
       lineNum: (item as any).lineNum || index + 1,
-      unitCode: (item as any).unitCode || "PCS",
-      taxCategoryId: (item as any).taxCategoryId || "1",
+      unitCode: (item as any).unitCode || "EA",
+      taxCategoryId: (item as any).taxCategoryId || "STANDARD_VAT",
       currencyCode: (payload as any).currency || "NGN",
       invoiceTypeCode,
       headerDiscount,

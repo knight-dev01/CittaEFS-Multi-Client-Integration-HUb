@@ -1,4 +1,5 @@
 import { useHub } from '../lib/store';
+import { getStoredCittaEndpoint } from '../lib/gatewaySettings';
 import { 
   Activity, 
   Layers, 
@@ -22,6 +23,7 @@ interface OverviewTabProps {
 
 export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
   const { metrics, tenants, invoices, auditLogs, activeTenant, purgeDemoData, currentUser } = useHub();
+  const cittaEndpoint = getStoredCittaEndpoint();
 
   const userRole = currentUser?.role || 'OPERATOR';
   const canOnboard = userRole === 'ADMIN';
@@ -124,7 +126,7 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
           <div className="space-y-2 text-xs text-slate-600">
             <div className="flex justify-between">
               <span>Endpoint:</span>
-              <span className="font-semibold text-slate-900">gateway.cittaefs.com/api/v1</span>
+              <span className="font-semibold text-slate-900 text-right break-all">{cittaEndpoint}</span>
             </div>
             <div className="flex justify-between">
               <span>Serialization:</span>
