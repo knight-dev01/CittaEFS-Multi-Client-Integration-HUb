@@ -694,6 +694,7 @@ async function startServer() {
         .replace(/[^a-z0-9]/g, "_")
         .substring(0, 15);
       const tenantId = `tenant_${cleanSlug}_${Date.now().toString(36).substring(2, 6)}`;
+      const cittaApiKey = `sk_live_${crypto.randomBytes(24).toString("hex")}`;
 
       const packedSecret = packEncryptedString(
         oauthSecret || "client_refresh_secret_99812",
@@ -707,6 +708,7 @@ async function startServer() {
           tin: tin || "P000000000X",
           platformType: platformType || "QuickBooks Online",
           marketTier: marketTier || "Enterprise",
+          cittaApiKey,
           encryptedSecret: packedSecret,
           onboardingStatus: "VERIFIED_READY",
           monthlyAllowance:
