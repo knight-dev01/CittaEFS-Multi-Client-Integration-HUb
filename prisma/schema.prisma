@@ -106,8 +106,8 @@ model Invoice {
   tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   lineItems InvoiceLineItem[]
 
+  @@unique([tenantId, clientInvoiceId])
   @@index([tenantId])
-  @@index([tenantId, clientInvoiceId])
   @@index([status])
   @@map("invoices")
 }

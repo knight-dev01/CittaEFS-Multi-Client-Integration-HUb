@@ -73,9 +73,14 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
       lineItems
     };
 
-    const result = await transmitInvoice(payload);
-    setResponseResult(result);
-    setIsTransmitting(false);
+    try {
+      const result = await transmitInvoice(payload);
+      setResponseResult(result);
+    } catch (err: any) {
+      setResponseResult({ success: false, message: err.message || 'Transmission failed.' });
+    } finally {
+      setIsTransmitting(false);
+    }
   };
 
   return (

@@ -111,7 +111,9 @@ export async function parseJsonResponse<T = any>(res: Response): Promise<T> {
     let errorMessage = `HTTP ${res.status} ${res.statusText || 'Error'}`;
     try {
       const parsed = JSON.parse(text);
-      if (parsed && (parsed.error || parsed.message)) {
+      if (parsed && Array.isArray(parsed.errors) && parsed.errors.length > 0) {
+        errorMessage = parsed.errors.join(' | ');
+      } else if (parsed && (parsed.error || parsed.message)) {
         errorMessage = parsed.error || parsed.message;
       }
     } catch {

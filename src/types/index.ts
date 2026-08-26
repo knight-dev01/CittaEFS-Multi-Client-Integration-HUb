@@ -116,7 +116,7 @@ export interface ValidationErrorItem {
   id: string;
   tenantId: TenantId;
   clientInvoiceNumber: string;
-  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH';
+  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH' | 'DUPLICATE_INVOICE';
   fieldAffected: string;
   errorMessage: string;
   rawPayloadSample: any;

@@ -1072,6 +1072,17 @@ async function startServer() {
       if (!clientInvoiceNumber) errors.push("clientInvoiceNumber is mandatory");
       if (!issueDate) errors.push("issueDate is mandatory (YYYY-MM-DD)");
 
+      if (clientInvoiceNumber) {
+        const duplicate = await prisma.invoice.findFirst({
+          where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber },
+        });
+        if (duplicate) {
+          errors.push(
+            `Duplicate invoice: clientInvoiceNumber "${clientInvoiceNumber}" already exists for this tenant (existing status: ${duplicate.status})`,
+          );
+        }
+      }
+
       if (
         (invoiceKind === "B2B" || invoiceKind === "B2G") &&
         (!customerTin || customerTin.length < 8)
@@ -1123,23 +1134,28 @@ async function startServer() {
       );
 
       if (errors.length > 0) {
+        const isDuplicate = errors.some((e) => e.startsWith("Duplicate invoice"));
         const valError = await prisma.validationError.create({
           data: {
             tenantId: tenant.id,
             clientInvoiceNumber: clientInvoiceNumber || "UNNAMED",
-            errorCategory: errors.some((e) => e.includes("hsOrServiceCode"))
-              ? "MISSING_HS_CODE"
-              : "INVALID_TIN_FORMAT",
-            fieldAffected: errors[0].includes("customerTin")
-              ? "customerTin"
-              : "lineItems",
+            errorCategory: isDuplicate
+              ? "DUPLICATE_INVOICE"
+              : errors.some((e) => e.includes("hsOrServiceCode"))
+                ? "MISSING_HS_CODE"
+                : "INVALID_TIN_FORMAT",
+            fieldAffected: isDuplicate
+              ? "clientInvoiceNumber"
+              : errors[0].includes("customerTin")
+                ? "customerTin"
+                : "lineItems",
             errorMessage: errors.join(" | "),
             rawPayloadSample: JSON.stringify(req.body),
             status: "OPEN",
           },
         });
 
-        return res.status(400).json({
+        return res.status(isDuplicate ? 409 : 400).json({
           success: false,
           status: "REJECTED_PREFLIGHT",
           errors,
@@ -1242,6 +1258,11 @@ async function startServer() {
         },
       });
     } catch (e: any) {
+      if (e.code === "P2002" && e.meta?.target?.includes("client_invoice_id")) {
+        return res.status(409).json({
+          error: `Duplicate invoice: clientInvoiceNumber "${req.body.clientInvoiceNumber}" already exists for this tenant`,
+        });
+      }
       res.status(500).json({ error: e.message });
     }
   });

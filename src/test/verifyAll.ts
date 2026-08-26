@@ -282,6 +282,52 @@ async function runAllTests() {
   }
 
   // ------------------------------------------------------------------
+  // MODULE 2b: Database-Level Duplicate Invoice Protection
+  // ------------------------------------------------------------------
+  try {
+    const dupInvoiceNumber = `DUP-TEST-${Date.now()}`;
+    const dupInvoiceData = {
+      tenantId: "tenant_qbo",
+      clientInvoiceId: dupInvoiceNumber,
+      customerCode: "CUST-DUP-TEST",
+      customerName: "Duplicate Test Customer",
+      issueDate: new Date("2026-08-01"),
+      subtotal: 1000,
+      taxAmount: 75,
+      totalAmount: 1075,
+    };
+    await prisma.invoice.create({ data: dupInvoiceData });
+
+    let duplicateRejected = false;
+    let rejectionDetail = "";
+    try {
+      await prisma.invoice.create({ data: dupInvoiceData });
+    } catch (e: any) {
+      duplicateRejected = e.code === "P2002";
+      rejectionDetail = e.code || e.message;
+    }
+    assert(
+      "Database Integrity",
+      "Duplicate clientInvoiceId Rejected Per Tenant",
+      "EdgeCase",
+      duplicateRejected,
+      "A second invoice with the same (tenantId, clientInvoiceId) is rejected by the database unique constraint",
+      duplicateRejected
+        ? `Second insert correctly rejected (${rejectionDetail})`
+        : "Second insert with a duplicate clientInvoiceId was NOT rejected",
+    );
+  } catch (err: any) {
+    assert(
+      "Database Integrity",
+      "Duplicate Invoice Constraint Test Execution",
+      "Runtime",
+      false,
+      "No unhandled exceptions",
+      err.message,
+    );
+  }
+
+  // ------------------------------------------------------------------
   // MODULE 3: Connector Adapter Engine (QBO, Sage, Xero, NRS, SAP)
   // ------------------------------------------------------------------
   try {
