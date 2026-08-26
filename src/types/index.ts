@@ -16,7 +16,7 @@ export interface Tenant {
   lastSyncAt: string;
 }
 
-export type InvoiceKind = 'B2B' | 'B2C' | 'EXPORT';
+export type InvoiceKind = 'B2B' | 'B2C' | 'B2G' | 'EXPORT';
 export type InvoiceType = 'STANDARD' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
 export type InvoiceStatus = 'QUEUED' | 'PENDING_NRS_STAMP' | 'APPROVED' | 'SIGNED' | 'REJECTED' | 'CANCELLED';
 export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'REJECTED_BANK';

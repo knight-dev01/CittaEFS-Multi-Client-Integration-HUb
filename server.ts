@@ -1053,9 +1053,12 @@ async function startServer() {
       if (!clientInvoiceNumber) errors.push("clientInvoiceNumber is mandatory");
       if (!issueDate) errors.push("issueDate is mandatory (YYYY-MM-DD)");
 
-      if (invoiceKind === "B2B" && (!customerTin || customerTin.length < 8)) {
+      if (
+        (invoiceKind === "B2B" || invoiceKind === "B2G") &&
+        (!customerTin || customerTin.length < 8)
+      ) {
         errors.push(
-          "B2B Invoices require a valid Tax Identification Number (customerTin)",
+          `${invoiceKind} Invoices require a valid Tax Identification Number (customerTin)`,
         );
       }
 

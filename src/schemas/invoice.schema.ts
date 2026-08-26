@@ -24,7 +24,7 @@ export const invoiceIngestionSchema = z
     invoiceType: z
       .enum(["STANDARD", "CREDIT_NOTE", "DEBIT_NOTE", "CANCELLATION"])
       .default("STANDARD"),
-    invoiceKind: z.enum(["B2B", "B2C", "EXPORT"]).default("B2B"),
+    invoiceKind: z.enum(["B2B", "B2C", "B2G", "EXPORT"]).default("B2B"),
     issueDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Issue date must be YYYY-MM-DD"),
@@ -41,9 +41,10 @@ export const invoiceIngestionSchema = z
   })
   .transform((data) => {
     // CRITICAL BUSINESS RULE 1: Auto-downgrade tax classification to B2C if tax_id / customerTin is missing/empty
+    // B2G behaves as B2B for this customer-registration gate (same TIN requirement).
     let effectiveKind = data.invoiceKind;
     if (
-      effectiveKind === "B2B" &&
+      (effectiveKind === "B2B" || effectiveKind === "B2G") &&
       (!data.customerTin || data.customerTin.trim().length === 0)
     ) {
       effectiveKind = "B2C";

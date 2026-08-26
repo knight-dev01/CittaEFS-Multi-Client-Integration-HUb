@@ -13,7 +13,7 @@ export interface CittaEfsRequestPayload {
   tenantId: string;
   clientInvoiceNumber: string;
   invoiceType: "STANDARD" | "CREDIT_NOTE" | "DEBIT_NOTE" | "CANCELLATION";
-  invoiceKind: "B2B" | "B2C" | "EXPORT";
+  invoiceKind: "B2B" | "B2C" | "B2G" | "EXPORT";
   customerCode: string;
   customerName: string;
   customerTin?: string;

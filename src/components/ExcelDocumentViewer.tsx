@@ -26,7 +26,7 @@ import {
 export interface SpreadsheetRow {
   id: string;
   clientInvoiceNumber: string;
-  invoiceKind: 'B2B' | 'B2C' | 'EXPORT';
+  invoiceKind: 'B2B' | 'B2C' | 'B2G' | 'EXPORT';
   issueDate: string;
   customerCode: string;
   customerName: string;
@@ -357,7 +357,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             clientCustomerCode: row.customerCode,
             name: row.customerName,
             tin: row.customerTin || 'N/A',
-            isB2B: row.invoiceKind === 'B2B',
+            isB2B: row.invoiceKind === 'B2B' || row.invoiceKind === 'B2G',
             email: `billing@${row.customerCode.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
             address: 'Commercial Business Park',
             city: 'Nairobi'
@@ -713,6 +713,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                       >
                         <option value="B2B">B2B</option>
                         <option value="B2C">B2C</option>
+                        <option value="B2G">B2G</option>
                         <option value="EXPORT">EXPORT</option>
                       </select>
                     </td>

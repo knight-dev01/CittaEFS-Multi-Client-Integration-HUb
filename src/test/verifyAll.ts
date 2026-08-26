@@ -204,6 +204,34 @@ async function runAllTests() {
         : "Failed validation",
     );
 
+    // Edge Case: B2G Invoices Are Accepted (spec: complete kind list is B2B, B2C, B2G)
+    const b2gInvoice = { ...validInvoice, invoiceKind: "B2G" as const };
+    const b2gResult = invoiceIngestionSchema.safeParse(b2gInvoice);
+    assert(
+      "Canonical Schema",
+      "B2G Invoice Kind Accepted",
+      "EdgeCase",
+      b2gResult.success && b2gResult.data.invoiceKind === "B2G",
+      "Schema accepts invoiceKind B2G and preserves it when a TIN is present",
+      b2gResult.success
+        ? `Evaluated kind: ${b2gResult.data.invoiceKind}`
+        : JSON.stringify(b2gResult.error?.issues),
+    );
+
+    // Edge Case: B2G Auto-Downgrade to B2C when Tax PIN is missing (behaves as B2B for the registration gate)
+    const b2gNoPinInvoice = { ...validInvoice, invoiceKind: "B2G" as const, customerTin: "" };
+    const b2gNoPinResult = invoiceIngestionSchema.safeParse(b2gNoPinInvoice);
+    assert(
+      "Canonical Schema",
+      "B2G Behaves As B2B For Customer Registration Gate",
+      "EdgeCase",
+      b2gNoPinResult.success && b2gNoPinResult.data.invoiceKind === "B2C",
+      "Auto-downgrades invoiceKind to B2C when customerTin is empty, same as B2B",
+      b2gNoPinResult.success
+        ? `Evaluated kind: ${b2gNoPinResult.data.invoiceKind}`
+        : "Failed validation",
+    );
+
     // Edge Case: Empty Line Items
     const emptyLineInvoice = { ...validInvoice, lineItems: [] };
     const emptyLineResult = invoiceIngestionSchema.safeParse(emptyLineInvoice);

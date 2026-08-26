@@ -12,7 +12,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
   const { activeTenant, transmitInvoice } = useHub();
 
   const [invNum, setInvNum] = useState(`INV-TEST-${Math.floor(1000 + Math.random() * 9000)}`);
-  const [kind, setKind] = useState<'B2B' | 'B2C'>('B2B');
+  const [kind, setKind] = useState<'B2B' | 'B2C' | 'B2G'>('B2B');
   const [type, setType] = useState<'STANDARD' | 'CREDIT_NOTE' | 'DEBIT_NOTE'>('STANDARD');
   const [custName, setCustName] = useState('');
   const [custTin, setCustTin] = useState('P019283746Z');
@@ -69,7 +69,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
       issueDate: new Date().toISOString().substring(0, 10),
       customerCode: 'CUST-TEST-001',
       customerName: custName,
-      customerTin: kind === 'B2B' ? custTin : undefined,
+      customerTin: kind === 'B2B' || kind === 'B2G' ? custTin : undefined,
       lineItems
     };
 
@@ -123,6 +123,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
               >
                 <option value="B2B">B2B (Corporate)</option>
                 <option value="B2C">B2C (Retail)</option>
+                <option value="B2G">B2G (Government)</option>
               </select>
             </div>
 
@@ -152,7 +153,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
               />
             </div>
 
-            {kind === 'B2B' && (
+            {(kind === 'B2B' || kind === 'B2G') && (
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Tax ID (TIN) *</label>
                 <input

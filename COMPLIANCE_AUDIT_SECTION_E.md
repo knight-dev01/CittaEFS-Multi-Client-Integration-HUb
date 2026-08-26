@@ -19,7 +19,7 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 ## Top risks
 
 1. **VAT is hardcoded at 16% almost everywhere it defaults**, not Nigeria's actual 7.5% standard rate — which is also the rate the spec's own example row uses. One of the source comments literally reads *"Default VAT rate for Kenya (16%)"*. This looks like an unconverted leftover from a Kenyan build, not a considered choice for an NRS (Nigeria) integration.
-2. **B2G cannot be submitted at all.** The spec's complete kind list is B2B / B2C / B2G, but every type and validator in the codebase only allows `B2B | B2C | EXPORT`. A request with `invoiceKind: "B2G"` is rejected outright.
+2. ~~**B2G cannot be submitted at all.**~~ **FIXED 2026-08-26.** `InvoiceKind` now includes `B2G` across the type system, zod schema, CittaEFS client, and server-side TIN gate; B2G behaves as B2B for the customer-registration/TIN gate as the spec requires. See Classification #2–#3 below.
 3. **Customer and Item templates are missing spec-mandatory columns entirely** — no `Country` field, no `Unit Code` field, no `ItemName` field, and nowhere to store the CittaEFS-issued customer ID the spec says must be persisted after registration.
 4. **Gateway credentials are global, not per-tenant**, despite the `Tenant` model already having `cittaApiKey` / `cittaApiSecretEncrypted` columns for exactly this — they're simply never read. Every tenant's invoices are signed with one shared `CITTAEFS_API_KEY`.
 5. **No duplicate-invoice protection.** `clientInvoiceId` is indexed but not unique in the database, and the invoice-creation endpoint does no duplicate check — contradicting the spec's "yes, critical" answer on duplicate detection.
@@ -32,9 +32,9 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 | Customer | 3 | 0 | 7 | 1 |
 | Item | 3 | 2 | 3 | 0 |
 | Invoice & tax | 4 | 1 | 7 | 0 |
-| Classification | 1 | 2 | 2 | 0 |
+| Classification | 3 | 2 | 0 | 0 |
 | Interface (answered items only) | 2 | 0 | 2 | 0 |
-| **Total** | **13** | **5** | **21** | **1** |
+| **Total** | **15** | **5** | **19** | **1** |
 
 Validation Rules and Samples contribute zero scored items — both sheets are effectively unfilled in the spec (see those sections below). Most of Interface is also unfilled (Phase 5, marked "not needed to start the build").
 
@@ -95,8 +95,8 @@ The spec calls this "the most important sheet in this workbook."
 | # | Spec requirement | Status | Evidence | Note |
 |---|---|---|---|---|
 | 1 | Kind is inferred from the buyer, driven by TIN presence | PASS | `src/schemas/invoice.schema.ts:43-50` | Auto-downgrades `B2B → B2C` when TIN is missing/empty |
-| 2 | Complete kind list: B2B, B2C, B2G | **FAIL (critical)** | `src/types/index.ts:19`, `src/schemas/invoice.schema.ts:27` | `InvoiceKind` is `'B2B' \| 'B2C' \| 'EXPORT'` — B2G doesn't exist anywhere in the codebase. Submitting `invoiceKind: "B2G"` is rejected by the zod schema outright |
-| 3 | B2G behaves as B2B for the customer registration gate | FAIL (moot) | — | Can't be true or false — B2G cannot be represented in the first place |
+| 2 | Complete kind list: B2B, B2C, B2G | **PASS (fixed 2026-08-26)** | `src/types/index.ts:19`, `src/schemas/invoice.schema.ts:27` | `InvoiceKind` is now `'B2B' \| 'B2C' \| 'B2G' \| 'EXPORT'`; zod enum, `cittaEfsClient.ts`, and the manual invoice-entry UI (`NewInvoiceModal.tsx`, `ExcelDocumentViewer.tsx`) all accept `B2G` |
+| 3 | B2G behaves as B2B for the customer registration gate | **PASS (fixed 2026-08-26)** | `src/schemas/invoice.schema.ts:44-50`, `server.ts:1056-1062` | TIN-required gate and the auto-downgrade-to-B2C-on-missing-TIN rule now apply to `B2B \| B2G` symmetrically in both the zod transform and the server pre-flight check |
 | 4 | Buyer TIN never permitted on a B2C invoice | FAIL | `server.ts:1140-1163`, `src/schemas/invoice.schema.ts` | Enforced only inside the dead `efs-normalization.ts` module (see §3). The live invoice-creation path stores whatever `customerTin` is submitted regardless of `invoiceKind` |
 | 5 | TIN format check gating the B2B/B2C decision | PARTIAL | `server.ts:1056` | Only checks `customerTin.length < 8`, not the spec's stated 10–14 character range |
 
