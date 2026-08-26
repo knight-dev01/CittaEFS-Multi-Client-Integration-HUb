@@ -1175,6 +1175,12 @@ async function startServer() {
       );
       const grandTotal = subtotal + totalVat;
 
+      // A buyer TIN is never permitted on a B2C invoice (spec: it would weaken
+      // the B2B/B2C misclassification alert) -- strip it regardless of whether
+      // the caller mistakenly included one alongside invoiceKind: "B2C".
+      const effectiveCustomerTin =
+        invoiceKind === "B2C" ? undefined : customerTin || undefined;
+
       // Insert as PENDING_NRS_STAMP — the real IRN/QR only exist once the queue worker
       // gets a response back from the CittaEFS Gateway (same pipeline QBO invoices use).
       const rawNewInvoice = await prisma.invoice.create({
@@ -1186,7 +1192,7 @@ async function startServer() {
           issueDate: new Date(issueDate || Date.now()),
           customerCode: customerCode || "CUST-CITTA-GENERIC",
           customerName: customerName || "Valued Client",
-          customerTin: customerTin || null,
+          customerTin: effectiveCustomerTin || null,
           currency: "NGN",
           subtotal,
           taxAmount: totalVat,
@@ -1211,7 +1217,7 @@ async function startServer() {
         issueDate: issueDate || new Date().toISOString().substring(0, 10),
         customerCode: customerCode || "CUST-CITTA-GENERIC",
         customerName: customerName || "Valued Client",
-        customerTin: customerTin || undefined,
+        customerTin: effectiveCustomerTin,
         originalIrn: originalIrn || undefined,
         lineItems: processedLineItems.map((li: any) => ({
           itemCode: li.itemCode,

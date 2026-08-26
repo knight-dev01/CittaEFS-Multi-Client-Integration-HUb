@@ -257,6 +257,26 @@ async function runAllTests() {
         : JSON.stringify(noVatRateResult.error?.issues),
     );
 
+    // Edge Case: Buyer TIN Is Never Permitted On A B2C Invoice, Even If Submitted
+    const b2cWithTinInvoice = {
+      ...validInvoice,
+      invoiceKind: "B2C" as const,
+      customerTin: "P019283746Z",
+    };
+    const b2cWithTinResult = invoiceIngestionSchema.safeParse(b2cWithTinInvoice);
+    assert(
+      "Canonical Schema",
+      "B2C Invoice Never Carries A Buyer TIN",
+      "EdgeCase",
+      b2cWithTinResult.success &&
+        b2cWithTinResult.data.invoiceKind === "B2C" &&
+        !b2cWithTinResult.data.customerTin,
+      "Schema strips customerTin whenever the effective invoiceKind is B2C, even if one was submitted",
+      b2cWithTinResult.success
+        ? `Stripped: kind=${b2cWithTinResult.data.invoiceKind}, customerTin=${b2cWithTinResult.data.customerTin}`
+        : JSON.stringify(b2cWithTinResult.error?.issues),
+    );
+
     // Edge Case: Empty Line Items
     const emptyLineInvoice = { ...validInvoice, lineItems: [] };
     const emptyLineResult = invoiceIngestionSchema.safeParse(emptyLineInvoice);

@@ -50,6 +50,13 @@ export const invoiceIngestionSchema = z
       effectiveKind = "B2C";
     }
 
+    // CRITICAL BUSINESS RULE 1b: A buyer TIN is never permitted on a B2C invoice
+    // (spec: it would weaken the B2B/B2C misclassification alert). Strip it
+    // regardless of whether B2C was submitted directly or reached via the
+    // downgrade above.
+    const effectiveCustomerTin =
+      effectiveKind === "B2C" ? undefined : data.customerTin;
+
     // CRITICAL BUSINESS RULE 2: Compute line item amounts & default classification codes
     const transformedLineItems = data.lineItems.map((item) => {
       const qty = item.quantity;
@@ -104,6 +111,7 @@ export const invoiceIngestionSchema = z
     return {
       ...data,
       invoiceKind: effectiveKind,
+      customerTin: effectiveCustomerTin,
       lineItems: transformedLineItems,
       subtotal,
       totalVat,
