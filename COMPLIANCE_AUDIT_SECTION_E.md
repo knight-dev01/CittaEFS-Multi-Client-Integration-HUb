@@ -30,11 +30,11 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 | Section | Pass | Partial | Fail | Not verified |
 |---|---|---|---|---|
 | Customer | 7 | 0 | 3 | 1 |
-| Item | 6 | 1 | 1 | 0 |
+| Item | 7 | 1 | 0 | 0 |
 | Invoice & tax | 5 | 1 | 6 | 0 |
 | Classification | 4 | 1 | 0 | 0 |
 | Interface (answered items only) | 4 | 0 | 0 | 0 |
-| **Total** | **26** | **3** | **10** | **1** |
+| **Total** | **27** | **3** | **9** | **1** |
 
 Validation Rules and Samples contribute zero scored items — both sheets are effectively unfilled in the spec (see those sections below). Most of Interface is also unfilled (Phase 5, marked "not needed to start the build").
 
@@ -66,7 +66,7 @@ Validation Rules and Samples contribute zero scored items — both sheets are ef
 | 4 | `Unit Code` column, mandatory (UN/ECE Rec 20) | **PASS (fixed 2026-08-26)** | `prisma/schema.prisma` (`Item.unitCode`, default `"EA"`), `src/components/ItemDictionaryTab.tsx` | Column added with the spec's own stated default (EA = Each); exposed as a required field in the Add Item form |
 | 5 | `HsorServiceCode`, mandatory, "no catch-all code" | PARTIAL | `src/components/ExcelDocumentViewer.tsx:321` | Field exists, but a missing code is silently defaulted to `'HS-8471.30'` (a real laptop HS code) rather than rejected — the opposite of "no catch-all" |
 | 6 | Default unit of measure is `EA` (Each) | PASS | `prisma/schema.prisma` (`Item.unitCode @default("EA")`) | Correct value, now a real DB default rather than a constant in the dead `efs-normalization.ts` module (deleted — see §3) |
-| 7 | Price lives on the invoice line, not the item | FAIL | `prisma/schema.prisma:62` | `Item.unitPrice` exists directly on the item record, contradicting the spec answer |
+| 7 | Price lives on the invoice line, not the item | **PASS (fixed 2026-08-27)** | `prisma/schema.prisma` (`Item` model), migration `20260827100000_item_drop_unit_price` | Dropped `Item.unitPrice` entirely — it was a hardcoded `1000.0` placeholder on creation, never updated, and never read by any pricing logic (`InvoiceLineItem.unitPrice` is untouched and remains the only real price, sourced entirely from user input). Also removed a live write to the now-dropped column in `qboService.ts`'s QBO item auto-registration path |
 | 8 | Currency is not carried on the item | PASS | `prisma/schema.prisma:57-67` | No currency field on `Item` |
 
 ## 3. Invoice template, tax & totals

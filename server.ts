@@ -1871,7 +1871,6 @@ async function startServer() {
             name: name || description || "Catalog Item",
             description: description || "Catalog Item",
             unitCode: unitCode || "EA",
-            unitPrice: 1000.0,
             hsOrServiceCode: hsOrServiceCode || "HS-8471.30",
             categoryType: "GOODS",
             defaultVatRate:

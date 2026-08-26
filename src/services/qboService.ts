@@ -615,7 +615,6 @@ async function upsertQboMasterData(
           tenantId,
           clientSku: item.itemCode,
           description: item.description,
-          unitPrice: item.unitPrice,
           hsOrServiceCode: item.hsOrServiceCode,
           categoryType: /^SRV|^SERV/.test(item.hsOrServiceCode)
             ? "SERVICE"

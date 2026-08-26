@@ -64,7 +64,6 @@ model Item {
   name            String?
   description     String
   unitCode        String   @default("EA") @map("unit_code")
-  unitPrice       Float    @map("unit_price")
   hsOrServiceCode String   @map("hs_or_service_code")
   categoryType    String   @default("GOODS") @map("category_type")
   defaultVatRate  Float    @default(7.5) @map("default_vat_rate")
