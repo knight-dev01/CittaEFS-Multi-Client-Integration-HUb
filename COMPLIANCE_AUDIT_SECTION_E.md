@@ -20,7 +20,7 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 
 1. ~~**VAT is hardcoded at 16% almost everywhere it defaults.**~~ **FIXED 2026-08-26.** Added a per-tenant `defaultVatRate` (migration `20260826130000_tenant_default_vat_rate`, defaults to 7.5% — Nigeria's NRS standard rate), configurable via Settings → Tenant Gateway & Retry Policies (`PATCH /api/tenants/:id`). The invoice line-item fallback (`server.ts`) and new-item creation default now read the tenant's configured rate instead of a hardcoded `16`; the zod schema default, `referenceData.ts` catalog, and the dead `efs-normalization.ts` constant were also corrected from 16 to 7.5. See Invoice & tax #11 below.
 2. ~~**B2G cannot be submitted at all.**~~ **FIXED 2026-08-26.** `InvoiceKind` now includes `B2G` across the type system, zod schema, CittaEFS client, and server-side TIN gate; B2G behaves as B2B for the customer-registration/TIN gate as the spec requires. See Classification #2–#3 below.
-3. ~~**Customer and Item templates are missing spec-mandatory columns entirely.**~~ **FIXED 2026-08-26.** Added `Customer.country`, `Customer.cittaCustomerId`, `Item.name` (ItemName), and `Item.unitCode` (migration `20260826140000_customer_item_spec_columns`, with `Item.name` backfilled from `description` for existing rows). Wired into the manual-entry forms (`CustomerSyncTab.tsx`, `ItemDictionaryTab.tsx`) and the Excel-import auto-registration path. The previously-fabricated `cittaCustomerCode` (a random string masquerading as a real CittaEFS ID) is gone — the UI now honestly shows "Not yet registered" until a real registration flow populates it. See Customer #7–#8 and Item #2/#4 below.
+3. ~~**Customer and Item templates are missing spec-mandatory columns entirely.**~~ **FIXED 2026-08-26.** Added `Customer.country`, `Customer.cittaCustomerId`, `Item.name` (ItemName), and `Item.unitCode` (migration `20260826140000_customer_item_spec_columns`, with `Item.name` backfilled from `description` for existing rows), and renamed the generic `Customer.address` column to `street` (migration `20260826150000_customer_address_to_street`) so street/city/country are three real, distinct fields matching the spec's column grid. Wired into the manual-entry forms (`CustomerSyncTab.tsx`, `ItemDictionaryTab.tsx`) and the Excel-import auto-registration path. The previously-fabricated `cittaCustomerCode` (a random string masquerading as a real CittaEFS ID) is gone — the UI now honestly shows "Not yet registered" until a real registration flow populates it. See Customer #7–#8 and Item #2/#4 below.
 4. **Gateway credentials are global, not per-tenant**, despite the `Tenant` model already having `cittaApiKey` / `cittaApiSecretEncrypted` columns for exactly this — they're simply never read. Every tenant's invoices are signed with one shared `CITTAEFS_API_KEY`.
 5. **No duplicate-invoice protection.** `clientInvoiceId` is indexed but not unique in the database, and the invoice-creation endpoint does no duplicate check — contradicting the spec's "yes, critical" answer on duplicate detection.
 6. **The one module that gets several rules right is never called.** `src/normalization/efs-normalization.ts` correctly strips TIN on B2C invoices and computes tax — but nothing in the app imports it. It's dead code; its correctness has zero effect on what actually runs.
@@ -29,12 +29,12 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 
 | Section | Pass | Partial | Fail | Not verified |
 |---|---|---|---|---|
-| Customer | 4 | 1 | 5 | 1 |
+| Customer | 5 | 0 | 5 | 1 |
 | Item | 6 | 1 | 1 | 0 |
 | Invoice & tax | 5 | 1 | 6 | 0 |
 | Classification | 3 | 2 | 0 | 0 |
 | Interface (answered items only) | 2 | 0 | 2 | 0 |
-| **Total** | **20** | **5** | **14** | **1** |
+| **Total** | **21** | **4** | **14** | **1** |
 
 Validation Rules and Samples contribute zero scored items — both sheets are effectively unfilled in the spec (see those sections below). Most of Interface is also unfilled (Phase 5, marked "not needed to start the build").
 
@@ -51,7 +51,7 @@ Validation Rules and Samples contribute zero scored items — both sheets are ef
 | 5 | TIN mandatory for B2B, optional for B2C | FAIL | `server.ts:1900` | When `isB2B` is true and no TIN is supplied, the code fabricates a placeholder TIN (`"P000000000X"`) instead of rejecting the record |
 | 6 | Customer code uniquely identifies a customer | PASS | `prisma/schema.prisma:40,53` | `clientSystemCustId` indexed per tenant |
 | 7 | CittaEFS-issued `CittaEFS_Customer_ID` must be stored after registration | **PASS (fixed 2026-08-26)** | `prisma/schema.prisma` (`Customer.cittaCustomerId`), `server.ts` (`formatCustomer`) | Column now exists; `formatCustomer` returns the real value (or null) instead of fabricating a fake `CITTA-CUST-xxxxxx` string. No live registration endpoint exists yet to populate it (see Interface #3), so it reads null until one does |
-| 8 | Required address fields: street, city, country | PARTIAL | `prisma/schema.prisma` (`Customer.country`), `src/components/CustomerSyncTab.tsx` | `city` and the new `country` column/form field are now real; `street` still isn't split out from the freeform `address` field |
+| 8 | Required address fields: street, city, country | **PASS (fixed 2026-08-26)** | `prisma/schema.prisma` (`Customer.street`, `.city`, `.country`), `src/components/CustomerSyncTab.tsx` | The generic `address` column was renamed to `street` (migration `20260826150000_customer_address_to_street`) and `country` added; all three are now real, distinct fields exposed in the Add Customer form |
 | 9 | Postcode required for B2B | FAIL | `prisma/schema.prisma:37-55` | No postcode field anywhere in the model |
 | 10 | `CCEmail` optional, semicolon-separated secondary recipients | FAIL | `server.ts:1879-1888` | Field isn't in the request body destructuring or the DB model — silently dropped if present in an upload |
 | 11 | Update semantics: all fields but customer code mutable | NOT VERIFIED | — | No dedicated customer update/PUT endpoint was located in this pass |

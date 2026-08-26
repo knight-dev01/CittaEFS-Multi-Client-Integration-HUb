@@ -600,7 +600,7 @@ async function upsertQboMasterData(
         companyName: customerName || "QuickBooks Customer",
         taxId: customerTin || null,
         taxClassification: customerTin ? "B2B" : "B2C",
-        address: "Synced from QuickBooks Online",
+        street: "Synced from QuickBooks Online",
         city: "Nairobi",
       },
     });

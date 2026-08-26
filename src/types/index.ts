@@ -87,7 +87,7 @@ export interface CustomerProfile {
   name: string;
   tin: string;
   isB2B: boolean;
-  address: string;
+  street: string;
   city: string;
   country: string | null;
   email: string;

@@ -28,7 +28,7 @@ export function CustomerSyncTab() {
   const [isB2B, setIsB2B] = useState(true);
   const [clientCode, setClientCode] = useState('');
   const [email, setEmail] = useState('');
-  const [address, setAddress] = useState('');
+  const [street, setStreet] = useState('');
   const [country, setCountry] = useState('NG');
 
   const tenantCustomers = customers.filter(c => c.tenantId === activeTenant.id);
@@ -56,7 +56,7 @@ export function CustomerSyncTab() {
       isB2B,
       clientCustomerCode: clientCode || `CUST-${Math.floor(1000 + Math.random() * 9000)}`,
       email: email || 'contact@client.com',
-      address: address || 'Nairobi Business District',
+      street: street || 'Nairobi Business District',
       city: 'Nairobi',
       country: country || 'NG',
       phone: '+254700000000'
@@ -160,7 +160,7 @@ export function CustomerSyncTab() {
                 <th className="py-3 px-4">Customer Name</th>
                 <th className="py-3 px-4">Tax ID (TIN)</th>
                 <th className="py-3 px-4">Kind</th>
-                <th className="py-3 px-4">Billing Address</th>
+                <th className="py-3 px-4">Street</th>
                 <th className="py-3 px-4">Country</th>
                 <th className="py-3 px-4">TIN Validation</th>
                 <th className="py-3 px-4 text-right">Last Synced</th>
@@ -191,8 +191,8 @@ export function CustomerSyncTab() {
                         {c.isB2B ? 'B2B Corporate' : 'B2C Retail'}
                       </span>
                     </td>
-                    <td className="py-3 px-4 max-w-xs truncate text-slate-500" title={c.address}>
-                      {c.address}
+                    <td className="py-3 px-4 max-w-xs truncate text-slate-500" title={c.street}>
+                      {c.street}
                     </td>
                     <td className="py-3 px-4 font-mono text-slate-600 uppercase">
                       {c.country || <span className="italic text-slate-400 normal-case">Unknown</span>}
@@ -306,13 +306,13 @@ export function CustomerSyncTab() {
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">
-                  Billing Address (Street)
+                  Street *
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Plot 42, Industrial Avenue, Nairobi"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="e.g. Plot 42, Industrial Avenue"
+                  value={street}
+                  onChange={(e) => setStreet(e.target.value)}
                   className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 />
               </div>

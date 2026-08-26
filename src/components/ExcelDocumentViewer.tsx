@@ -359,7 +359,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             tin: row.customerTin || 'N/A',
             isB2B: row.invoiceKind === 'B2B' || row.invoiceKind === 'B2G',
             email: `billing@${row.customerCode.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
-            address: 'Commercial Business Park',
+            street: 'Commercial Business Park',
             city: 'Nairobi',
             country: 'NG'
           }, targetTenantId);

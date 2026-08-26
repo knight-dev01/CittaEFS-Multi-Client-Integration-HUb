@@ -43,7 +43,7 @@ model Customer {
   email              String?
   taxId              String?  @map("tax_id")
   taxClassification  String   @default("B2B") @map("tax_classification")
-  address            String?
+  street             String?
   city               String?
   country            String?
   cittaCustomerId    String?  @map("citta_customer_id")
