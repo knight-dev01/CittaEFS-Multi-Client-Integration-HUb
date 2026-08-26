@@ -100,12 +100,12 @@ export function calculateTotalAmount(
 }
 
 /**
- * Default VAT rate for Kenya (16%)
+ * Default standard VAT rate for Nigeria (7.5%)
  */
-export const DEFAULT_VAT_RATE = 16;
+export const DEFAULT_VAT_RATE = 7.5;
 
 /**
- * Default currency for Kenya
+ * Default currency for Nigeria
  */
 export const DEFAULT_CURRENCY = "NGN";
 

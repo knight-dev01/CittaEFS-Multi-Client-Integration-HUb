@@ -927,15 +927,20 @@ async function startServer() {
   app.patch("/api/tenants/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { companyName, tin, platformType, marketTier } = req.body;
+      const { companyName, tin, platformType, marketTier, defaultVatRate } =
+        req.body;
 
       const existing = await prisma.tenant.findUnique({ where: { id } });
       if (!existing) {
         return res.status(404).json({ success: false, error: "Tenant not found" });
       }
 
-      const trimmedName = (companyName || "").trim();
-      const normalizedTin = (tin || "").trim().toUpperCase();
+      const companyNameProvided = companyName !== undefined;
+      const trimmedName = companyNameProvided
+        ? companyName.trim()
+        : existing.companyName;
+      const normalizedTin =
+        tin !== undefined ? tin.trim().toUpperCase() : existing.tin;
 
       const errors: string[] = [];
       if (trimmedName.length < 2 || trimmedName.length > 100) {
@@ -944,6 +949,17 @@ async function startServer() {
       if (!/^[A-Z]\d{9}[A-Z]$/.test(normalizedTin)) {
         errors.push("TIN must be one letter, 9 digits, one letter (e.g. P051123456Z).");
       }
+
+      let normalizedVatRate = existing.defaultVatRate;
+      if (defaultVatRate !== undefined) {
+        const rate = Number(defaultVatRate);
+        if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+          errors.push("Default VAT rate must be a number between 0 and 100.");
+        } else {
+          normalizedVatRate = rate;
+        }
+      }
+
       if (errors.length > 0) {
         return res.status(400).json({ success: false, errors });
       }
@@ -951,11 +967,12 @@ async function startServer() {
       const updated = await prisma.tenant.update({
         where: { id },
         data: {
-          name: trimmedName,
+          name: companyNameProvided ? trimmedName : existing.name,
           companyName: trimmedName,
           tin: normalizedTin,
           platformType: platformType || existing.platformType,
           marketTier: marketTier || existing.marketTier,
+          defaultVatRate: normalizedVatRate,
           monthlyAllowance:
             marketTier === "Enterprise"
               ? 10000
@@ -1085,7 +1102,7 @@ async function startServer() {
           const vatRate =
             li.vatRate !== undefined
               ? Number(li.vatRate)
-              : Number(mapping?.defaultVatRate || 16);
+              : Number(mapping?.defaultVatRate ?? tenant.defaultVatRate);
           const vatAmount = (taxable * vatRate) / 100;
           const totalAmount = taxable + vatAmount;
 
@@ -1797,6 +1814,9 @@ async function startServer() {
       const existing = await prisma.item.findFirst({
         where: { tenantId: tId, clientSku: sku },
       });
+      const owningTenant = await prisma.tenant.findUnique({
+        where: { id: tId },
+      });
 
       if (existing) {
         item = await prisma.item.update({
@@ -1820,7 +1840,9 @@ async function startServer() {
             hsOrServiceCode: hsOrServiceCode || "HS-8471.30",
             categoryType: "GOODS",
             defaultVatRate:
-              defaultVatRate !== undefined ? Number(defaultVatRate) : 16.0,
+              defaultVatRate !== undefined
+                ? Number(defaultVatRate)
+                : (owningTenant?.defaultVatRate ?? 7.5),
           },
         });
       }

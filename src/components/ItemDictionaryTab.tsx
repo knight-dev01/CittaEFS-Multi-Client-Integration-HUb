@@ -27,7 +27,7 @@ export function ItemDictionaryTab() {
   const [desc, setDesc] = useState('');
   const [category, setCategory] = useState('General Merchandise');
   const [selectedCode, setSelectedCode] = useState('HS-8471.30');
-  const [vatRate, setVatRate] = useState(16);
+  const [vatRate, setVatRate] = useState(activeTenant?.defaultVatRate ?? 7.5);
 
   const tenantMappings = itemMappings.filter(m => m.tenantId === activeTenant.id);
 

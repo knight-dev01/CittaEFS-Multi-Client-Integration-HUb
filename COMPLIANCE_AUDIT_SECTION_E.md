@@ -18,7 +18,7 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 
 ## Top risks
 
-1. **VAT is hardcoded at 16% almost everywhere it defaults**, not Nigeria's actual 7.5% standard rate — which is also the rate the spec's own example row uses. One of the source comments literally reads *"Default VAT rate for Kenya (16%)"*. This looks like an unconverted leftover from a Kenyan build, not a considered choice for an NRS (Nigeria) integration.
+1. ~~**VAT is hardcoded at 16% almost everywhere it defaults.**~~ **FIXED 2026-08-26.** Added a per-tenant `defaultVatRate` (migration `20260826130000_tenant_default_vat_rate`, defaults to 7.5% — Nigeria's NRS standard rate), configurable via Settings → Tenant Gateway & Retry Policies (`PATCH /api/tenants/:id`). The invoice line-item fallback (`server.ts`) and new-item creation default now read the tenant's configured rate instead of a hardcoded `16`; the zod schema default, `referenceData.ts` catalog, and the dead `efs-normalization.ts` constant were also corrected from 16 to 7.5. See Invoice & tax #11 below.
 2. ~~**B2G cannot be submitted at all.**~~ **FIXED 2026-08-26.** `InvoiceKind` now includes `B2G` across the type system, zod schema, CittaEFS client, and server-side TIN gate; B2G behaves as B2B for the customer-registration/TIN gate as the spec requires. See Classification #2–#3 below.
 3. **Customer and Item templates are missing spec-mandatory columns entirely** — no `Country` field, no `Unit Code` field, no `ItemName` field, and nowhere to store the CittaEFS-issued customer ID the spec says must be persisted after registration.
 4. **Gateway credentials are global, not per-tenant**, despite the `Tenant` model already having `cittaApiKey` / `cittaApiSecretEncrypted` columns for exactly this — they're simply never read. Every tenant's invoices are signed with one shared `CITTAEFS_API_KEY`.
@@ -31,10 +31,10 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 |---|---|---|---|---|
 | Customer | 3 | 0 | 7 | 1 |
 | Item | 3 | 2 | 3 | 0 |
-| Invoice & tax | 4 | 1 | 7 | 0 |
+| Invoice & tax | 5 | 1 | 6 | 0 |
 | Classification | 3 | 2 | 0 | 0 |
 | Interface (answered items only) | 2 | 0 | 2 | 0 |
-| **Total** | **15** | **5** | **19** | **1** |
+| **Total** | **16** | **5** | **18** | **1** |
 
 Validation Rules and Samples contribute zero scored items — both sheets are effectively unfilled in the spec (see those sections below). Most of Interface is also unfilled (Phase 5, marked "not needed to start the build").
 
@@ -83,7 +83,7 @@ Validation Rules and Samples contribute zero scored items — both sheets are ef
 | 8 | IRN format: 8–10 digits | FAIL | `src/services/cittaEfsClient.ts:232-238` | The fallback-generated IRN (used whenever the gateway response doesn't include one) is shaped `IRN-NRS-2026-123456` — not 8–10 digits |
 | 9 | QR payload should be base64 | FAIL | `src/services/cittaEfsClient.ts:242-244` | Returns a verification **URL string** (`https://nrs.portal.gov/verify?...`), not a base64 payload |
 | 10 | Rounding to 2 decimal places | PASS | `src/schemas/invoice.schema.ts:73-75` | Consistent `.toFixed(2)` |
-| 11 | VAT rate default | **FAIL (critical)** | `src/data/referenceData.ts:6-20`, `src/schemas/invoice.schema.ts:16`, `src/normalization/efs-normalization.ts:102-105`, `server.ts:1085,1820`, `prisma/schema.prisma:65` | Hardcoded to **16%** everywhere it defaults. Nigeria's actual standard VAT is 7.5% — also what the spec's own `Item Code Lists` example row states (`VAT-STD … 7.5%`). One source comment literally says *"Default VAT rate for Kenya (16%)"* |
+| 11 | VAT rate default | **PASS (fixed 2026-08-26)** | `prisma/schema.prisma` (`Tenant.defaultVatRate`, `Item.defaultVatRate`), `server.ts` (invoice line-item fallback + item creation), `src/schemas/invoice.schema.ts:16`, `src/components/SettingsTab.tsx` | Default is now 7.5% (Nigeria's NRS standard, matching the spec's `Item Code Lists` example row `VAT-STD … 7.5%`) and configurable per-tenant via Settings, rather than a hardcoded 16% left over from a Kenyan build |
 | 12 | Exempt/zero-rated items distinct from standard-rate | FAIL | `prisma/schema.prisma:65` | Only a flat numeric `defaultVatRate` — no semantic tax-category field, so "0% because exempt" and "0% because zero-rated" are indistinguishable |
 
 **Architecture note (not scored):** `src/normalization/efs-normalization.ts` (492 lines) is not imported by `server.ts` or any other live module — it is dead code. It happens to implement several rules more correctly than the live path (e.g. stripping customer TIN on non-B2B invoices), but none of that matters because it never runs.

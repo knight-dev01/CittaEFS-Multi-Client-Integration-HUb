@@ -13,6 +13,7 @@ export interface Tenant {
   onboardingStatus: 'SANDBOX_TESTING' | 'NRS_VERIFIED' | 'LIVE_PRODUCTION' | 'PENDING_MAPPING' | 'VERIFIED_READY';
   monthlyAllowance: number;
   monthlyUsed: number;
+  defaultVatRate: number;
   lastSyncAt: string;
 }
 

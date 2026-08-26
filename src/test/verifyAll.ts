@@ -232,6 +232,31 @@ async function runAllTests() {
         : "Failed validation",
     );
 
+    // Edge Case: VAT Rate Defaults To Nigeria's 7.5% Standard Rate, Not Kenya's 16%, When Omitted
+    const noVatRateInvoice = {
+      ...validInvoice,
+      lineItems: [
+        {
+          itemCode: "ITEM-NO-VAT",
+          description: "Line item with no explicit vatRate",
+          quantity: 1,
+          unitPrice: 1000,
+          hsOrServiceCode: "HS-8471.50",
+        },
+      ],
+    };
+    const noVatRateResult = invoiceIngestionSchema.safeParse(noVatRateInvoice);
+    assert(
+      "Canonical Schema",
+      "VAT Rate Defaults To Nigeria's 7.5% Standard Rate",
+      "EdgeCase",
+      noVatRateResult.success && noVatRateResult.data.lineItems[0].vatRate === 7.5,
+      "Schema defaults an omitted vatRate to 7.5 (NRS standard), not 16 (unconverted Kenya default)",
+      noVatRateResult.success
+        ? `Defaulted vatRate: ${noVatRateResult.data.lineItems[0].vatRate}`
+        : JSON.stringify(noVatRateResult.error?.issues),
+    );
+
     // Edge Case: Empty Line Items
     const emptyLineInvoice = { ...validInvoice, lineItems: [] };
     const emptyLineResult = invoiceIngestionSchema.safeParse(emptyLineInvoice);

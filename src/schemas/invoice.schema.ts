@@ -13,7 +13,7 @@ export const invoiceLineItemSchema = z.object({
     .enum(["HS_CODE", "SERVICE_CODE", "UNMAPPED"])
     .optional()
     .default("SERVICE_CODE"),
-  vatRate: z.number().min(0).max(100).default(16),
+  vatRate: z.number().min(0).max(100).default(7.5),
 });
 
 // Full Invoice Validation Schema
