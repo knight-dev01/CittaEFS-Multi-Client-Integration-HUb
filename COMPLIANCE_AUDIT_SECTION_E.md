@@ -29,12 +29,12 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 
 | Section | Pass | Partial | Fail | Not verified |
 |---|---|---|---|---|
-| Customer | 5 | 0 | 5 | 1 |
+| Customer | 7 | 0 | 3 | 1 |
 | Item | 6 | 1 | 1 | 0 |
 | Invoice & tax | 5 | 1 | 6 | 0 |
 | Classification | 4 | 1 | 0 | 0 |
 | Interface (answered items only) | 4 | 0 | 0 | 0 |
-| **Total** | **24** | **3** | **12** | **1** |
+| **Total** | **26** | **3** | **10** | **1** |
 
 Validation Rules and Samples contribute zero scored items — both sheets are effectively unfilled in the spec (see those sections below). Most of Interface is also unfilled (Phase 5, marked "not needed to start the build").
 
@@ -47,8 +47,8 @@ Validation Rules and Samples contribute zero scored items — both sheets are ef
 | 1 | File format .xlsx / .xls / .csv accepted | PASS | `src/components/ExcelDocumentViewer.tsx:252-269` | Uses the `xlsx` package for both string and binary buffers |
 | 2 | Sheet name must be exact, case-sensitive `Customer Template` | FAIL | `src/components/ExcelDocumentViewer.tsx:253,268` | Always reads `workbook.SheetNames[0]` — never checks the sheet's actual name |
 | 3 | Header row 1, first data row 2 | PASS | same file | Default `sheet_to_json` behavior |
-| 4 | TIN format: 10–14 alphanumeric characters | FAIL | `server.ts:1877-1909` (`POST /api/customers`) | No length or format check on `tin` anywhere in customer creation |
-| 5 | TIN mandatory for B2B, optional for B2C | FAIL | `server.ts:1900` | When `isB2B` is true and no TIN is supplied, the code fabricates a placeholder TIN (`"P000000000X"`) instead of rejecting the record |
+| 4 | TIN format: 10–14 alphanumeric characters | **PASS (fixed 2026-08-27)** | `server.ts` (`POST /api/customers`) | Rejects with 400 unless the TIN is 10–14 alphanumeric characters (when one is required or supplied); verified live in the browser |
+| 5 | TIN mandatory for B2B, optional for B2C | **PASS (fixed 2026-08-27)** | `server.ts` (`POST /api/customers`) | No longer fabricates a placeholder TIN (`"P000000000X"`) for B2B — rejects with 400 ("TIN is mandatory for B2B customers.") instead. B2C still defaults to `"N/A"` when omitted. Also fixed `CustomerSyncTab.tsx`'s save handler, which had no error handling at all (same silent-failure class of bug as the `NewInvoiceModal` one fixed under top risk #5) — it would now fail with zero feedback to the user once this validation started rejecting bad submissions |
 | 6 | Customer code uniquely identifies a customer | PASS | `prisma/schema.prisma:40,53` | `clientSystemCustId` indexed per tenant |
 | 7 | CittaEFS-issued `CittaEFS_Customer_ID` must be stored after registration | **PASS (fixed 2026-08-26)** | `prisma/schema.prisma` (`Customer.cittaCustomerId`), `server.ts` (`formatCustomer`) | Column now exists; `formatCustomer` returns the real value (or null) instead of fabricating a fake `CITTA-CUST-xxxxxx` string. No live registration endpoint exists yet to populate it (see Interface #3), so it reads null until one does |
 | 8 | Required address fields: street, city, country | **PASS (fixed 2026-08-26)** | `prisma/schema.prisma` (`Customer.street`, `.city`, `.country`), `src/components/CustomerSyncTab.tsx` | The generic `address` column was renamed to `street` (migration `20260826150000_customer_address_to_street`) and `country` added; all three are now real, distinct fields exposed in the Add Customer form |

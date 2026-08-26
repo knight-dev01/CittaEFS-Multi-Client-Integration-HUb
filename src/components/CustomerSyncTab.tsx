@@ -30,6 +30,8 @@ export function CustomerSyncTab() {
   const [email, setEmail] = useState('');
   const [street, setStreet] = useState('');
   const [country, setCountry] = useState('NG');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const tenantCustomers = customers.filter(c => c.tenantId === activeTenant.id);
 
@@ -50,21 +52,29 @@ export function CustomerSyncTab() {
   const handleSaveCustomer = async () => {
     if (!name) return;
 
-    await addCustomer({
-      name,
-      tin: isB2B ? tin : 'N/A',
-      isB2B,
-      clientCustomerCode: clientCode || `CUST-${Math.floor(1000 + Math.random() * 9000)}`,
-      email: email || 'contact@client.com',
-      street: street || 'Nairobi Business District',
-      city: 'Nairobi',
-      country: country || 'NG',
-      phone: '+254700000000'
-    });
+    setSaveError('');
+    setIsSaving(true);
+    try {
+      await addCustomer({
+        name,
+        tin: isB2B ? tin : 'N/A',
+        isB2B,
+        clientCustomerCode: clientCode || `CUST-${Math.floor(1000 + Math.random() * 9000)}`,
+        email: email || 'contact@client.com',
+        street: street || 'Nairobi Business District',
+        city: 'Nairobi',
+        country: country || 'NG',
+        phone: '+254700000000'
+      });
 
-    setIsAddModalOpen(false);
-    setName('');
-    setClientCode('');
+      setIsAddModalOpen(false);
+      setName('');
+      setClientCode('');
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save customer.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -231,7 +241,7 @@ export function CustomerSyncTab() {
                 Sync New Customer Profile
               </h3>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => { setIsAddModalOpen(false); setSaveError(''); }}
                 className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer font-medium"
               >
                 Cancel
@@ -288,6 +298,9 @@ export function CustomerSyncTab() {
                     onChange={(e) => setTin(e.target.value)}
                     className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
+                  <span className="text-[11px] text-slate-500 font-medium block mt-1">
+                    10 to 14 alphanumeric characters, no spaces or hyphens
+                  </span>
                 </div>
               )}
 
@@ -335,18 +348,26 @@ export function CustomerSyncTab() {
 
             </div>
 
+            {saveError && (
+              <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{saveError}</span>
+              </div>
+            )}
+
             <div className="pt-2 flex justify-end space-x-2">
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => { setIsAddModalOpen(false); setSaveError(''); }}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg cursor-pointer transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveCustomer}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors"
+                disabled={isSaving}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Customer Profile
+                {isSaving ? 'Saving...' : 'Save Customer Profile'}
               </button>
             </div>
 

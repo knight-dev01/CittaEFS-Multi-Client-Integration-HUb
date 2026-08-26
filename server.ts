@@ -1951,6 +1951,23 @@ async function startServer() {
       const custCode =
         clientCustomerCode || `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
 
+      // Spec: TIN is 10-14 alphanumeric characters, no spaces/hyphens; mandatory
+      // for B2B, optional for B2C.
+      const trimmedTin = typeof tin === "string" ? tin.trim() : "";
+      const tinFormatValid = /^[A-Za-z0-9]{10,14}$/.test(trimmedTin);
+
+      const errors: string[] = [];
+      if (isB2B && !trimmedTin) {
+        errors.push("TIN is mandatory for B2B customers.");
+      } else if (trimmedTin && !tinFormatValid) {
+        errors.push(
+          "TIN must be 10 to 14 alphanumeric characters, with no spaces or hyphens.",
+        );
+      }
+      if (errors.length > 0) {
+        return res.status(400).json({ success: false, errors });
+      }
+
       let rawCustomer: any;
       rawCustomer = await prisma.customer.create({
         data: {
@@ -1958,7 +1975,7 @@ async function startServer() {
           clientSystemCustId: custCode,
           companyName: name || "New Customer",
           email: email || "contact@client.com",
-          taxId: tin || (isB2B ? "P000000000X" : "N/A"),
+          taxId: trimmedTin || "N/A",
           taxClassification: isB2B ? "B2B" : "B2C",
           street: street || "Nairobi Business District",
           city: city || "Nairobi",
