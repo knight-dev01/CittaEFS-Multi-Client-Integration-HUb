@@ -467,6 +467,83 @@ async function runAllTests() {
       `Success: ${efsResponse.success}, IRN: ${efsResponse.irn}, QR URL: ${efsResponse.qrCodeUrl?.substring(0, 30)}...`,
     );
 
+    // 1b. Per-tenant credential isolation: the gateway request must carry the
+    // tenant's own DB-stored cittaApiKey, not the shared CITTAEFS_API_KEY env var.
+    const tenantRecord = await prisma.tenant.findUnique({
+      where: { id: "tenant_qbo" },
+      select: { cittaApiKey: true },
+    });
+    let perTenantKeyUsed = false;
+    let perTenantError: any = null;
+    try {
+      nock("https://ei-api.azurewebsites.net", {
+        reqheaders: { authorization: `Bearer ${tenantRecord?.cittaApiKey}` },
+      })
+        .post("/api/integration/gen/invoices")
+        .reply(() => {
+          perTenantKeyUsed = true;
+          return [
+            200,
+            {
+              totalInvoices: 1,
+              successCount: 1,
+              failedCount: 0,
+              errors: [],
+              items: [
+                {
+                  invoiceNumber: testInvoice.clientInvoiceNumber,
+                  irn: "IRN-NRS-2026-PERTENANT",
+                  qrCodeUrl:
+                    "https://nrs.portal.gov/verify?irn=IRN-NRS-2026-PERTENANT",
+                  csid: "CSID-PERTENANT",
+                },
+              ],
+            },
+          ];
+        });
+      await cittaEfsClient.signAndStampInvoice(testInvoice);
+    } catch (e) {
+      perTenantError = e;
+    }
+    assert(
+      "CittaEFS Gateway Client",
+      "Per-Tenant Gateway Credential Isolation",
+      "Security",
+      perTenantKeyUsed &&
+        !perTenantError &&
+        Boolean(tenantRecord?.cittaApiKey) &&
+        tenantRecord!.cittaApiKey !== process.env.CITTAEFS_API_KEY,
+      "Gateway request is signed with the tenant's own DB-stored cittaApiKey, not the shared CITTAEFS_API_KEY env var",
+      perTenantKeyUsed
+        ? "Request carried the tenant-specific Authorization header"
+        : `Request did not match tenant-specific key${perTenantError ? ` (${perTenantError.message})` : ""}`,
+    );
+
+    // 1c. Unknown tenant must fail loudly rather than silently signing under a shared/global key.
+    let threwForUnknownTenant = false;
+    let unknownTenantErrorMsg = "";
+    try {
+      await cittaEfsClient.signAndStampInvoice({
+        ...testInvoice,
+        tenantId: "tenant_does_not_exist_xyz",
+      });
+    } catch (e: any) {
+      unknownTenantErrorMsg = e.message || "";
+      threwForUnknownTenant = /No CittaEFS Gateway API key configured/.test(
+        unknownTenantErrorMsg,
+      );
+    }
+    assert(
+      "CittaEFS Gateway Client",
+      "Unknown Tenant Rejected Instead Of Falling Back To Shared Key",
+      "Security",
+      threwForUnknownTenant,
+      "Throws a clear error for a tenant with no configured gateway credentials, instead of silently using a shared key",
+      threwForUnknownTenant
+        ? `Threw expected error: ${unknownTenantErrorMsg}`
+        : "Did not throw the expected credential error",
+    );
+
     // 2. Mock and verify other methods: getArchive, getValidationErrors, updatePaymentStatus
     const getArchiveScope = nock("https://ei-api.azurewebsites.net")
       .get("/api/einvoice/archive")

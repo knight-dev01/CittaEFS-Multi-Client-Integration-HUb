@@ -21,7 +21,7 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 1. ~~**VAT is hardcoded at 16% almost everywhere it defaults.**~~ **FIXED 2026-08-26.** Added a per-tenant `defaultVatRate` (migration `20260826130000_tenant_default_vat_rate`, defaults to 7.5% — Nigeria's NRS standard rate), configurable via Settings → Tenant Gateway & Retry Policies (`PATCH /api/tenants/:id`). The invoice line-item fallback (`server.ts`) and new-item creation default now read the tenant's configured rate instead of a hardcoded `16`; the zod schema default, `referenceData.ts` catalog, and the dead `efs-normalization.ts` constant were also corrected from 16 to 7.5. See Invoice & tax #11 below.
 2. ~~**B2G cannot be submitted at all.**~~ **FIXED 2026-08-26.** `InvoiceKind` now includes `B2G` across the type system, zod schema, CittaEFS client, and server-side TIN gate; B2G behaves as B2B for the customer-registration/TIN gate as the spec requires. See Classification #2–#3 below.
 3. ~~**Customer and Item templates are missing spec-mandatory columns entirely.**~~ **FIXED 2026-08-26.** Added `Customer.country`, `Customer.cittaCustomerId`, `Item.name` (ItemName), and `Item.unitCode` (migration `20260826140000_customer_item_spec_columns`, with `Item.name` backfilled from `description` for existing rows), and renamed the generic `Customer.address` column to `street` (migration `20260826150000_customer_address_to_street`) so street/city/country are three real, distinct fields matching the spec's column grid. Wired into the manual-entry forms (`CustomerSyncTab.tsx`, `ItemDictionaryTab.tsx`) and the Excel-import auto-registration path. The previously-fabricated `cittaCustomerCode` (a random string masquerading as a real CittaEFS ID) is gone — the UI now honestly shows "Not yet registered" until a real registration flow populates it. See Customer #7–#8 and Item #2/#4 below.
-4. **Gateway credentials are global, not per-tenant**, despite the `Tenant` model already having `cittaApiKey` / `cittaApiSecretEncrypted` columns for exactly this — they're simply never read. Every tenant's invoices are signed with one shared `CITTAEFS_API_KEY`.
+4. ~~**Gateway credentials are global, not per-tenant.**~~ **FIXED 2026-08-26.** `cittaEfsClient.ts` now resolves each tenant's own `Tenant.cittaApiKey` from the database (every method already took `tenantId` as a parameter — it just never used it) instead of the shared `CITTAEFS_API_KEY` env var. A tenant with no configured key throws a clear error rather than silently falling back to a shared credential. `Tenant.cittaApiSecretEncrypted` (`encryptedSecret`) remains unused — there's no documented gateway auth flow beyond a single Bearer token to wire it into (the spec's own Interface sheet leaves auth details as TODO beyond "API key"), so using it would mean inventing a protocol the gateway doesn't ask for. See Interface #2 below.
 5. **No duplicate-invoice protection.** `clientInvoiceId` is indexed but not unique in the database, and the invoice-creation endpoint does no duplicate check — contradicting the spec's "yes, critical" answer on duplicate detection.
 6. **The one module that gets several rules right is never called.** `src/normalization/efs-normalization.ts` correctly strips TIN on B2C invoices and computes tax — but nothing in the app imports it. It's dead code; its correctness has zero effect on what actually runs.
 
@@ -33,8 +33,8 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 | Item | 6 | 1 | 1 | 0 |
 | Invoice & tax | 5 | 1 | 6 | 0 |
 | Classification | 3 | 2 | 0 | 0 |
-| Interface (answered items only) | 2 | 0 | 2 | 0 |
-| **Total** | **21** | **4** | **14** | **1** |
+| Interface (answered items only) | 3 | 0 | 1 | 0 |
+| **Total** | **22** | **4** | **13** | **1** |
 
 Validation Rules and Samples contribute zero scored items — both sheets are effectively unfilled in the spec (see those sections below). Most of Interface is also unfilled (Phase 5, marked "not needed to start the build").
 
@@ -106,8 +106,8 @@ The spec explicitly defers this sheet to Phase 5 and says not to let it hold up 
 
 | # | Spec requirement | Status | Evidence | Note |
 |---|---|---|---|---|
-| 1 | Authentication method: API key | PASS | `src/services/cittaEfsClient.ts:4-10` | Bearer token via `CITTAEFS_API_KEY` |
-| 2 | Credentials are per-tenant | FAIL | `src/services/cittaEfsClient.ts:4-10` | Reads one single global env var for every tenant. `Tenant.cittaApiKey` / `cittaApiSecretEncrypted` exist in the schema but are never read anywhere |
+| 1 | Authentication method: API key | PASS | `src/services/cittaEfsClient.ts` | Bearer token, now resolved per-tenant (see #2) |
+| 2 | Credentials are per-tenant | **PASS (fixed 2026-08-26)** | `src/services/cittaEfsClient.ts` (`getCittaEfsApiKey`) | Every gateway call now looks up the calling tenant's own `Tenant.cittaApiKey` (generated uniquely per tenant at onboarding) instead of the shared `CITTAEFS_API_KEY` env var; a tenant with no key throws instead of silently reusing a shared credential |
 | 3 | Duplicate detection exists today ("critical") | FAIL | `prisma/schema.prisma:79,105` | `clientInvoiceId` is indexed, not unique; no duplicate check in the invoice-creation endpoint |
 | 4 | Submission is per-tenant; multiple files in flight per tenant | PASS | (repo-wide) | `tenantId` scoping present throughout the ingestion path |
 | — | Registration endpoints, idempotency, error/retry taxonomy, callback vs. polling, master-data confirmations, sandbox mode | **SPEC INCOMPLETE** | — | Left TODO/blank in the workbook — nothing to audit against |
