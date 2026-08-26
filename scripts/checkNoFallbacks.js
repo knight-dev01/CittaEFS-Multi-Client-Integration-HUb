@@ -49,7 +49,7 @@ function walkDir(dir, fileList = []) {
 }
 
 function checkFile(filePath) {
-  const relativePath = filePath.replace(/^.\//, '');
+  const relativePath = filePath.replace(/^.\//, '').split(path.sep).join('/');
   if (ALLOWLIST.includes(relativePath)) {
     return [];
   }
