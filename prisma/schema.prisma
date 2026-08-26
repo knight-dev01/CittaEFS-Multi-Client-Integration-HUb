@@ -81,6 +81,7 @@ model Invoice {
   id                    String    @id @default(uuid())
   tenantId              String    @map("tenant_id")
   clientInvoiceId       String    @map("client_invoice_id")
+  documentNumber        String?   @map("document_number")
   invoiceType           String    @default("STANDARD") @map("invoice_type")
   invoiceKind           String    @default("B2B") @map("invoice_kind")
   issueDate             DateTime  @map("issue_date")

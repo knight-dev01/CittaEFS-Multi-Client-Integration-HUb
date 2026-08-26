@@ -610,6 +610,55 @@ async function runAllTests() {
         : "Did not throw the expected credential error",
     );
 
+    // 1d. Document Number is distinct from Invoice Number when explicitly supplied
+    // (spec: Document Number is an optional, separate header field -- previously
+    // always silently aliased to clientInvoiceNumber).
+    let capturedDocumentNumber: string | undefined;
+    try {
+      nock("https://ei-api.azurewebsites.net")
+        .post("/api/integration/gen/invoices")
+        .reply((uri, requestBody: any) => {
+          const body =
+            typeof requestBody === "string"
+              ? JSON.parse(requestBody)
+              : requestBody;
+          capturedDocumentNumber = body?.[0]?.documentNumber;
+          return [
+            200,
+            {
+              totalInvoices: 1,
+              successCount: 1,
+              failedCount: 0,
+              errors: [],
+              items: [
+                {
+                  invoiceNumber: testInvoice.clientInvoiceNumber,
+                  irn: "IRN-NRS-2026-DOCNUM",
+                  qrCodeUrl:
+                    "https://nrs.portal.gov/verify?irn=IRN-NRS-2026-DOCNUM",
+                  csid: "CSID-DOCNUM",
+                },
+              ],
+            },
+          ];
+        });
+      await cittaEfsClient.signAndStampInvoice({
+        ...testInvoice,
+        documentNumber: "DOC-9988-DISTINCT",
+      });
+    } catch {
+      // handled by the assertion below
+    }
+    assert(
+      "CittaEFS Gateway Client",
+      "Document Number Distinct From Invoice Number",
+      "EdgeCase",
+      capturedDocumentNumber === "DOC-9988-DISTINCT" &&
+        capturedDocumentNumber !== testInvoice.clientInvoiceNumber,
+      "Gateway payload carries an explicitly supplied documentNumber rather than aliasing it to clientInvoiceNumber",
+      `Sent documentNumber: ${capturedDocumentNumber}, clientInvoiceNumber: ${testInvoice.clientInvoiceNumber}`,
+    );
+
     // 2. Mock and verify other methods: getArchive, getValidationErrors, updatePaymentStatus
     const getArchiveScope = nock("https://ei-api.azurewebsites.net")
       .get("/api/einvoice/archive")

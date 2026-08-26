@@ -31,10 +31,10 @@ Evidence cites `file:line` in the repository. Every FAIL below is one you can re
 |---|---|---|---|---|
 | Customer | 7 | 0 | 3 | 1 |
 | Item | 7 | 1 | 0 | 0 |
-| Invoice & tax | 5 | 1 | 6 | 0 |
+| Invoice & tax | 6 | 1 | 5 | 0 |
 | Classification | 4 | 1 | 0 | 0 |
 | Interface (answered items only) | 4 | 0 | 0 | 0 |
-| **Total** | **27** | **3** | **9** | **1** |
+| **Total** | **28** | **3** | **8** | **1** |
 
 Validation Rules and Samples contribute zero scored items — both sheets are effectively unfilled in the spec (see those sections below). Most of Interface is also unfilled (Phase 5, marked "not needed to start the build").
 
@@ -74,7 +74,7 @@ Validation Rules and Samples contribute zero scored items — both sheets are ef
 | # | Spec requirement | Status | Evidence | Note |
 |---|---|---|---|---|
 | 1 | File format .xlsx, header row 1, data row 2 | PASS | `src/components/ExcelDocumentViewer.tsx` | — |
-| 2 | `Document Number` distinct from `Invoice Number` | FAIL | `src/schemas/invoice.schema.ts`, `prisma/schema.prisma:76-108` | No distinct column anywhere; `cittaEfsClient.ts:153-154` just aliases it to `clientInvoiceNumber` when absent |
+| 2 | `Document Number` distinct from `Invoice Number` | **PASS (fixed 2026-08-27)** | `prisma/schema.prisma` (`Invoice.documentNumber`), migration `20260827110000_invoice_document_number`, `server.ts`, `src/schemas/invoice.schema.ts`, `src/services/cittaEfsClient.ts` | Added a real, optional, distinct column and threaded it through the full path (request → DB row → schema → gateway client, with `cittaEfsClient.ts`'s `as any` cast replaced by a typed field). Still falls back to `clientInvoiceNumber` when omitted (matches "Mandatory: No"), but now genuinely carries a different value when one is supplied — verified live via a direct request and locked in with a header-capturing nock test |
 | 3 | `Invoice Type` numeric codes (380 commercial / 381 credit / 383 debit) | PARTIAL | `src/services/cittaEfsClient.ts:142-149` | Correctly branches per type, but uses `388` rather than the spec's `380` for a standard invoice — worth confirming which code NRS actually expects |
 | 4 | `Header Charges`, `Header Discount`, `Line Discount` columns | FAIL | `prisma/schema.prisma:76-108` | No header-level charge/discount columns exist at all; only a per-line `discountAmount` |
 | 5 | `Currency Code` column | PASS | `prisma/schema.prisma:87` | Defaults `"NGN"`, overridable |

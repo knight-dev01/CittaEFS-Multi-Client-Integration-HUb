@@ -38,6 +38,7 @@ async function getCittaEfsApiKey(tenantId: string): Promise<string> {
 export interface CittaEfsRequestPayload {
   tenantId: string;
   clientInvoiceNumber: string;
+  documentNumber?: string; // spec: distinct, optional sequential document reference
   invoiceType: "STANDARD" | "CREDIT_NOTE" | "DEBIT_NOTE" | "CANCELLATION";
   invoiceKind: "B2B" | "B2C" | "B2G" | "EXPORT";
   customerCode: string;
@@ -176,8 +177,7 @@ export class CittaEfsClient {
     const headerDiscount = (payload as any).headerDiscount || 0;
     const headerCharges = (payload as any).headerCharges || 0;
     const useStateTax = (payload as any).useStateTax || false;
-    const documentNumber =
-      (payload as any).documentNumber || payload.clientInvoiceNumber;
+    const documentNumber = payload.documentNumber || payload.clientInvoiceNumber;
     const billingReferenceIrns = originalIrn ? [originalIrn] : [];
     const customFields = (payload as any).customFields || {};
     const metadata = (payload as any).metadata || {};

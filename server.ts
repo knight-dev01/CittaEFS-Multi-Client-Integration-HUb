@@ -1048,6 +1048,7 @@ async function startServer() {
       const {
         tenantId,
         clientInvoiceNumber,
+        documentNumber,
         invoiceKind,
         invoiceType,
         originalIrn,
@@ -1187,6 +1188,7 @@ async function startServer() {
         data: {
           tenantId: tenant.id,
           clientInvoiceId: clientInvoiceNumber || `INV-${Date.now()}`,
+          documentNumber: documentNumber || null,
           invoiceType: invoiceType || "STANDARD",
           invoiceKind: invoiceKind || "B2B",
           issueDate: new Date(issueDate || Date.now()),
@@ -1212,6 +1214,7 @@ async function startServer() {
         tenantId: tenant.id,
         clientInvoiceNumber:
           clientInvoiceNumber || rawNewInvoice.clientInvoiceId,
+        documentNumber: documentNumber || undefined,
         invoiceType: invoiceType || "STANDARD",
         invoiceKind: invoiceKind || "B2B",
         issueDate: issueDate || new Date().toISOString().substring(0, 10),

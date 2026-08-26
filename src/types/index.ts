@@ -41,6 +41,7 @@ export interface Invoice {
   id: string;
   tenantId: TenantId;
   clientInvoiceNumber: string;
+  documentNumber?: string; // spec: distinct, optional sequential document reference
   invoiceType: InvoiceType;
   invoiceKind: InvoiceKind;
   issueDate: string; // YYYY-MM-DD

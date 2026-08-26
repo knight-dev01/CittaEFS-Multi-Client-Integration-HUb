@@ -21,6 +21,7 @@ export const invoiceIngestionSchema = z
   .object({
     tenantId: z.string().min(1, "Tenant ID is required"),
     clientInvoiceNumber: z.string().min(1, "Client Invoice Number is required"),
+    documentNumber: z.string().optional(), // spec: distinct from Invoice Number, optional
     invoiceType: z
       .enum(["STANDARD", "CREDIT_NOTE", "DEBIT_NOTE", "CANCELLATION"])
       .default("STANDARD"),
