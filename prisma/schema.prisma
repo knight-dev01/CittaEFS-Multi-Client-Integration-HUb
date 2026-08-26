@@ -45,6 +45,8 @@ model Customer {
   taxClassification  String   @default("B2B") @map("tax_classification")
   address            String?
   city               String?
+  country            String?
+  cittaCustomerId    String?  @map("citta_customer_id")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
@@ -59,7 +61,9 @@ model Item {
   id              String   @id @default(uuid())
   tenantId        String   @map("tenant_id")
   clientSku       String   @map("client_sku")
+  name            String?
   description     String
+  unitCode        String   @default("EA") @map("unit_code")
   unitPrice       Float    @map("unit_price")
   hsOrServiceCode String   @map("hs_or_service_code")
   categoryType    String   @default("GOODS") @map("category_type")

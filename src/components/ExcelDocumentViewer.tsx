@@ -360,7 +360,8 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             isB2B: row.invoiceKind === 'B2B' || row.invoiceKind === 'B2G',
             email: `billing@${row.customerCode.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
             address: 'Commercial Business Park',
-            city: 'Nairobi'
+            city: 'Nairobi',
+            country: 'NG'
           }, targetTenantId);
         }
         row.partyNormalized = true;
@@ -370,12 +371,14 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
         if (!existingItem) {
           await addItemMapping({
             clientSku: row.itemCode,
+            name: row.description,
             description: row.description,
+            unitCode: 'EA',
             hsOrServiceCode: row.hsOrServiceCode || 'HS-8471.30',
             category: 'General Goods',
             codeType: (row.hsOrServiceCode || '').startsWith('HS') ? 'HS_CODE' : 'SERVICE_CODE',
             codeDescription: row.description,
-            defaultVatRate: row.vatRate || 16,
+            defaultVatRate: row.vatRate || activeTenant?.defaultVatRate || 7.5,
             status: 'MAPPED'
           }, targetTenantId);
         }

@@ -83,12 +83,13 @@ export interface CustomerProfile {
   id: string;
   tenantId: TenantId;
   clientCustomerCode: string;
-  cittaCustomerCode: string;
+  cittaCustomerCode: string | null; // CittaEFS-issued ID; null until registered
   name: string;
   tin: string;
   isB2B: boolean;
   address: string;
   city: string;
+  country: string | null;
   email: string;
   phone: string;
   tinValidationStatus: 'VALIDATED' | 'INVALID_FORMAT' | 'UNVERIFIED';
@@ -99,7 +100,9 @@ export interface ItemCodeMapping {
   id: string;
   tenantId: TenantId;
   clientSku: string;
+  name: string;
   description: string;
+  unitCode: string;
   category: string;
   hsOrServiceCode: string;
   codeType: 'HS_CODE' | 'SERVICE_CODE';

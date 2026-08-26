@@ -24,7 +24,9 @@ export function ItemDictionaryTab() {
 
   // Form fields for new mapping
   const [sku, setSku] = useState('');
+  const [itemName, setItemName] = useState('');
   const [desc, setDesc] = useState('');
+  const [unitCode, setUnitCode] = useState('EA');
   const [category, setCategory] = useState('General Merchandise');
   const [selectedCode, setSelectedCode] = useState('HS-8471.30');
   const [vatRate, setVatRate] = useState(activeTenant?.defaultVatRate ?? 7.5);
@@ -52,7 +54,9 @@ export function ItemDictionaryTab() {
 
     await addItemMapping({
       clientSku: sku,
+      name: itemName || desc || 'Catalog Item',
       description: desc || 'Item Description',
+      unitCode: unitCode || 'EA',
       category: category,
       hsOrServiceCode: selectedCode,
       codeType: isService ? 'SERVICE_CODE' : 'HS_CODE',
@@ -63,7 +67,9 @@ export function ItemDictionaryTab() {
 
     setIsAddModalOpen(false);
     setSku('');
+    setItemName('');
     setDesc('');
+    setUnitCode('EA');
   };
 
   const handleAutoMap = async () => {
@@ -153,7 +159,9 @@ export function ItemDictionaryTab() {
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
                 <th className="py-3 px-4">Client SKU</th>
+                <th className="py-3 px-4">Item Name</th>
                 <th className="py-3 px-4">Item Description</th>
+                <th className="py-3 px-4">Unit Code</th>
                 <th className="py-3 px-4">Category</th>
                 <th className="py-3 px-4">Regulatory Code (hsOrServiceCode)</th>
                 <th className="py-3 px-4">Code Type</th>
@@ -165,7 +173,7 @@ export function ItemDictionaryTab() {
             <tbody className="divide-y divide-slate-100">
               {filteredMappings.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400 font-medium">
+                  <td colSpan={10} className="p-8 text-center text-slate-400 font-medium">
                     No SKU mappings found for this search filter.
                   </td>
                 </tr>
@@ -173,7 +181,9 @@ export function ItemDictionaryTab() {
                 filteredMappings.map((m) => (
                   <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-mono font-semibold text-slate-900">{m.clientSku}</td>
+                    <td className="py-3 px-4 max-w-xs truncate font-medium text-slate-800" title={m.name}>{m.name}</td>
                     <td className="py-3 px-4 max-w-xs truncate text-slate-600" title={m.description}>{m.description}</td>
+                    <td className="py-3 px-4 font-mono text-[11px] text-slate-600">{m.unitCode}</td>
                     <td className="py-3 px-4">
                       <span className="px-2.5 py-0.5 text-[10px] bg-slate-100 text-slate-700 font-medium rounded-full border border-slate-200">
                         {m.category}
@@ -241,15 +251,49 @@ export function ItemDictionaryTab() {
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">
-                  Item Description
+                  Item Name *
                 </label>
                 <input
                   type="text"
                   placeholder="e.g. Dell XPS 15 Business Laptop"
-                  value={desc}
-                  onChange={(e) => setDesc(e.target.value)}
+                  value={itemName}
+                  onChange={(e) => setItemName(e.target.value)}
+                  maxLength={100}
                   className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 />
+                <span className="text-[11px] text-slate-500 font-medium block mt-1">
+                  Short commercial name/title (max 100 characters)
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">
+                  Item Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Business-grade 15-inch laptop, 32GB RAM, annual warranty"
+                  value={desc}
+                  onChange={(e) => setDesc(e.target.value)}
+                  maxLength={250}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">
+                  Unit Code (UN/ECE Rec 20) *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. EA, KGM, HUR, BOX"
+                  value={unitCode}
+                  onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
+                />
+                <span className="text-[11px] text-slate-500 font-medium block mt-1">
+                  Standard unit of measure code, e.g. EA (Each), KGM (Kilograms), HUR (Hours)
+                </span>
               </div>
 
               <div>

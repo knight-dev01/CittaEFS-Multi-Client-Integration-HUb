@@ -221,13 +221,15 @@ function formatCustomer(c: any) {
     ...c,
     clientCustomerCode:
       c.clientSystemCustId || c.clientCustomerCode || "CUST-001",
-    cittaCustomerCode:
-      c.cittaCustomerCode || `CITTA-CUST-${c.id?.substring(0, 6) || "001"}`,
+    // Real CittaEFS-issued ID, only present once a registration round-trip has
+    // actually happened; null (never fabricated) means "not yet registered".
+    cittaCustomerCode: c.cittaCustomerId || c.cittaCustomerCode || null,
     name: c.companyName || c.name || "Unnamed Customer",
     tin: c.taxId || c.tin || "N/A",
     isB2B,
     address: c.address || "Nairobi Business District",
     city: c.city || "Nairobi",
+    country: c.country || null,
     email: c.email || "contact@client.com",
     phone: c.phone || "+254700000000",
     tinValidationStatus:
@@ -1803,7 +1805,9 @@ async function startServer() {
       const {
         tenantId,
         clientSku,
+        name,
         description,
+        unitCode,
         hsOrServiceCode,
         defaultVatRate,
       } = req.body;
@@ -1822,7 +1826,9 @@ async function startServer() {
         item = await prisma.item.update({
           where: { id: existing.id },
           data: {
+            name: name || existing.name,
             description: description || existing.description,
+            unitCode: unitCode || existing.unitCode,
             hsOrServiceCode: hsOrServiceCode || existing.hsOrServiceCode,
             defaultVatRate:
               defaultVatRate !== undefined
@@ -1835,7 +1841,9 @@ async function startServer() {
           data: {
             tenantId: tId,
             clientSku: sku,
+            name: name || description || "Catalog Item",
             description: description || "Catalog Item",
+            unitCode: unitCode || "EA",
             unitPrice: 1000.0,
             hsOrServiceCode: hsOrServiceCode || "HS-8471.30",
             categoryType: "GOODS",
@@ -1909,6 +1917,7 @@ async function startServer() {
         isB2B,
         address,
         city,
+        country,
         email,
       } = req.body;
       const tId = tenantId || "tenant_qbo_smb";
@@ -1926,6 +1935,7 @@ async function startServer() {
           taxClassification: isB2B ? "B2B" : "B2C",
           address: address || "Nairobi Business District",
           city: city || "Nairobi",
+          country: country || "NG",
         },
       });
 

@@ -29,6 +29,7 @@ export function CustomerSyncTab() {
   const [clientCode, setClientCode] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
+  const [country, setCountry] = useState('NG');
 
   const tenantCustomers = customers.filter(c => c.tenantId === activeTenant.id);
 
@@ -57,6 +58,7 @@ export function CustomerSyncTab() {
       email: email || 'contact@client.com',
       address: address || 'Nairobi Business District',
       city: 'Nairobi',
+      country: country || 'NG',
       phone: '+254700000000'
     });
 
@@ -159,6 +161,7 @@ export function CustomerSyncTab() {
                 <th className="py-3 px-4">Tax ID (TIN)</th>
                 <th className="py-3 px-4">Kind</th>
                 <th className="py-3 px-4">Billing Address</th>
+                <th className="py-3 px-4">Country</th>
                 <th className="py-3 px-4">TIN Validation</th>
                 <th className="py-3 px-4 text-right">Last Synced</th>
               </tr>
@@ -166,7 +169,7 @@ export function CustomerSyncTab() {
             <tbody className="divide-y divide-slate-100">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400 font-medium">
+                  <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
                     No customers match your search query.
                   </td>
                 </tr>
@@ -174,7 +177,11 @@ export function CustomerSyncTab() {
                 filteredCustomers.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-mono font-semibold text-slate-900">{c.clientCustomerCode}</td>
-                    <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">{c.cittaCustomerCode}</td>
+                    <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">
+                      {c.cittaCustomerCode ? c.cittaCustomerCode : (
+                        <span className="italic text-slate-400">Not yet registered</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 font-medium text-slate-900">{c.name}</td>
                     <td className="py-3 px-4 font-mono text-slate-600">{c.tin}</td>
                     <td className="py-3 px-4">
@@ -186,6 +193,9 @@ export function CustomerSyncTab() {
                     </td>
                     <td className="py-3 px-4 max-w-xs truncate text-slate-500" title={c.address}>
                       {c.address}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-slate-600 uppercase">
+                      {c.country || <span className="italic text-slate-400 normal-case">Unknown</span>}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -296,7 +306,7 @@ export function CustomerSyncTab() {
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">
-                  Billing Address
+                  Billing Address (Street)
                 </label>
                 <input
                   type="text"
@@ -305,6 +315,22 @@ export function CustomerSyncTab() {
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 />
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">
+                  Country *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. NG"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
+                />
+                <span className="text-[11px] text-slate-500 font-medium block mt-1">
+                  Standard ISO country code, e.g. NG for Nigeria
+                </span>
               </div>
 
             </div>
