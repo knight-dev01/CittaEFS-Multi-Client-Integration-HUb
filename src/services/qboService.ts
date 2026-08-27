@@ -600,7 +600,7 @@ async function upsertQboMasterData(
         companyName: customerName || "QuickBooks Customer",
         taxId: customerTin || null,
         taxClassification: customerTin ? "B2B" : "B2C",
-        address: "Synced from QuickBooks Online",
+        street: "Synced from QuickBooks Online",
         city: "Nairobi",
       },
     });
@@ -615,7 +615,6 @@ async function upsertQboMasterData(
           tenantId,
           clientSku: item.itemCode,
           description: item.description,
-          unitPrice: item.unitPrice,
           hsOrServiceCode: item.hsOrServiceCode,
           categoryType: /^SRV|^SERV/.test(item.hsOrServiceCode)
             ? "SERVICE"

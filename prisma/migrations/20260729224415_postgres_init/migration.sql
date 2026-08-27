@@ -144,22 +144,6 @@ CREATE TABLE "users" (
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "integrations" (
-    "id" TEXT NOT NULL,
-    "tenant_id" TEXT NOT NULL,
-    "source_system" TEXT NOT NULL,
-    "access_token" TEXT NOT NULL,
-    "refresh_token" TEXT NOT NULL,
-    "company_id" TEXT NOT NULL,
-    "access_token_expires_at" TIMESTAMP(3) NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'CONNECTED',
-    "last_sync_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "integrations_pkey" PRIMARY KEY ("id")
-);
-
 -- CreateIndex
 CREATE INDEX "customers_tenant_id_idx" ON "customers"("tenant_id");
 
@@ -199,9 +183,6 @@ CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 -- CreateIndex
 CREATE INDEX "users_tenant_id_idx" ON "users"("tenant_id");
 
--- CreateIndex
-CREATE INDEX "integrations_tenant_id_idx" ON "integrations"("tenant_id");
-
 -- AddForeignKey
 ALTER TABLE "customers" ADD CONSTRAINT "customers_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -222,6 +203,3 @@ ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_tenant_id_fkey" FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE "users" ADD CONSTRAINT "users_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "integrations" ADD CONSTRAINT "integrations_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;

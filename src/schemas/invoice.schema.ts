@@ -13,7 +13,7 @@ export const invoiceLineItemSchema = z.object({
     .enum(["HS_CODE", "SERVICE_CODE", "UNMAPPED"])
     .optional()
     .default("SERVICE_CODE"),
-  vatRate: z.number().min(0).max(100).default(16),
+  vatRate: z.number().min(0).max(100).default(7.5),
 });
 
 // Full Invoice Validation Schema
@@ -21,10 +21,11 @@ export const invoiceIngestionSchema = z
   .object({
     tenantId: z.string().min(1, "Tenant ID is required"),
     clientInvoiceNumber: z.string().min(1, "Client Invoice Number is required"),
+    documentNumber: z.string().optional(), // spec: distinct from Invoice Number, optional
     invoiceType: z
       .enum(["STANDARD", "CREDIT_NOTE", "DEBIT_NOTE", "CANCELLATION"])
       .default("STANDARD"),
-    invoiceKind: z.enum(["B2B", "B2C", "EXPORT"]).default("B2B"),
+    invoiceKind: z.enum(["B2B", "B2C", "B2G", "EXPORT"]).default("B2B"),
     issueDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Issue date must be YYYY-MM-DD"),
@@ -41,13 +42,21 @@ export const invoiceIngestionSchema = z
   })
   .transform((data) => {
     // CRITICAL BUSINESS RULE 1: Auto-downgrade tax classification to B2C if tax_id / customerTin is missing/empty
+    // B2G behaves as B2B for this customer-registration gate (same TIN requirement).
     let effectiveKind = data.invoiceKind;
     if (
-      effectiveKind === "B2B" &&
+      (effectiveKind === "B2B" || effectiveKind === "B2G") &&
       (!data.customerTin || data.customerTin.trim().length === 0)
     ) {
       effectiveKind = "B2C";
     }
+
+    // CRITICAL BUSINESS RULE 1b: A buyer TIN is never permitted on a B2C invoice
+    // (spec: it would weaken the B2B/B2C misclassification alert). Strip it
+    // regardless of whether B2C was submitted directly or reached via the
+    // downgrade above.
+    const effectiveCustomerTin =
+      effectiveKind === "B2C" ? undefined : data.customerTin;
 
     // CRITICAL BUSINESS RULE 2: Compute line item amounts & default classification codes
     const transformedLineItems = data.lineItems.map((item) => {
@@ -103,6 +112,7 @@ export const invoiceIngestionSchema = z
     return {
       ...data,
       invoiceKind: effectiveKind,
+      customerTin: effectiveCustomerTin,
       lineItems: transformedLineItems,
       subtotal,
       totalVat,

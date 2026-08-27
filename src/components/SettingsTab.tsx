@@ -36,13 +36,20 @@ interface UserMember {
 }
 
 export function SettingsTab() {
-  const { activeTenant } = useHub();
+  const { activeTenant, updateTenant } = useHub();
 
   const [currentRole, setCurrentRole] = useState<'ADMIN' | 'OPERATOR'>('ADMIN');
   const [retryMax, setRetryMax] = useState(5);
   const [cittaEndpoint, setCittaEndpoint] = useState(getStoredCittaEndpoint);
   const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
+  const [defaultVatRate, setDefaultVatRate] = useState(activeTenant?.defaultVatRate ?? 7.5);
   const [isSaved, setIsSaved] = useState(false);
+  const [isSavingVat, setIsSavingVat] = useState(false);
+  const [vatError, setVatError] = useState('');
+
+  useEffect(() => {
+    setDefaultVatRate(activeTenant?.defaultVatRate ?? 7.5);
+  }, [activeTenant?.id, activeTenant?.defaultVatRate]);
 
   // Users State - fetched from API, empty initially
   const [users, setUsers] = useState<UserMember[]>([]);
@@ -84,8 +91,28 @@ export function SettingsTab() {
     }
   };
 
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
+    setVatError('');
+
+    if (!Number.isFinite(defaultVatRate) || defaultVatRate < 0 || defaultVatRate > 100) {
+      setVatError('VAT rate must be a number between 0 and 100.');
+      return;
+    }
+
     saveStoredCittaEndpoint(cittaEndpoint);
+
+    if (activeTenant && defaultVatRate !== activeTenant.defaultVatRate) {
+      setIsSavingVat(true);
+      try {
+        await updateTenant(activeTenant.id, { defaultVatRate });
+      } catch (err: any) {
+        setIsSavingVat(false);
+        setVatError(err.message || 'Failed to save default VAT rate.');
+        return;
+      }
+      setIsSavingVat(false);
+    }
+
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
@@ -403,6 +430,23 @@ export function SettingsTab() {
           </div>
 
           <div>
+            <label className="block font-medium text-slate-700 mb-1">Default VAT Rate (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={defaultVatRate}
+              disabled={currentRole === 'OPERATOR'}
+              onChange={(e) => setDefaultVatRate(Number(e.target.value))}
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 transition-all"
+            />
+            <span className="text-xs text-slate-500 font-medium block mt-1">
+              Applied to invoice line items and new catalog items when no item-specific rate is set. Nigeria's NRS standard rate is 7.5%.
+            </span>
+          </div>
+
+          <div>
             <label className="block font-medium text-slate-700 mb-1">Timestamp Serialization Format</label>
             <select
               value={timeZone}
@@ -416,14 +460,15 @@ export function SettingsTab() {
           </div>
         </div>
 
-        <div className="pt-3 border-t border-slate-100 flex justify-end">
+        <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+          {vatError && <span className="text-xs text-rose-600 font-medium">{vatError}</span>}
           <button
             onClick={handleSaveSettings}
-            disabled={currentRole === 'OPERATOR'}
+            disabled={currentRole === 'OPERATOR' || isSavingVat}
             className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm cursor-pointer flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Save className="w-4 h-4 text-white" />
-            <span>{isSaved ? 'Settings Saved!' : 'Save Security & Retry Policy'}</span>
+            <span>{isSavingVat ? 'Saving...' : isSaved ? 'Settings Saved!' : 'Save Security & Retry Policy'}</span>
           </button>
         </div>
       </div>

@@ -13,10 +13,11 @@ export interface Tenant {
   onboardingStatus: 'SANDBOX_TESTING' | 'NRS_VERIFIED' | 'LIVE_PRODUCTION' | 'PENDING_MAPPING' | 'VERIFIED_READY';
   monthlyAllowance: number;
   monthlyUsed: number;
+  defaultVatRate: number;
   lastSyncAt: string;
 }
 
-export type InvoiceKind = 'B2B' | 'B2C' | 'EXPORT';
+export type InvoiceKind = 'B2B' | 'B2C' | 'B2G' | 'EXPORT';
 export type InvoiceType = 'STANDARD' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
 export type InvoiceStatus = 'QUEUED' | 'PENDING_NRS_STAMP' | 'APPROVED' | 'SIGNED' | 'REJECTED' | 'CANCELLED';
 export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'REJECTED_BANK';
@@ -40,6 +41,7 @@ export interface Invoice {
   id: string;
   tenantId: TenantId;
   clientInvoiceNumber: string;
+  documentNumber?: string; // spec: distinct, optional sequential document reference
   invoiceType: InvoiceType;
   invoiceKind: InvoiceKind;
   issueDate: string; // YYYY-MM-DD
@@ -82,12 +84,13 @@ export interface CustomerProfile {
   id: string;
   tenantId: TenantId;
   clientCustomerCode: string;
-  cittaCustomerCode: string;
+  cittaCustomerCode: string | null; // CittaEFS-issued ID; null until registered
   name: string;
   tin: string;
   isB2B: boolean;
-  address: string;
+  street: string;
   city: string;
+  country: string | null;
   email: string;
   phone: string;
   tinValidationStatus: 'VALIDATED' | 'INVALID_FORMAT' | 'UNVERIFIED';
@@ -98,7 +101,9 @@ export interface ItemCodeMapping {
   id: string;
   tenantId: TenantId;
   clientSku: string;
+  name: string;
   description: string;
+  unitCode: string;
   category: string;
   hsOrServiceCode: string;
   codeType: 'HS_CODE' | 'SERVICE_CODE';
@@ -112,7 +117,7 @@ export interface ValidationErrorItem {
   id: string;
   tenantId: TenantId;
   clientInvoiceNumber: string;
-  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH';
+  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH' | 'DUPLICATE_INVOICE';
   fieldAffected: string;
   errorMessage: string;
   rawPayloadSample: any;

@@ -204,6 +204,79 @@ async function runAllTests() {
         : "Failed validation",
     );
 
+    // Edge Case: B2G Invoices Are Accepted (spec: complete kind list is B2B, B2C, B2G)
+    const b2gInvoice = { ...validInvoice, invoiceKind: "B2G" as const };
+    const b2gResult = invoiceIngestionSchema.safeParse(b2gInvoice);
+    assert(
+      "Canonical Schema",
+      "B2G Invoice Kind Accepted",
+      "EdgeCase",
+      b2gResult.success && b2gResult.data.invoiceKind === "B2G",
+      "Schema accepts invoiceKind B2G and preserves it when a TIN is present",
+      b2gResult.success
+        ? `Evaluated kind: ${b2gResult.data.invoiceKind}`
+        : JSON.stringify(b2gResult.error?.issues),
+    );
+
+    // Edge Case: B2G Auto-Downgrade to B2C when Tax PIN is missing (behaves as B2B for the registration gate)
+    const b2gNoPinInvoice = { ...validInvoice, invoiceKind: "B2G" as const, customerTin: "" };
+    const b2gNoPinResult = invoiceIngestionSchema.safeParse(b2gNoPinInvoice);
+    assert(
+      "Canonical Schema",
+      "B2G Behaves As B2B For Customer Registration Gate",
+      "EdgeCase",
+      b2gNoPinResult.success && b2gNoPinResult.data.invoiceKind === "B2C",
+      "Auto-downgrades invoiceKind to B2C when customerTin is empty, same as B2B",
+      b2gNoPinResult.success
+        ? `Evaluated kind: ${b2gNoPinResult.data.invoiceKind}`
+        : "Failed validation",
+    );
+
+    // Edge Case: VAT Rate Defaults To Nigeria's 7.5% Standard Rate, Not Kenya's 16%, When Omitted
+    const noVatRateInvoice = {
+      ...validInvoice,
+      lineItems: [
+        {
+          itemCode: "ITEM-NO-VAT",
+          description: "Line item with no explicit vatRate",
+          quantity: 1,
+          unitPrice: 1000,
+          hsOrServiceCode: "HS-8471.50",
+        },
+      ],
+    };
+    const noVatRateResult = invoiceIngestionSchema.safeParse(noVatRateInvoice);
+    assert(
+      "Canonical Schema",
+      "VAT Rate Defaults To Nigeria's 7.5% Standard Rate",
+      "EdgeCase",
+      noVatRateResult.success && noVatRateResult.data.lineItems[0].vatRate === 7.5,
+      "Schema defaults an omitted vatRate to 7.5 (NRS standard), not 16 (unconverted Kenya default)",
+      noVatRateResult.success
+        ? `Defaulted vatRate: ${noVatRateResult.data.lineItems[0].vatRate}`
+        : JSON.stringify(noVatRateResult.error?.issues),
+    );
+
+    // Edge Case: Buyer TIN Is Never Permitted On A B2C Invoice, Even If Submitted
+    const b2cWithTinInvoice = {
+      ...validInvoice,
+      invoiceKind: "B2C" as const,
+      customerTin: "P019283746Z",
+    };
+    const b2cWithTinResult = invoiceIngestionSchema.safeParse(b2cWithTinInvoice);
+    assert(
+      "Canonical Schema",
+      "B2C Invoice Never Carries A Buyer TIN",
+      "EdgeCase",
+      b2cWithTinResult.success &&
+        b2cWithTinResult.data.invoiceKind === "B2C" &&
+        !b2cWithTinResult.data.customerTin,
+      "Schema strips customerTin whenever the effective invoiceKind is B2C, even if one was submitted",
+      b2cWithTinResult.success
+        ? `Stripped: kind=${b2cWithTinResult.data.invoiceKind}, customerTin=${b2cWithTinResult.data.customerTin}`
+        : JSON.stringify(b2cWithTinResult.error?.issues),
+    );
+
     // Edge Case: Empty Line Items
     const emptyLineInvoice = { ...validInvoice, lineItems: [] };
     const emptyLineResult = invoiceIngestionSchema.safeParse(emptyLineInvoice);
@@ -221,6 +294,52 @@ async function runAllTests() {
     assert(
       "Canonical Schema",
       "Schema Execution",
+      "Runtime",
+      false,
+      "No unhandled exceptions",
+      err.message,
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // MODULE 2b: Database-Level Duplicate Invoice Protection
+  // ------------------------------------------------------------------
+  try {
+    const dupInvoiceNumber = `DUP-TEST-${Date.now()}`;
+    const dupInvoiceData = {
+      tenantId: "tenant_qbo",
+      clientInvoiceId: dupInvoiceNumber,
+      customerCode: "CUST-DUP-TEST",
+      customerName: "Duplicate Test Customer",
+      issueDate: new Date("2026-08-01"),
+      subtotal: 1000,
+      taxAmount: 75,
+      totalAmount: 1075,
+    };
+    await prisma.invoice.create({ data: dupInvoiceData });
+
+    let duplicateRejected = false;
+    let rejectionDetail = "";
+    try {
+      await prisma.invoice.create({ data: dupInvoiceData });
+    } catch (e: any) {
+      duplicateRejected = e.code === "P2002";
+      rejectionDetail = e.code || e.message;
+    }
+    assert(
+      "Database Integrity",
+      "Duplicate clientInvoiceId Rejected Per Tenant",
+      "EdgeCase",
+      duplicateRejected,
+      "A second invoice with the same (tenantId, clientInvoiceId) is rejected by the database unique constraint",
+      duplicateRejected
+        ? `Second insert correctly rejected (${rejectionDetail})`
+        : "Second insert with a duplicate clientInvoiceId was NOT rejected",
+    );
+  } catch (err: any) {
+    assert(
+      "Database Integrity",
+      "Duplicate Invoice Constraint Test Execution",
       "Runtime",
       false,
       "No unhandled exceptions",
@@ -412,6 +531,132 @@ async function runAllTests() {
         Boolean(efsResponse.qrCodeUrl),
       "Returns HTTP 200, valid IRN and QR verification URL",
       `Success: ${efsResponse.success}, IRN: ${efsResponse.irn}, QR URL: ${efsResponse.qrCodeUrl?.substring(0, 30)}...`,
+    );
+
+    // 1b. Per-tenant credential isolation: the gateway request must carry the
+    // tenant's own DB-stored cittaApiKey, not the shared CITTAEFS_API_KEY env var.
+    const tenantRecord = await prisma.tenant.findUnique({
+      where: { id: "tenant_qbo" },
+      select: { cittaApiKey: true },
+    });
+    let perTenantKeyUsed = false;
+    let perTenantError: any = null;
+    try {
+      nock("https://ei-api.azurewebsites.net", {
+        reqheaders: { authorization: `Bearer ${tenantRecord?.cittaApiKey}` },
+      })
+        .post("/api/integration/gen/invoices")
+        .reply(() => {
+          perTenantKeyUsed = true;
+          return [
+            200,
+            {
+              totalInvoices: 1,
+              successCount: 1,
+              failedCount: 0,
+              errors: [],
+              items: [
+                {
+                  invoiceNumber: testInvoice.clientInvoiceNumber,
+                  irn: "IRN-NRS-2026-PERTENANT",
+                  qrCodeUrl:
+                    "https://nrs.portal.gov/verify?irn=IRN-NRS-2026-PERTENANT",
+                  csid: "CSID-PERTENANT",
+                },
+              ],
+            },
+          ];
+        });
+      await cittaEfsClient.signAndStampInvoice(testInvoice);
+    } catch (e) {
+      perTenantError = e;
+    }
+    assert(
+      "CittaEFS Gateway Client",
+      "Per-Tenant Gateway Credential Isolation",
+      "Security",
+      perTenantKeyUsed &&
+        !perTenantError &&
+        Boolean(tenantRecord?.cittaApiKey) &&
+        tenantRecord!.cittaApiKey !== process.env.CITTAEFS_API_KEY,
+      "Gateway request is signed with the tenant's own DB-stored cittaApiKey, not the shared CITTAEFS_API_KEY env var",
+      perTenantKeyUsed
+        ? "Request carried the tenant-specific Authorization header"
+        : `Request did not match tenant-specific key${perTenantError ? ` (${perTenantError.message})` : ""}`,
+    );
+
+    // 1c. Unknown tenant must fail loudly rather than silently signing under a shared/global key.
+    let threwForUnknownTenant = false;
+    let unknownTenantErrorMsg = "";
+    try {
+      await cittaEfsClient.signAndStampInvoice({
+        ...testInvoice,
+        tenantId: "tenant_does_not_exist_xyz",
+      });
+    } catch (e: any) {
+      unknownTenantErrorMsg = e.message || "";
+      threwForUnknownTenant = /No CittaEFS Gateway API key configured/.test(
+        unknownTenantErrorMsg,
+      );
+    }
+    assert(
+      "CittaEFS Gateway Client",
+      "Unknown Tenant Rejected Instead Of Falling Back To Shared Key",
+      "Security",
+      threwForUnknownTenant,
+      "Throws a clear error for a tenant with no configured gateway credentials, instead of silently using a shared key",
+      threwForUnknownTenant
+        ? `Threw expected error: ${unknownTenantErrorMsg}`
+        : "Did not throw the expected credential error",
+    );
+
+    // 1d. Document Number is distinct from Invoice Number when explicitly supplied
+    // (spec: Document Number is an optional, separate header field -- previously
+    // always silently aliased to clientInvoiceNumber).
+    let capturedDocumentNumber: string | undefined;
+    try {
+      nock("https://ei-api.azurewebsites.net")
+        .post("/api/integration/gen/invoices")
+        .reply((uri, requestBody: any) => {
+          const body =
+            typeof requestBody === "string"
+              ? JSON.parse(requestBody)
+              : requestBody;
+          capturedDocumentNumber = body?.[0]?.documentNumber;
+          return [
+            200,
+            {
+              totalInvoices: 1,
+              successCount: 1,
+              failedCount: 0,
+              errors: [],
+              items: [
+                {
+                  invoiceNumber: testInvoice.clientInvoiceNumber,
+                  irn: "IRN-NRS-2026-DOCNUM",
+                  qrCodeUrl:
+                    "https://nrs.portal.gov/verify?irn=IRN-NRS-2026-DOCNUM",
+                  csid: "CSID-DOCNUM",
+                },
+              ],
+            },
+          ];
+        });
+      await cittaEfsClient.signAndStampInvoice({
+        ...testInvoice,
+        documentNumber: "DOC-9988-DISTINCT",
+      });
+    } catch {
+      // handled by the assertion below
+    }
+    assert(
+      "CittaEFS Gateway Client",
+      "Document Number Distinct From Invoice Number",
+      "EdgeCase",
+      capturedDocumentNumber === "DOC-9988-DISTINCT" &&
+        capturedDocumentNumber !== testInvoice.clientInvoiceNumber,
+      "Gateway payload carries an explicitly supplied documentNumber rather than aliasing it to clientInvoiceNumber",
+      `Sent documentNumber: ${capturedDocumentNumber}, clientInvoiceNumber: ${testInvoice.clientInvoiceNumber}`,
     );
 
     // 2. Mock and verify other methods: getArchive, getValidationErrors, updatePaymentStatus

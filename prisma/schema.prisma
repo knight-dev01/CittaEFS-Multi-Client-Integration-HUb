@@ -19,6 +19,7 @@ model Tenant {
   onboardingStatus String   @map("onboarding_status")
   monthlyAllowance Int      @default(1000) @map("monthly_allowance")
   monthlyUsed      Int      @default(0) @map("monthly_used")
+  defaultVatRate   Float    @default(7.5) @map("default_vat_rate")
   lastSyncAt       DateTime @default(now()) @map("last_sync_at")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
@@ -42,8 +43,10 @@ model Customer {
   email              String?
   taxId              String?  @map("tax_id")
   taxClassification  String   @default("B2B") @map("tax_classification")
-  address            String?
+  street             String?
   city               String?
+  country            String?
+  cittaCustomerId    String?  @map("citta_customer_id")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
@@ -58,11 +61,12 @@ model Item {
   id              String   @id @default(uuid())
   tenantId        String   @map("tenant_id")
   clientSku       String   @map("client_sku")
+  name            String?
   description     String
-  unitPrice       Float    @map("unit_price")
+  unitCode        String   @default("EA") @map("unit_code")
   hsOrServiceCode String   @map("hs_or_service_code")
   categoryType    String   @default("GOODS") @map("category_type")
-  defaultVatRate  Float    @default(16.00) @map("default_vat_rate")
+  defaultVatRate  Float    @default(7.5) @map("default_vat_rate")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -77,6 +81,7 @@ model Invoice {
   id                    String    @id @default(uuid())
   tenantId              String    @map("tenant_id")
   clientInvoiceId       String    @map("client_invoice_id")
+  documentNumber        String?   @map("document_number")
   invoiceType           String    @default("STANDARD") @map("invoice_type")
   invoiceKind           String    @default("B2B") @map("invoice_kind")
   issueDate             DateTime  @map("issue_date")
@@ -101,8 +106,8 @@ model Invoice {
   tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   lineItems InvoiceLineItem[]
 
+  @@unique([tenantId, clientInvoiceId])
   @@index([tenantId])
-  @@index([tenantId, clientInvoiceId])
   @@index([status])
   @@map("invoices")
 }

@@ -221,13 +221,15 @@ function formatCustomer(c: any) {
     ...c,
     clientCustomerCode:
       c.clientSystemCustId || c.clientCustomerCode || "CUST-001",
-    cittaCustomerCode:
-      c.cittaCustomerCode || `CITTA-CUST-${c.id?.substring(0, 6) || "001"}`,
+    // Real CittaEFS-issued ID, only present once a registration round-trip has
+    // actually happened; null (never fabricated) means "not yet registered".
+    cittaCustomerCode: c.cittaCustomerId || c.cittaCustomerCode || null,
     name: c.companyName || c.name || "Unnamed Customer",
     tin: c.taxId || c.tin || "N/A",
     isB2B,
-    address: c.address || "Nairobi Business District",
+    street: c.street || "Nairobi Business District",
     city: c.city || "Nairobi",
+    country: c.country || null,
     email: c.email || "contact@client.com",
     phone: c.phone || "+254700000000",
     tinValidationStatus:
@@ -927,15 +929,20 @@ async function startServer() {
   app.patch("/api/tenants/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { companyName, tin, platformType, marketTier } = req.body;
+      const { companyName, tin, platformType, marketTier, defaultVatRate } =
+        req.body;
 
       const existing = await prisma.tenant.findUnique({ where: { id } });
       if (!existing) {
         return res.status(404).json({ success: false, error: "Tenant not found" });
       }
 
-      const trimmedName = (companyName || "").trim();
-      const normalizedTin = (tin || "").trim().toUpperCase();
+      const companyNameProvided = companyName !== undefined;
+      const trimmedName = companyNameProvided
+        ? companyName.trim()
+        : existing.companyName;
+      const normalizedTin =
+        tin !== undefined ? tin.trim().toUpperCase() : existing.tin;
 
       const errors: string[] = [];
       if (trimmedName.length < 2 || trimmedName.length > 100) {
@@ -944,6 +951,17 @@ async function startServer() {
       if (!/^[A-Z]\d{9}[A-Z]$/.test(normalizedTin)) {
         errors.push("TIN must be one letter, 9 digits, one letter (e.g. P051123456Z).");
       }
+
+      let normalizedVatRate = existing.defaultVatRate;
+      if (defaultVatRate !== undefined) {
+        const rate = Number(defaultVatRate);
+        if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+          errors.push("Default VAT rate must be a number between 0 and 100.");
+        } else {
+          normalizedVatRate = rate;
+        }
+      }
+
       if (errors.length > 0) {
         return res.status(400).json({ success: false, errors });
       }
@@ -951,11 +969,12 @@ async function startServer() {
       const updated = await prisma.tenant.update({
         where: { id },
         data: {
-          name: trimmedName,
+          name: companyNameProvided ? trimmedName : existing.name,
           companyName: trimmedName,
           tin: normalizedTin,
           platformType: platformType || existing.platformType,
           marketTier: marketTier || existing.marketTier,
+          defaultVatRate: normalizedVatRate,
           monthlyAllowance:
             marketTier === "Enterprise"
               ? 10000
@@ -1029,6 +1048,7 @@ async function startServer() {
       const {
         tenantId,
         clientInvoiceNumber,
+        documentNumber,
         invoiceKind,
         invoiceType,
         originalIrn,
@@ -1053,9 +1073,23 @@ async function startServer() {
       if (!clientInvoiceNumber) errors.push("clientInvoiceNumber is mandatory");
       if (!issueDate) errors.push("issueDate is mandatory (YYYY-MM-DD)");
 
-      if (invoiceKind === "B2B" && (!customerTin || customerTin.length < 8)) {
+      if (clientInvoiceNumber) {
+        const duplicate = await prisma.invoice.findFirst({
+          where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber },
+        });
+        if (duplicate) {
+          errors.push(
+            `Duplicate invoice: clientInvoiceNumber "${clientInvoiceNumber}" already exists for this tenant (existing status: ${duplicate.status})`,
+          );
+        }
+      }
+
+      if (
+        (invoiceKind === "B2B" || invoiceKind === "B2G") &&
+        (!customerTin || customerTin.length < 8)
+      ) {
         errors.push(
-          "B2B Invoices require a valid Tax Identification Number (customerTin)",
+          `${invoiceKind} Invoices require a valid Tax Identification Number (customerTin)`,
         );
       }
 
@@ -1082,7 +1116,7 @@ async function startServer() {
           const vatRate =
             li.vatRate !== undefined
               ? Number(li.vatRate)
-              : Number(mapping?.defaultVatRate || 16);
+              : Number(mapping?.defaultVatRate ?? tenant.defaultVatRate);
           const vatAmount = (taxable * vatRate) / 100;
           const totalAmount = taxable + vatAmount;
 
@@ -1101,23 +1135,28 @@ async function startServer() {
       );
 
       if (errors.length > 0) {
+        const isDuplicate = errors.some((e) => e.startsWith("Duplicate invoice"));
         const valError = await prisma.validationError.create({
           data: {
             tenantId: tenant.id,
             clientInvoiceNumber: clientInvoiceNumber || "UNNAMED",
-            errorCategory: errors.some((e) => e.includes("hsOrServiceCode"))
-              ? "MISSING_HS_CODE"
-              : "INVALID_TIN_FORMAT",
-            fieldAffected: errors[0].includes("customerTin")
-              ? "customerTin"
-              : "lineItems",
+            errorCategory: isDuplicate
+              ? "DUPLICATE_INVOICE"
+              : errors.some((e) => e.includes("hsOrServiceCode"))
+                ? "MISSING_HS_CODE"
+                : "INVALID_TIN_FORMAT",
+            fieldAffected: isDuplicate
+              ? "clientInvoiceNumber"
+              : errors[0].includes("customerTin")
+                ? "customerTin"
+                : "lineItems",
             errorMessage: errors.join(" | "),
             rawPayloadSample: JSON.stringify(req.body),
             status: "OPEN",
           },
         });
 
-        return res.status(400).json({
+        return res.status(isDuplicate ? 409 : 400).json({
           success: false,
           status: "REJECTED_PREFLIGHT",
           errors,
@@ -1137,18 +1176,25 @@ async function startServer() {
       );
       const grandTotal = subtotal + totalVat;
 
+      // A buyer TIN is never permitted on a B2C invoice (spec: it would weaken
+      // the B2B/B2C misclassification alert) -- strip it regardless of whether
+      // the caller mistakenly included one alongside invoiceKind: "B2C".
+      const effectiveCustomerTin =
+        invoiceKind === "B2C" ? undefined : customerTin || undefined;
+
       // Insert as PENDING_NRS_STAMP — the real IRN/QR only exist once the queue worker
       // gets a response back from the CittaEFS Gateway (same pipeline QBO invoices use).
       const rawNewInvoice = await prisma.invoice.create({
         data: {
           tenantId: tenant.id,
           clientInvoiceId: clientInvoiceNumber || `INV-${Date.now()}`,
+          documentNumber: documentNumber || null,
           invoiceType: invoiceType || "STANDARD",
           invoiceKind: invoiceKind || "B2B",
           issueDate: new Date(issueDate || Date.now()),
           customerCode: customerCode || "CUST-CITTA-GENERIC",
           customerName: customerName || "Valued Client",
-          customerTin: customerTin || null,
+          customerTin: effectiveCustomerTin || null,
           currency: "NGN",
           subtotal,
           taxAmount: totalVat,
@@ -1168,12 +1214,13 @@ async function startServer() {
         tenantId: tenant.id,
         clientInvoiceNumber:
           clientInvoiceNumber || rawNewInvoice.clientInvoiceId,
+        documentNumber: documentNumber || undefined,
         invoiceType: invoiceType || "STANDARD",
         invoiceKind: invoiceKind || "B2B",
         issueDate: issueDate || new Date().toISOString().substring(0, 10),
         customerCode: customerCode || "CUST-CITTA-GENERIC",
         customerName: customerName || "Valued Client",
-        customerTin: customerTin || undefined,
+        customerTin: effectiveCustomerTin,
         originalIrn: originalIrn || undefined,
         lineItems: processedLineItems.map((li: any) => ({
           itemCode: li.itemCode,
@@ -1220,6 +1267,11 @@ async function startServer() {
         },
       });
     } catch (e: any) {
+      if (e.code === "P2002" && e.meta?.target?.includes("client_invoice_id")) {
+        return res.status(409).json({
+          error: `Duplicate invoice: clientInvoiceNumber "${req.body.clientInvoiceNumber}" already exists for this tenant`,
+        });
+      }
       res.status(500).json({ error: e.message });
     }
   });
@@ -1783,7 +1835,9 @@ async function startServer() {
       const {
         tenantId,
         clientSku,
+        name,
         description,
+        unitCode,
         hsOrServiceCode,
         defaultVatRate,
       } = req.body;
@@ -1794,12 +1848,17 @@ async function startServer() {
       const existing = await prisma.item.findFirst({
         where: { tenantId: tId, clientSku: sku },
       });
+      const owningTenant = await prisma.tenant.findUnique({
+        where: { id: tId },
+      });
 
       if (existing) {
         item = await prisma.item.update({
           where: { id: existing.id },
           data: {
+            name: name || existing.name,
             description: description || existing.description,
+            unitCode: unitCode || existing.unitCode,
             hsOrServiceCode: hsOrServiceCode || existing.hsOrServiceCode,
             defaultVatRate:
               defaultVatRate !== undefined
@@ -1812,12 +1871,15 @@ async function startServer() {
           data: {
             tenantId: tId,
             clientSku: sku,
+            name: name || description || "Catalog Item",
             description: description || "Catalog Item",
-            unitPrice: 1000.0,
+            unitCode: unitCode || "EA",
             hsOrServiceCode: hsOrServiceCode || "HS-8471.30",
             categoryType: "GOODS",
             defaultVatRate:
-              defaultVatRate !== undefined ? Number(defaultVatRate) : 16.0,
+              defaultVatRate !== undefined
+                ? Number(defaultVatRate)
+                : (owningTenant?.defaultVatRate ?? 7.5),
           },
         });
       }
@@ -1882,13 +1944,31 @@ async function startServer() {
         name,
         tin,
         isB2B,
-        address,
+        street,
         city,
+        country,
         email,
       } = req.body;
       const tId = tenantId || "tenant_qbo_smb";
       const custCode =
         clientCustomerCode || `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      // Spec: TIN is 10-14 alphanumeric characters, no spaces/hyphens; mandatory
+      // for B2B, optional for B2C.
+      const trimmedTin = typeof tin === "string" ? tin.trim() : "";
+      const tinFormatValid = /^[A-Za-z0-9]{10,14}$/.test(trimmedTin);
+
+      const errors: string[] = [];
+      if (isB2B && !trimmedTin) {
+        errors.push("TIN is mandatory for B2B customers.");
+      } else if (trimmedTin && !tinFormatValid) {
+        errors.push(
+          "TIN must be 10 to 14 alphanumeric characters, with no spaces or hyphens.",
+        );
+      }
+      if (errors.length > 0) {
+        return res.status(400).json({ success: false, errors });
+      }
 
       let rawCustomer: any;
       rawCustomer = await prisma.customer.create({
@@ -1897,10 +1977,11 @@ async function startServer() {
           clientSystemCustId: custCode,
           companyName: name || "New Customer",
           email: email || "contact@client.com",
-          taxId: tin || (isB2B ? "P000000000X" : "N/A"),
+          taxId: trimmedTin || "N/A",
           taxClassification: isB2B ? "B2B" : "B2C",
-          address: address || "Nairobi Business District",
+          street: street || "Nairobi Business District",
           city: city || "Nairobi",
+          country: country || "NG",
         },
       });
 

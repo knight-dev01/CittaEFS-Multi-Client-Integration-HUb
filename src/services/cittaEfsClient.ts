@@ -1,19 +1,46 @@
 import "dotenv/config";
 import https from "https";
 
-function getCittaEfsApiKey(): string {
-  const key = process.env.CITTAEFS_API_KEY;
-  if (!key) {
-    throw new Error("CITTAEFS_API_KEY environment variable is required.");
+let prismaPromise: Promise<import("@prisma/client").PrismaClient> | null =
+  null;
+function getPrisma(): Promise<import("@prisma/client").PrismaClient> {
+  if (!prismaPromise) {
+    prismaPromise = (async () => {
+      const { PrismaClient } = await import("@prisma/client");
+      const { getDatabaseUrl } = await import("../config/dbConfig");
+      return new PrismaClient({
+        datasources: { db: { url: getDatabaseUrl() } },
+      });
+    })();
   }
-  return key;
+  return prismaPromise;
+}
+
+/**
+ * Resolves each tenant's own CittaEFS Gateway API key (Tenant.cittaApiKey,
+ * generated per-tenant at onboarding) rather than one shared credential —
+ * every tenant's invoices must be signed under its own identity.
+ */
+async function getCittaEfsApiKey(tenantId: string): Promise<string> {
+  const prisma = await getPrisma();
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { cittaApiKey: true },
+  });
+  if (!tenant?.cittaApiKey) {
+    throw new Error(
+      `No CittaEFS Gateway API key configured for tenant "${tenantId}".`,
+    );
+  }
+  return tenant.cittaApiKey;
 }
 
 export interface CittaEfsRequestPayload {
   tenantId: string;
   clientInvoiceNumber: string;
+  documentNumber?: string; // spec: distinct, optional sequential document reference
   invoiceType: "STANDARD" | "CREDIT_NOTE" | "DEBIT_NOTE" | "CANCELLATION";
-  invoiceKind: "B2B" | "B2C" | "EXPORT";
+  invoiceKind: "B2B" | "B2C" | "B2G" | "EXPORT";
   customerCode: string;
   customerName: string;
   customerTin?: string;
@@ -133,7 +160,7 @@ export class CittaEfsClient {
   public async signAndStampInvoice(
     payload: CittaEfsRequestPayload,
   ): Promise<CittaEfsResponse> {
-    const decryptedApiKey = getCittaEfsApiKey();
+    const decryptedApiKey = await getCittaEfsApiKey(payload.tenantId);
 
     const invoiceNumber = payload.clientInvoiceNumber;
     const issueDate = payload.issueDate;
@@ -150,8 +177,7 @@ export class CittaEfsClient {
     const headerDiscount = (payload as any).headerDiscount || 0;
     const headerCharges = (payload as any).headerCharges || 0;
     const useStateTax = (payload as any).useStateTax || false;
-    const documentNumber =
-      (payload as any).documentNumber || payload.clientInvoiceNumber;
+    const documentNumber = payload.documentNumber || payload.clientInvoiceNumber;
     const billingReferenceIrns = originalIrn ? [originalIrn] : [];
     const customFields = (payload as any).customFields || {};
     const metadata = (payload as any).metadata || {};
@@ -264,7 +290,7 @@ export class CittaEfsClient {
     toDate?: string,
     paymentStatus?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = getCittaEfsApiKey();
+    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
@@ -293,7 +319,7 @@ export class CittaEfsClient {
     fromDate?: string,
     toDate?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = getCittaEfsApiKey();
+    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
@@ -319,7 +345,7 @@ export class CittaEfsClient {
     fromDate?: string,
     toDate?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = getCittaEfsApiKey();
+    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
@@ -345,7 +371,7 @@ export class CittaEfsClient {
     fromDate?: string,
     toDate?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = getCittaEfsApiKey();
+    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
@@ -372,7 +398,7 @@ export class CittaEfsClient {
     status: string,
     reference?: string,
   ): Promise<any> {
-    const decryptedApiKey = getCittaEfsApiKey();
+    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
     const url = `${this.gatewayBaseUrl}/api/einvoice/update/${irn}`;
     const res = await httpsRequest(url, {
       method: "PATCH",
@@ -398,7 +424,7 @@ export class CittaEfsClient {
     tenantId: string,
     items: Array<{ irn: string; payment_status: string; reference?: string }>,
   ): Promise<any> {
-    const decryptedApiKey = getCittaEfsApiKey();
+    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
     const url = `${this.gatewayBaseUrl}/api/einvoice/bulk/update`;
     const res = await httpsRequest(url, {
       method: "PATCH",
@@ -424,11 +450,7 @@ export class CittaEfsClient {
     qrCodeUrl: string,
   ): Promise<{ synced: boolean; message: string }> {
     try {
-      const { PrismaClient } = await import("@prisma/client");
-      const { getDatabaseUrl } = await import("../config/dbConfig");
-      const prisma = new PrismaClient({
-        datasources: { db: { url: getDatabaseUrl() } },
-      });
+      const prisma = await getPrisma();
       const integration = await prisma.integration.findUnique({
         where: {
           tenantId_sourceSystem: {
