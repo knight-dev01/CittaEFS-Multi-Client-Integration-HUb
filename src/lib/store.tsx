@@ -189,32 +189,40 @@ export function HubProvider({ children }: { children: ReactNode }) {
           fetchOrNull('/api/metrics')
         ]);
 
+        // Avoid resetting current activity: only update state if data actually changed
+        const isSameIds = (a: any[], b: any[]) => a.length === b.length && a.every((x, i) => x.id === b[i]?.id && JSON.stringify(x) === JSON.stringify(b[i]));
         if (Array.isArray(tenRes)) {
-          setTenants(tenRes);
+          setTenants(prev => (isSameIds(prev as any, tenRes) ? prev : tenRes));
+          // Preserve user's current workspace selection — only set if empty or URL explicitly dictates
           const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
           const urlTenantId = params?.get('tenantId');
           const savedId = typeof window !== 'undefined' ? localStorage.getItem('citta_active_tenant_id') : null;
-
-          if (urlTenantId && tenRes.some((t: Tenant) => t.id === urlTenantId)) {
-            setActiveTenantIdState(urlTenantId);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('citta_active_tenant_id', urlTenantId);
-            }
-          } else if (savedId && tenRes.some((t: Tenant) => t.id === savedId)) {
-            setActiveTenantIdState(savedId);
-          } else if (tenRes.length > 0) {
-            setActiveTenantIdState(tenRes[0].id);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('citta_active_tenant_id', tenRes[0].id);
+          // Defer tenant switch if user is actively editing a form/modal
+          const isEditing = typeof document !== 'undefined' && document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
+          if (!isEditing) {
+            if (urlTenantId && tenRes.some((t: Tenant) => t.id === urlTenantId)) {
+              setActiveTenantIdState(prev => prev === urlTenantId ? prev : urlTenantId);
+              if (typeof window !== 'undefined') localStorage.setItem('citta_active_tenant_id', urlTenantId);
+            } else if (!activeTenantId && savedId && tenRes.some((t: Tenant) => t.id === savedId)) {
+              setActiveTenantIdState(savedId);
+            } else if (!activeTenantId && tenRes.length > 0) {
+              setActiveTenantIdState(tenRes[0].id);
+              if (typeof window !== 'undefined') localStorage.setItem('citta_active_tenant_id', tenRes[0].id);
             }
           }
         }
-        if (Array.isArray(invRes)) setInvoices(invRes);
-        if (Array.isArray(custRes)) setCustomers(custRes);
-        if (Array.isArray(itemRes)) setItemMappings(itemRes);
-        if (Array.isArray(errRes)) setValidationErrors(errRes);
-        if (Array.isArray(auditRes)) setAuditLogs(auditRes);
-        if (metRes && typeof metRes === 'object') setMetrics(metRes);
+        const updateIfChanged = (setter: any, prev: any[], next: any) => {
+          if (!Array.isArray(next)) return;
+          setter((p: any[]) => (isSameIds(p, next) ? p : next));
+        };
+        // Use functional updates to avoid resetting local UI state (search, expanded rows) when data unchanged
+        const unwrap = (r: any) => Array.isArray(r) ? r : (r?.data && Array.isArray(r.data) ? r.data : null);
+        const invArr = unwrap(invRes); if (invArr) setInvoices(prev => (isSameIds(prev as any, invArr as any) ? prev : invArr));
+        const custArr = unwrap(custRes); if (custArr) setCustomers(prev => (isSameIds(prev as any, custArr as any) ? prev : custArr));
+        const itemArr = unwrap(itemRes); if (itemArr) setItemMappings(prev => (isSameIds(prev as any, itemArr as any) ? prev : itemArr));
+        const errArr = unwrap(errRes); if (errArr) setValidationErrors(prev => (isSameIds(prev as any, errArr as any) ? prev : errArr));
+        const auditArr = unwrap(auditRes); if (auditArr) setAuditLogs(prev => (isSameIds(prev as any, auditArr as any) ? prev : auditArr));
+        if (metRes && typeof metRes === 'object') setMetrics(prev => JSON.stringify(prev) === JSON.stringify(metRes) ? prev : metRes);
       } catch (e) {
         console.error('Backend refresh warning, preserving local state:', e);
       } finally {

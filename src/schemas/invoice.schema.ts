@@ -36,6 +36,8 @@ export const invoiceIngestionSchema = z
     customerAddress: z.string().optional(),
     currency: z.string().default("NGN"),
     originalIrn: z.string().optional(), // For Credit/Debit notes
+    headerDiscount: z.number().min(0).default(0),
+    headerCharges: z.number().min(0).default(0),
     lineItems: z
       .array(invoiceLineItemSchema)
       .min(1, "At least one line item is required"),
@@ -95,7 +97,9 @@ export const invoiceIngestionSchema = z
         .reduce((acc, item) => acc + item.vatAmount, 0)
         .toFixed(2),
     );
-    const grandTotal = Number((subtotal + totalVat).toFixed(2));
+    const headerDiscount = Number((data.headerDiscount || 0).toFixed(2));
+    const headerCharges = Number((data.headerCharges || 0).toFixed(2));
+    const grandTotal = Number((subtotal + totalVat - headerDiscount + headerCharges).toFixed(2));
 
     // Compute SHA-256 payload hash for audit logs
     const payloadJson = JSON.stringify({

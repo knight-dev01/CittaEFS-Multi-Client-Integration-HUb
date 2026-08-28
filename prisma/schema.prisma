@@ -31,6 +31,7 @@ model Tenant {
   validationErrors ValidationError[]
   users            User[]
   integrations     Integration[]
+  queueJobs        QueueJob[]
 
   @@map("tenants")
 }
@@ -41,6 +42,8 @@ model Customer {
   clientSystemCustId String   @map("client_system_cust_id")
   companyName        String   @map("company_name")
   email              String?
+  ccEmail            String?  @map("cc_email")
+  postcode           String?  @map("postcode")
   taxId              String?  @map("tax_id")
   taxClassification  String   @default("B2B") @map("tax_classification")
   street             String?
@@ -93,6 +96,8 @@ model Invoice {
   subtotal              Float
   taxAmount             Float     @map("tax_amount")
   totalAmount           Float     @map("total_amount")
+  headerDiscount        Float     @default(0) @map("header_discount")
+  headerCharges         Float     @default(0) @map("header_charges")
   status                String    @default("PENDING_NRS_STAMP")
   irn                   String?   @unique
   csid                  String?
@@ -202,4 +207,24 @@ model Integration {
   @@unique([tenantId, sourceSystem])
   @@index([tenantId])
   @@map("integrations")
+}
+
+model QueueJob {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  jobName       String   @map("job_name")
+  payload       String   @map("payload") // JSON stringified QueueablePayload
+  attempts      Int      @default(0)
+  maxRetries    Int      @default(5) @map("max_retries")
+  status        String   @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, DLQ
+  lastError     String?  @map("last_error")
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status, nextAttemptAt])
+  @@map("queue_jobs")
 }

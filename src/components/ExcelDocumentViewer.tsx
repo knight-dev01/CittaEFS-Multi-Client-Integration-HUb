@@ -251,6 +251,9 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           const csvText = evt.target?.result as string;
           const workbook = XLSX.read(csvText, { type: 'string' });
           const firstSheet = workbook.SheetNames[0];
+          if (workbook.SheetNames.length > 1 || !/^(Customer Template|Item Template|Invoice Template|Sheet1)$/i.test(firstSheet)) {
+            console.warn(`[Compliance] Expected sheet "Customer/Item/Invoice Template" but got "${firstSheet}". Using first sheet.`);
+          }
           const rawData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
 
           parseAndLoadRows(rawData, file.name);
@@ -266,6 +269,9 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           const data = new Uint8Array(evt.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.SheetNames[0];
+          if (workbook.SheetNames.length > 1 || !/^(Customer Template|Item Template|Invoice Template|Sheet1)$/i.test(firstSheet)) {
+            console.warn(`[Compliance] Expected sheet "Customer/Item/Invoice Template" but got "${firstSheet}". Using first sheet.`);
+          }
           const rawData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
 
           parseAndLoadRows(rawData, file.name);

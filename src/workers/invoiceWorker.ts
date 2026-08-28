@@ -24,6 +24,7 @@ export async function processInvoiceJob(
   job.status = 'PROCESSING';
   job.attempts += 1;
   job.updatedAt = new Date().toISOString();
+  await invoiceQueue.updateJob(job);
 
   try {
     // 1. Dispatch payload to CittaEFS Gateway C# REST API
@@ -66,7 +67,7 @@ export async function processInvoiceJob(
         response.qrCodeUrl || ''
       );
 
-      invoiceQueue.removeJob(job.id);
+      await invoiceQueue.removeJob(job.id);
       return { jobId: job.id, success: true, irn: response.irn };
     } else {
       throw new Error(response.message || 'Gateway returned non-success status');
@@ -77,7 +78,7 @@ export async function processInvoiceJob(
 
     // Check if max retries exceeded
     if (job.attempts >= job.maxRetries) {
-      invoiceQueue.moveToDLQ(job, `Exceeded max retries (${job.maxRetries}). Error: ${errorMsg}`);
+      await invoiceQueue.moveToDLQ(job, `Exceeded max retries (${job.maxRetries}). Error: ${errorMsg}`);
       await prisma.invoice.update({
         where: { id: job.data.dbInvoiceId },
         data: { status: 'REJECTED' }
@@ -95,6 +96,7 @@ export async function processInvoiceJob(
     const backoffDelay = job.backoffMs[Math.min(job.attempts - 1, job.backoffMs.length - 1)];
     job.nextAttemptAt = new Date(Date.now() + backoffDelay).toISOString();
     console.warn(`[Worker] Job ${job.id} failed attempt ${job.attempts}/${job.maxRetries}. Retrying in ${backoffDelay}ms. Error: ${errorMsg}`);
+    await invoiceQueue.updateJob(job);
     
     return {
       jobId: job.id,
@@ -109,6 +111,8 @@ export async function processInvoiceJob(
  * Worker Loop: Process all pending items in queue
  */
 export async function runWorkerBatch(): Promise<ProcessingResult[]> {
+  // Recover orphans that lost queue entry after restart
+  await invoiceQueue.recoverOrphans().catch(()=>{});
   const pendingJobs = invoiceQueue.getPendingJobs();
   const results: ProcessingResult[] = [];
 

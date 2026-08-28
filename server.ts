@@ -238,6 +238,8 @@ function formatCustomer(c: any) {
     city: c.city || "Nairobi",
     country: c.country || null,
     email: c.email || "contact@client.com",
+    ccEmail: (c as any).ccEmail || null,
+    postcode: (c as any).postcode || null,
     phone: c.phone || "+254700000000",
     tinValidationStatus:
       c.tinValidationStatus || (isB2B ? "VALIDATED" : "UNVERIFIED"),
@@ -1072,6 +1074,44 @@ async function startServer() {
     }
   });
 
+  app.get("/api/tenants/:id", async (req, res) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.params.id },
+        include: { customers: true, items: true, invoices: { include: { lineItems: true } } },
+      });
+      if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
+      res.json({
+        ...tenant,
+        customers: (tenant.customers || []).map(formatCustomer),
+        invoices: (tenant.invoices || []).map(formatInvoice),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/tenants/:id", async (req: any, res) => {
+    try {
+      const role = req.user?.role;
+      if (req.user && role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      await prisma.tenant.delete({ where: { id: req.params.id } });
+      await safeAuditLogCreate(prisma, {
+        tenantId: req.params.id,
+        action: "TENANT_DELETED",
+        entityType: "TENANT",
+        entityRef: req.params.id,
+        details: `Tenant ${req.params.id} deleted`,
+        sha256PayloadHash: generateSha256(req.params.id),
+        performedBy: req.user?.email || "Admin",
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      if (e.code === "P2025") return res.status(404).json({ success: false, error: "Tenant not found" });
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/system/purge-demo-data", async (req, res) => {
     try {
       try {
@@ -1138,6 +1178,16 @@ async function startServer() {
     } catch (e: any) {
       console.error("[API Error] GET /api/invoices failed:", e);
       res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/invoices/:id", async (req, res) => {
+    try {
+      const inv = await prisma.invoice.findUnique({ where: { id: req.params.id }, include: { lineItems: true } });
+      if (!inv) return res.status(404).json({ success: false, error: "Invoice not found" });
+      res.json(formatInvoice(inv));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -1406,6 +1456,153 @@ async function startServer() {
 
       res.json({ success: true, invoice: updated });
     } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ==========================================
+  // 2b. HUB EXTERNAL API FOR EXISTING CITTAEFS SYSTEMS
+  // ==========================================
+  // Allows an already-running CittaEFS instance to push invoices without a browser session.
+  // Auth: X-Hub-Api-Key: <Tenant.cittaApiKey>  OR  Authorization: Bearer <key>  OR tenantId body param for dev
+  async function resolveHubTenant(req: any): Promise<string | null> {
+    const apiKey = (req.headers["x-hub-api-key"] as string) || (req.headers["x-api-key"] as string) || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : null);
+    if (apiKey) {
+      const tenant = await prisma.tenant.findFirst({ where: { cittaApiKey: apiKey } });
+      if (tenant) return tenant.id;
+    }
+    if (req.body?.tenantId) {
+      const t = await prisma.tenant.findUnique({ where: { id: req.body.tenantId } });
+      if (t) return t.id;
+    }
+    if (req.query?.tenantId) {
+      const t = await prisma.tenant.findUnique({ where: { id: req.query.tenantId as string } });
+      if (t) return t.id;
+    }
+    return null;
+  }
+
+  app.get("/api/hub/v1/health", async (req, res) => {
+    res.json({ status: "ok", service: "citta-hub-external", timestamp: new Date().toISOString(), version: "1.0" });
+  });
+
+  app.get("/api/hub/v1/tenants/:tenantId/invoices", async (req, res) => {
+    try {
+      const tenantId = await resolveHubTenant(req) || req.params.tenantId;
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found or invalid API key" });
+      const { skip, take, page, limit } = parsePagination(req);
+      const where: any = { tenantId };
+      if (req.query.status) where.status = req.query.status;
+      const [total, rows] = await Promise.all([
+        prisma.invoice.count({ where }),
+        prisma.invoice.findMany({ where, include: { lineItems: true }, orderBy: { createdAt: "desc" }, skip, take }),
+      ]);
+      res.json({ data: rows.map(formatInvoice), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/hub/v1/tenants/:tenantId/invoices/:clientInvoiceNumber", async (req, res) => {
+    try {
+      const tenantId = await resolveHubTenant(req) || req.params.tenantId;
+      const inv = await prisma.invoice.findFirst({ where: { tenantId, clientInvoiceId: req.params.clientInvoiceNumber }, include: { lineItems: true } });
+      if (!inv) return res.status(404).json({ success: false, error: "Invoice not found" });
+      res.json(formatInvoice(inv));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Alias that accepts external payload and forwards to internal gen logic via internal fetch (avoids duplication)
+  app.post("/api/hub/v1/invoices", async (req, res) => {
+    try {
+      const tenantId = await resolveHubTenant(req);
+      if (!tenantId) return res.status(401).json({ success: false, error: "Missing or invalid X-Hub-Api-Key. Provide tenant's cittaApiKey." });
+      // Forward to internal handler by injecting tenantId and calling same validation path via direct DB logic (reuse endpoint)
+      req.body.tenantId = tenantId;
+      // Re-use the same handler by forwarding internally — simplest: call the existing endpoint via fetch to self would loop, so duplicate minimal create path
+      // For hub, accept simplified external schema and map to internal fields
+      const body = req.body;
+      const mapped = {
+        tenantId,
+        clientInvoiceNumber: body.clientInvoiceNumber || body.invoiceNumber || body.clientInvoiceId,
+        documentNumber: body.documentNumber,
+        invoiceKind: body.invoiceKind || "B2B",
+        invoiceType: body.invoiceType || "STANDARD",
+        originalIrn: body.originalIrn || body.billingReferenceIrn,
+        issueDate: body.issueDate,
+        customerCode: body.customerCode || body.customerCode || "CUST-EXTERNAL",
+        customerName: body.customerName || body.customer_name,
+        customerTin: body.customerTin || body.customer_tin,
+        lineItems: (body.lineItems || body.items || []).map((li: any) => ({
+          itemCode: li.itemCode || li.sku || li.ItemCode,
+          description: li.description || li.desc || li.ItemDescription,
+          quantity: Number(li.quantity || li.qty || 1),
+          unitPrice: Number(li.unitPrice || li.price || 0),
+          discountAmount: Number(li.discountAmount || li.discount || 0),
+          hsOrServiceCode: li.hsOrServiceCode || li.hsCode || "HS-8471.30",
+          vatRate: li.vatRate !== undefined ? Number(li.vatRate) : undefined,
+        })),
+      };
+      // Inject back to req and forward to the gen/invoices handler via internal call stack: just return 307 redirect semantics
+      // Instead, directly invoke creation logic by reusing the POST /api/integration/gen/invoices core (call via prisma directly)
+      // To avoid code duplication, make an internal loopback fetch to the same server once listening — use direct insert here
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
+      // Validate via schema
+      const validated = invoiceIngestionSchema.parse({
+        tenantId,
+        clientInvoiceNumber: mapped.clientInvoiceNumber,
+        documentNumber: mapped.documentNumber,
+        invoiceType: mapped.invoiceType as any,
+        invoiceKind: mapped.invoiceKind as any,
+        issueDate: mapped.issueDate,
+        customerCode: mapped.customerCode,
+        customerName: mapped.customerName,
+        customerTin: mapped.customerTin,
+        originalIrn: mapped.originalIrn,
+        lineItems: mapped.lineItems,
+      });
+      // Duplicate check
+      const dup = await prisma.invoice.findFirst({ where: { tenantId, clientInvoiceId: validated.clientInvoiceNumber } });
+      if (dup) return res.status(409).json({ success: false, error: `Duplicate invoice ${validated.clientInvoiceNumber}` });
+      const subtotal = validated.subtotal;
+      const totalVat = validated.totalVat;
+      const grandTotal = validated.grandTotal;
+      const rawNewInvoice = await prisma.invoice.create({
+        data: {
+          tenantId,
+          clientInvoiceId: validated.clientInvoiceNumber,
+          documentNumber: (validated as any).documentNumber || null,
+          invoiceType: validated.invoiceType,
+          invoiceKind: validated.invoiceKind,
+          issueDate: new Date(validated.issueDate),
+          customerCode: validated.customerCode,
+          customerName: validated.customerName,
+          customerTin: (validated as any).customerTin || null,
+          currency: "NGN",
+          subtotal,
+          taxAmount: totalVat,
+          totalAmount: grandTotal,
+          status: "PENDING_NRS_STAMP",
+          ledgerWritebackStatus: "PENDING",
+          lineItems: { create: validated.lineItems.map((li: any) => ({
+            itemCode: li.itemCode,
+            description: li.description,
+            quantity: li.quantity,
+            unitPrice: li.unitPrice,
+            taxableAmount: li.taxableAmount,
+            vatRate: li.vatRate,
+            vatAmount: li.vatAmount,
+            totalAmount: li.totalAmount,
+            hsOrServiceCode: li.hsOrServiceCode,
+          })) },
+        },
+        include: { lineItems: true },
+      });
+      await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: rawNewInvoice.id });
+      await prisma.tenant.update({ where: { id: tenantId }, data: { monthlyUsed: { increment: 1 }, lastSyncAt: new Date() } });
+      res.status(202).json({ success: true, status: "PENDING_NRS_STAMP", invoice: formatInvoice(rawNewInvoice), message: "Queued via Hub external API. Poll GET /api/hub/v1/tenants/:id/invoices/:number for IRN." });
+    } catch (e: any) {
+      if (e.name === "ZodError") return res.status(400).json({ success: false, error: "Validation failed", details: e.errors });
       res.status(500).json({ error: e.message });
     }
   });
@@ -2024,6 +2221,39 @@ async function startServer() {
     }
   });
 
+  app.put("/api/items/mappings/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { name, description, unitCode, hsOrServiceCode, defaultVatRate, categoryType } = req.body;
+      const existing = await prisma.item.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: "Item not found" });
+      const updated = await prisma.item.update({
+        where: { id },
+        data: {
+          name: name ?? existing.name,
+          description: description ?? existing.description,
+          unitCode: unitCode ?? existing.unitCode,
+          hsOrServiceCode: hsOrServiceCode ?? existing.hsOrServiceCode,
+          categoryType: categoryType ?? existing.categoryType,
+          defaultVatRate: defaultVatRate !== undefined ? Number(defaultVatRate) : existing.defaultVatRate,
+        },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/items/mappings/:id", async (req: any, res) => {
+    try {
+      await prisma.item.delete({ where: { id: req.params.id } });
+      res.json({ success: true });
+    } catch (e: any) {
+      if (e.code === "P2025") return res.status(404).json({ success: false, error: "Item not found" });
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ==========================================
   // 5. CUSTOMERS API (DB Backed)
   // ==========================================
@@ -2079,17 +2309,31 @@ async function startServer() {
           "TIN must be 10 to 14 alphanumeric characters, with no spaces or hyphens.",
         );
       }
+      if (isB2B && !(req.body.postcode || "").trim()) {
+        errors.push("Postcode is required for B2B customers.");
+      }
+      const ccEmailVal = (req.body.ccEmail as string) || "";
+      if (ccEmailVal.trim()) {
+        const parts = ccEmailVal.split(";").map((s: string) => s.trim()).filter(Boolean);
+        const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const bad = parts.filter((p: string) => !emailRe.test(p));
+        if (bad.length > 0) errors.push(`CCEmail contains invalid emails: ${bad.join(", ")} (semicolon-separated).`);
+      }
       if (errors.length > 0) {
         return res.status(400).json({ success: false, errors });
       }
 
       let rawCustomer: any;
+      const ccEmail = (req.body as any).ccEmail as string | undefined;
+      const postcode = (req.body as any).postcode as string | undefined;
       rawCustomer = await prisma.customer.create({
         data: {
           tenantId: tId,
           clientSystemCustId: custCode,
           companyName: name || "New Customer",
           email: email || "contact@client.com",
+          ccEmail: ccEmail || null,
+          postcode: postcode || null,
           taxId: trimmedTin || "N/A",
           taxClassification: isB2B ? "B2B" : "B2C",
           street: street || "Nairobi Business District",
@@ -2101,6 +2345,48 @@ async function startServer() {
       const customer = formatCustomer(rawCustomer);
       res.status(201).json(customer);
     } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/customers/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { name, tin, isB2B, street, city, country, email, ccEmail, postcode } = req.body;
+      const existing = await prisma.customer.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: "Customer not found" });
+      if (tin !== undefined) {
+        const trimmed = String(tin).trim();
+        const valid = /^[A-Za-z0-9]{10,14}$/.test(trimmed);
+        if (existing.taxClassification === "B2B" && !trimmed) return res.status(400).json({ success: false, errors: ["TIN is mandatory for B2B customers."] });
+        if (trimmed && !valid) return res.status(400).json({ success: false, errors: ["TIN must be 10 to 14 alphanumeric characters."] });
+      }
+      const updated = await prisma.customer.update({
+        where: { id },
+        data: {
+          companyName: name ?? existing.companyName,
+          taxId: tin !== undefined ? (String(tin).trim() || "N/A") : existing.taxId,
+          taxClassification: isB2B !== undefined ? (isB2B ? "B2B" : "B2C") : existing.taxClassification,
+          street: street ?? existing.street,
+          city: city ?? existing.city,
+          country: country ?? existing.country,
+          email: email ?? existing.email,
+          ccEmail: ccEmail ?? (existing as any).ccEmail,
+          postcode: postcode ?? (existing as any).postcode,
+        },
+      });
+      res.json(formatCustomer(updated));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/customers/:id", async (req: any, res) => {
+    try {
+      await prisma.customer.delete({ where: { id: req.params.id } });
+      res.json({ success: true });
+    } catch (e: any) {
+      if (e.code === "P2025") return res.status(404).json({ success: false, error: "Customer not found" });
       res.status(500).json({ error: e.message });
     }
   });
