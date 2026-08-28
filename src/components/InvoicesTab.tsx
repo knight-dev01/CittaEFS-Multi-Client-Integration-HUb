@@ -74,7 +74,7 @@ export function InvoicesTab() {
           quantity: 1,
           unitPrice: cnAmount,
           discountAmount: 0,
-          vatRate: 16,
+          vatRate: creditNoteModalInvoice.lineItems[0]?.vatRate ?? (activeTenant as any)?.defaultVatRate ?? 7.5,
           hsOrServiceCode: creditNoteModalInvoice.lineItems[0]?.hsOrServiceCode || 'SRV-7414.00'
         }
       ]
@@ -286,7 +286,7 @@ export function InvoicesTab() {
                           </button>
 
                           {/* Issue Credit Note Button */}
-                          {true && inv.status === 'SIGNED' && inv.invoiceType === 'STANDARD' && (
+                          {true && (inv.status === 'SIGNED' || inv.status === 'APPROVED') && inv.invoiceType === 'STANDARD' && (
                             <button
                               onClick={() => setCreditNoteModalInvoice(inv)}
                               className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md border border-amber-200 transition-colors cursor-pointer"

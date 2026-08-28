@@ -226,11 +226,22 @@ export function HubProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshAll();
 
-    // Set up real-time listener systems: WebSockets & Server-Sent Events
+    // Debounced refresh to coalesce simultaneous WS/SSE events
+    let debounceTimer: any = null;
+    const debouncedRefresh = () => {
+      if (debounceTimer) return;
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        refreshAll();
+      }, 500);
+    };
+
     let eventSource: EventSource | null = null;
     let ws: WebSocket | null = null;
     let sseReconnectTimeout: any = null;
     let wsReconnectTimeout: any = null;
+    let wsFailCount = 0;
+    let sseActive = false;
 
     const connectWS = () => {
       try {
@@ -249,15 +260,20 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
         ws.onopen = () => {
           console.log('[WS] Connection successfully established.');
+          wsFailCount = 0;
+          // WS recovered — close SSE secondary channel if active
+          if (sseActive && eventSource) {
+            eventSource.close();
+            eventSource = null;
+            sseActive = false;
+            if (sseReconnectTimeout) { clearTimeout(sseReconnectTimeout); sseReconnectTimeout = null; }
+          }
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log('[WS] Received real-time broadcast:', data);
-            if (data.type === 'update') {
-              refreshAll();
-            }
+            if (data.type === 'update') debouncedRefresh();
           } catch (e) {
             console.error('[WS] Error processing event data:', e);
           }
@@ -268,12 +284,15 @@ export function HubProvider({ children }: { children: ReactNode }) {
         };
 
         ws.onclose = () => {
-          console.log('[WS] WebSocket closed. Reconnecting in 5s...');
-          if (ws) {
-            ws.close();
-            ws = null;
-          }
+          wsFailCount++;
+          console.log(`[WS] Closed (failCount=${wsFailCount}). Reconnecting in 5s...`);
+          if (ws) { try { ws.close(); } catch {} ws = null; }
           wsReconnectTimeout = setTimeout(connectWS, 5000);
+          // After 2 consecutive WS failures, start SSE as secondary channel
+          if (wsFailCount >= 2 && !sseActive) {
+            console.log('[SSE] Starting secondary channel after WS failures');
+            connectSSE();
+          }
         };
       } catch (err) {
         console.error('[WS] Connection error:', err);
@@ -282,6 +301,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
     };
 
     const connectSSE = () => {
+      if (sseActive) return;
+      sseActive = true;
       console.log('[SSE] Attempting to connect to real-time events...');
       const baseUrl = getApiBaseUrl();
       const sseUrl = baseUrl ? `${baseUrl}/api/events` : '/api/events';
@@ -290,10 +311,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('[SSE] Received real-time broadcast:', data);
-          if (data.type === 'update') {
-            refreshAll();
-          }
+          if (data.type === 'update') debouncedRefresh();
         } catch (e) {
           console.error('[SSE] Error processing event data:', e);
         }
@@ -301,27 +319,31 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
       eventSource.onerror = (err) => {
         console.error('[SSE] EventSource failed, scheduling reconnect...', err);
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
+        if (eventSource) { eventSource.close(); eventSource = null; }
+        sseActive = false;
+        // Only reconnect SSE if WS is still down
+        if (wsFailCount >= 2) {
+          sseReconnectTimeout = setTimeout(connectSSE, 5000);
         }
-        sseReconnectTimeout = setTimeout(connectSSE, 5000); // Backoff retry
       };
     };
 
     connectWS();
-    connectSSE();
 
-    // Backup polling loop (every 8 seconds)
+    // Backup polling — 30s, paused when tab hidden
     const backupPoll = setInterval(() => {
-      refreshAll();
-    }, 8000);
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      if (sseActive && eventSource && eventSource.readyState === 1) return;
+      debouncedRefresh();
+    }, 30000);
 
     return () => {
       if (eventSource) eventSource.close();
-      if (ws) ws.close();
+      if (ws) try { ws.close(); } catch {}
       if (sseReconnectTimeout) clearTimeout(sseReconnectTimeout);
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      if (debounceTimer) clearTimeout(debounceTimer);
       clearInterval(backupPoll);
     };
   }, []);

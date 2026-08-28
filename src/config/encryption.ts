@@ -5,10 +5,21 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // Recommended IV length for AES-GCM
 const AUTH_TAG_LENGTH = 16;
 
-// Secret key should be 32 bytes (256 bits). Uses process.env.ENCRYPTION_SECRET or default secret key
+// Secret key should be 32 bytes (256 bits). Supports ENCRYPTION_KEY (hex 32 bytes) and ENCRYPTION_SECRET (passphrase)
 function getEncryptionKey(): Buffer {
-  const secret = process.env.ENCRYPTION_SECRET || 'cittaefs_compliance_hub_default_secret_32bytes!!';
-  return crypto.scryptSync(secret, 'salt_citta_hub', 32);
+  const rawKey = process.env.ENCRYPTION_KEY?.trim() || process.env.ENCRYPTION_SECRET?.trim();
+  if (!rawKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("ENCRYPTION_KEY or ENCRYPTION_SECRET environment variable is required in production");
+    }
+    console.warn("[Security Warning] ENCRYPTION_KEY/ENCRYPTION_SECRET not set — using insecure dev value. Set ENCRYPTION_KEY for production.");
+    return crypto.scryptSync("cittaefs_compliance_hub_default_secret_32bytes!!_dev_only", "salt_citta_hub", 32);
+  }
+  // If 64 hex chars (32 bytes), use directly; otherwise derive via scrypt
+  if (/^[0-9a-fA-F]{64}$/.test(rawKey)) {
+    return Buffer.from(rawKey, "hex");
+  }
+  return crypto.scryptSync(rawKey, "salt_citta_hub", 32);
 }
 
 export interface EncryptedData {

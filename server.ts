@@ -13,9 +13,23 @@ import { getDatabaseUrl } from "./src/config/dbConfig.ts";
 
 process.env.DATABASE_URL = getDatabaseUrl(false);
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || "citta_efs_jwt_secret_998";
+function requireEnv(name: string): string {
+  const v = process.env[name]?.trim();
+  if (!v) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(`${name} environment variable is required in production`);
+    }
+    console.warn(`[Security Warning] ${name} not set — using insecure dev value. Set ${name} for production.`);
+    return name === "JWT_SECRET" ? "citta_efs_jwt_secret_998_dev_only" : "";
+  }
+  return v;
+}
+const JWT_SECRET = process.env.JWT_SECRET?.trim() || (process.env.NODE_ENV === "production" ? requireEnv("JWT_SECRET") : "citta_efs_jwt_secret_998_dev_only");
+if (process.env.NODE_ENV === "production" && JWT_SECRET.includes("dev_only")) {
+  throw new Error("JWT_SECRET must be set to a strong random value in production");
+}
 const JWT_REFRESH_SECRET =
-  process.env.JWT_REFRESH_SECRET ||
+  process.env.JWT_REFRESH_SECRET?.trim() ||
   `${JWT_SECRET}_refresh`;
 const ACCESS_TOKEN_MAX_AGE_MS = 8 * 3600 * 1000;
 const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
@@ -44,16 +58,9 @@ import {
   writebackToQbo,
 } from "./src/services/qboService";
 
-// Helper to calculate SHA256 simulation hash
+// Cryptographic SHA-256 helper for audit trails and payload verification
 function generateSha256(data: string): string {
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  const hex = Math.abs(hash).toString(16).padStart(8, "0");
-  return `sha256_${hex}_${Date.now().toString(36)}`;
+  return crypto.createHash("sha256").update(data, "utf8").digest("hex");
 }
 
 /**
@@ -118,7 +125,7 @@ async function safeAuditLogCreate(
       }
     }
 
-    // If not found or not provided, try to find any existing tenant in DB as fallback
+    // If not found or not provided, try to find any existing tenant in DB as alternative
     if (!resolvedTenantId) {
       const anyTenant = await prismaClient.tenant.findFirst({
         select: { id: true },
@@ -339,7 +346,7 @@ function renderOAuthBridgeHtml(payload: {
         }
       } catch (e) {}
 
-      // 4. Close popup or fallback to top-level navigation
+      // 4. Close popup or navigate top-level
       var isPopup = postedToOpener || window.name === 'qbo_oauth' || (typeof window.opener !== 'undefined' && window.opener !== null);
       if (isPopup) {
         setTimeout(function () {
@@ -372,10 +379,72 @@ async function startServer() {
   );
   app.use(cookieParser());
 
-  // Global CORS & Preflight OPTIONS Handler
+  // Security headers (helmet-lite)
   app.use((req, res, next) => {
-    const origin = req.headers.origin || "*";
-    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "0");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (process.env.NODE_ENV === "production") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+    next();
+  });
+
+  // Simple in-memory rate limiter (100 req/min per IP, 15/min for auth)
+  const rateBuckets = new Map<string, number[]>();
+  function isRateLimited(key: string, limit: number, windowMs: number): boolean {
+    const now = Date.now();
+    const arr = rateBuckets.get(key) || [];
+    const recent = arr.filter((t) => now - t < windowMs);
+    recent.push(now);
+    rateBuckets.set(key, recent);
+    return recent.length > limit;
+  }
+  setInterval(() => {
+    const cutoff = Date.now() - 60000;
+    for (const [k, v] of rateBuckets) {
+      const f = v.filter((t) => t > cutoff);
+      if (f.length === 0) rateBuckets.delete(k);
+      else rateBuckets.set(k, f);
+    }
+  }, 60000).unref();
+  app.use((req, res, next) => {
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || (req.socket as any)?.remoteAddress || "unknown";
+    const isAuth = req.path.startsWith("/api/auth/");
+    const limit = isAuth ? 15 : 120;
+    const key = `${ip}:${isAuth ? "auth" : "api"}`;
+    if (isRateLimited(key, limit, 60000)) {
+      return res.status(429).json({ success: false, error: "Too many requests, please try again later." });
+    }
+    next();
+  });
+
+  // CORS with allowlist
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || process.env.APP_URL || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // Default: allow vercel + localhost + render domain if not configured
+  const defaultAllow = ["http://localhost:3000", "http://localhost:5173", "https://cittaefs-multi-client-integration-hub.onrender.com"];
+  const corsAllowList = allowedOrigins.length > 0 ? allowedOrigins : defaultAllow;
+  function isOriginAllowed(origin?: string): boolean {
+    if (!origin) return true;
+    if (corsAllowList.includes(origin)) return true;
+    if (origin.endsWith(".vercel.app")) return true;
+    if (process.env.NODE_ENV !== "production") return true;
+    return false;
+  }
+  app.use((req, res, next) => {
+    const origin = req.headers.origin as string | undefined;
+    if (origin && isOriginAllowed(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    } else if (!origin) {
+      // Non-browser request
+      res.setHeader("Access-Control-Allow-Origin", corsAllowList[0] || "*");
+    }
     res.setHeader(
       "Access-Control-Allow-Methods",
       "GET, POST, PUT, DELETE, PATCH, OPTIONS",
@@ -1026,17 +1095,46 @@ async function startServer() {
   // ==========================================
   // 2. INVOICES & FISCAL LIFECYCLE API (DB Backed)
   // ==========================================
+  function parsePagination(req: any): { skip: number; take: number; page: number; limit: number } {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const rawLimit = parseInt(req.query.limit as string) || 50;
+    const limit = Math.min(Math.max(1, rawLimit), 200);
+    return { page, limit, skip: (page - 1) * limit, take: limit };
+  }
+
   app.get("/api/invoices", async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      const rawInvoices = await prisma.invoice.findMany({
-        where: tenantId ? { tenantId } : {},
-        include: { lineItems: true },
-        orderBy: { createdAt: "desc" },
-      });
+      const status = req.query.status as string | undefined;
+      const { skip, take, page, limit } = parsePagination(req);
+      const where: any = {};
+      if (tenantId) where.tenantId = tenantId;
+      if (status && status !== "ALL") where.status = status;
+      const [total, rawInvoices] = await Promise.all([
+        prisma.invoice.count({ where }),
+        prisma.invoice.findMany({
+          where,
+          include: { lineItems: true },
+          orderBy: { createdAt: "desc" },
+          skip,
+          take,
+        }),
+      ]);
 
       const invoices = rawInvoices.map(formatInvoice);
-      res.json(invoices);
+      // Backward compatible: if client didn't request pagination, still paginate with default limit to avoid OOM
+      const paginated = req.query.page !== undefined || req.query.limit !== undefined || req.query.status !== undefined;
+      if (paginated || req.query.page !== undefined || total > limit) {
+        res.setHeader("X-Total-Count", String(total));
+        res.setHeader("X-Page", String(page));
+        res.setHeader("X-Limit", String(limit));
+      }
+      // Return enveloped response when pagination explicitly requested, else plain array for backward compat
+      if (req.query.page !== undefined || req.query.limit !== undefined) {
+        res.json({ data: invoices, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+      } else {
+        res.json(invoices);
+      }
     } catch (e: any) {
       console.error("[API Error] GET /api/invoices failed:", e);
       res.status(500).json({ success: false, error: "Internal server error" });
@@ -1820,10 +1918,18 @@ async function startServer() {
   app.get("/api/items/mappings", async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      const items = await prisma.item.findMany({
-        where: tenantId ? { tenantId } : {},
-      });
-      res.json(items);
+      const { skip, take, page, limit } = parsePagination(req);
+      const where: any = tenantId ? { tenantId } : {};
+      const [total, items] = await Promise.all([
+        prisma.item.count({ where }),
+        prisma.item.findMany({ where, skip, take, orderBy: { createdAt: "desc" } }),
+      ]);
+      if (req.query.page !== undefined || req.query.limit !== undefined) {
+        res.json({ data: items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+      } else {
+        res.setHeader("X-Total-Count", String(total));
+        res.json(items);
+      }
     } catch (e: any) {
       console.error("[API Error] GET /api/items/mappings failed:", e);
       res.status(500).json({ success: false, error: "Internal server error" });
@@ -1924,12 +2030,19 @@ async function startServer() {
   app.get("/api/customers", async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      const rawCustomers = await prisma.customer.findMany({
-        where: tenantId ? { tenantId } : {},
-      });
-
+      const { skip, take, page, limit } = parsePagination(req);
+      const where: any = tenantId ? { tenantId } : {};
+      const [total, rawCustomers] = await Promise.all([
+        prisma.customer.count({ where }),
+        prisma.customer.findMany({ where, skip, take, orderBy: { createdAt: "desc" } }),
+      ]);
       const customers = rawCustomers.map(formatCustomer);
-      res.json(customers);
+      if (req.query.page !== undefined || req.query.limit !== undefined) {
+        res.json({ data: customers, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+      } else {
+        res.setHeader("X-Total-Count", String(total));
+        res.json(customers);
+      }
     } catch (e: any) {
       console.error("[API Error] GET /api/customers failed:", e);
       res.status(500).json({ success: false, error: "Internal server error" });
@@ -1998,10 +2111,23 @@ async function startServer() {
   app.get("/api/validation-errors", async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      const errors = await prisma.validationError.findMany({
-        where: tenantId ? { tenantId } : {},
-      });
-      res.json(errors);
+      const { skip, take, page, limit } = parsePagination(req);
+      const where: any = tenantId ? { tenantId } : {};
+      const [total, errors] = await Promise.all([
+        prisma.validationError.count({ where }),
+        prisma.validationError.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip,
+          take,
+        }),
+      ]);
+      if (req.query.page !== undefined || req.query.limit !== undefined) {
+        res.json({ data: errors, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+      } else {
+        res.setHeader("X-Total-Count", String(total));
+        res.json(errors);
+      }
     } catch (e: any) {
       console.error("[API Error] GET /api/validation-errors failed:", e);
       res.status(500).json({ success: false, error: "Internal server error" });
@@ -2195,12 +2321,23 @@ async function startServer() {
   app.get("/api/audit-logs", async (req, res) => {
     try {
       const tenantId = req.query.tenantId as string;
-      const logs = await prisma.auditLog.findMany({
-        where: tenantId ? { tenantId } : {},
-        orderBy: { createdAt: "desc" },
-        take: 100,
-      });
-      res.json(logs);
+      const { skip, take, page, limit } = parsePagination(req);
+      const where: any = tenantId ? { tenantId } : {};
+      const [total, logs] = await Promise.all([
+        prisma.auditLog.count({ where }),
+        prisma.auditLog.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip,
+          take,
+        }),
+      ]);
+      if (req.query.page !== undefined || req.query.limit !== undefined) {
+        res.json({ data: logs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+      } else {
+        res.setHeader("X-Total-Count", String(total));
+        res.json(logs);
+      }
     } catch (e: any) {
       console.error("[API Error] GET /api/audit-logs failed:", e);
       res.status(500).json({ success: false, error: "Internal server error" });
