@@ -17,8 +17,33 @@ function getPrisma(): Promise<import("@prisma/client").PrismaClient> {
 }
 
 /**
- * Resolves each tenant's own CittaEFS Gateway API key and gateway URL.
+ * Resolves the CittaEFS Gateway config.
+ * UPDATED 2026-08-29: All tenants share ONE global API key (per user request).
+ * Priority: env CITTAEFS_API_KEY -> env CITTA_EFS_API_KEY -> first tenant's DB key -> error.
+ * Gateway URL: env CITTAEFS_GATEWAY_URL -> tenant.cittaGatewayUrl -> default.
+ * writebackTarget remains per-tenant (HUB | CITTAEFS | BOTH) for flexibility.
  */
+function getGlobalGatewayBaseUrl(tenantGatewayUrl?: string | null): string {
+  return (
+    process.env.CITTAEFS_GATEWAY_URL?.trim() ||
+    process.env.CITTA_GATEWAY_URL?.trim() ||
+    process.env.CITTAEFS_GATEWAY_BASE?.trim() ||
+    tenantGatewayUrl?.trim() ||
+    "https://ei-api.azurewebsites.net"
+  );
+}
+
+function getGlobalApiKey(): string | null {
+  const raw =
+    process.env.CITTAEFS_API_KEY?.trim() ||
+    process.env.CITTA_EFS_API_KEY?.trim() ||
+    process.env.CITTA_GATEWAY_API_KEY?.trim() ||
+    "";
+  if (!raw) return null;
+  if (raw.includes("placeholder") || raw === "citta_live_placeholder") return null;
+  return raw;
+}
+
 async function getCittaEfsApiKey(tenantId: string): Promise<string> {
   const { apiKey } = await getCittaEfsConfig(tenantId);
   return apiKey;
@@ -30,15 +55,41 @@ async function getCittaEfsConfig(tenantId: string): Promise<{ apiKey: string; ga
     where: { id: tenantId },
     select: { cittaApiKey: true, cittaGatewayUrl: true, cittaWritebackTarget: true },
   });
-  if (!tenant?.cittaApiKey) {
-    throw new Error(
-      `No CittaEFS Gateway API key configured for tenant "${tenantId}".`,
-    );
+
+  // 1. Global env key wins — single key for all tenants (user requirement)
+  const globalKey = getGlobalApiKey();
+  const gatewayUrl = getGlobalGatewayBaseUrl(tenant?.cittaGatewayUrl);
+  const writebackTarget = tenant?.cittaWritebackTarget || "HUB";
+
+  if (globalKey) {
+    return { apiKey: globalKey, gatewayUrl, writebackTarget };
   }
+
+  // 2. Fallback: if env not set, use shared DB key — pick first non-empty tenant key so all tenants behave identically
+  if (tenant?.cittaApiKey) {
+    return { apiKey: tenant.cittaApiKey, gatewayUrl, writebackTarget };
+  }
+  // If this tenant has no key, look for any tenant that does (shared pool)
+  const anyTenant = await prisma.tenant.findFirst({
+    where: { cittaApiKey: { not: "" } },
+    select: { cittaApiKey: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (anyTenant?.cittaApiKey) {
+    return { apiKey: anyTenant.cittaApiKey, gatewayUrl, writebackTarget };
+  }
+
+  throw new Error(
+    `No CittaEFS Gateway API key configured. Set CITTAEFS_API_KEY env var (single key for all tenants) or configure one tenant's cittaApiKey.`,
+  );
+}
+
+export function getGlobalCittaEfsGatewayInfo(): { apiKeySource: string; gatewayUrl: string; hasGlobalKey: boolean } {
+  const globalKey = getGlobalApiKey();
   return {
-    apiKey: tenant.cittaApiKey,
-    gatewayUrl: tenant.cittaGatewayUrl?.trim() || "https://ei-api.azurewebsites.net",
-    writebackTarget: tenant.cittaWritebackTarget || "HUB",
+    apiKeySource: globalKey ? "env:CITTAEFS_API_KEY (shared by all tenants)" : "db:tenant.cittaApiKey (shared pool)",
+    gatewayUrl: getGlobalGatewayBaseUrl(null),
+    hasGlobalKey: !!globalKey,
   };
 }
 

@@ -1112,7 +1112,9 @@ async function startServer() {
     }
   });
 
-  // Per-tenant CittaEFS gateway credentials (provided by CittaEFS) + writeback target
+  // CittaEFS gateway credentials — GLOBAL single API key for all tenants (user requirement: "all tenant send through one API key")
+  // Per-tenant PATCH now propagates gatewayUrl/apiKey to ALL tenants so behavior stays shared.
+  // Recommended: set CITTAEFS_API_KEY env var (Render Secret File) instead of DB — env wins over DB.
   app.patch("/api/tenants/:id/citta-config", async (req: any, res) => {
     try {
       const role = req.user?.role;
@@ -1121,30 +1123,97 @@ async function startServer() {
       const { cittaGatewayUrl, cittaApiKey, cittaWritebackTarget } = req.body;
       const existing = await prisma.tenant.findUnique({ where: { id } });
       if (!existing) return res.status(404).json({ success: false, error: "Tenant not found" });
-      const data: any = {};
+      const perTenantData: any = {};
+      let sharedUpdated = false;
       if (cittaGatewayUrl !== undefined) {
         if (cittaGatewayUrl && !/^https?:\/\/.+/.test(cittaGatewayUrl)) return res.status(400).json({ success: false, error: "cittaGatewayUrl must be http(s) URL" });
-        data.cittaGatewayUrl = cittaGatewayUrl || null;
+        perTenantData.cittaGatewayUrl = cittaGatewayUrl || null;
       }
       if (cittaWritebackTarget !== undefined) {
         if (!["HUB", "CITTAEFS", "BOTH"].includes(cittaWritebackTarget)) return res.status(400).json({ success: false, error: "cittaWritebackTarget must be HUB, CITTAEFS, or BOTH" });
-        data.cittaWritebackTarget = cittaWritebackTarget;
+        perTenantData.cittaWritebackTarget = cittaWritebackTarget;
       }
       if (cittaApiKey !== undefined) {
         if (cittaApiKey && cittaApiKey.length < 10) return res.status(400).json({ success: false, error: "cittaApiKey looks too short" });
-        if (cittaApiKey) data.cittaApiKey = cittaApiKey;
+        if (cittaApiKey) {
+          perTenantData.cittaApiKey = cittaApiKey;
+          // Propagate single key to ALL tenants for shared-gateway invariant
+          await prisma.tenant.updateMany({ data: { cittaApiKey } });
+          sharedUpdated = true;
+        }
       }
-      const updated = await prisma.tenant.update({ where: { id }, data });
+      if (cittaGatewayUrl !== undefined && cittaGatewayUrl) {
+        // Also propagate gateway URL to all tenants when a shared URL is set
+        await prisma.tenant.updateMany({ data: { cittaGatewayUrl: cittaGatewayUrl || null } });
+        sharedUpdated = true;
+      }
+      const updated = await prisma.tenant.update({ where: { id }, data: perTenantData });
       await safeAuditLogCreate(prisma, {
         tenantId: id,
         action: "CITTA_CONFIG_UPDATED",
         entityType: "TENANT",
         entityRef: updated.name,
-        details: `CittaEFS gateway config updated. Gateway: ${updated.cittaGatewayUrl || 'global'}, writeback: ${updated.cittaWritebackTarget}`,
+        details: `CittaEFS gateway config updated${sharedUpdated ? ' (propagated to ALL tenants — single shared key)' : ''}. Gateway: ${updated.cittaGatewayUrl || 'global env'}, writeback: ${updated.cittaWritebackTarget}. Env CITTAEFS_API_KEY ${process.env.CITTAEFS_API_KEY ? 'is set (takes precedence)' : 'not set (using DB shared key)'}`,
         sha256PayloadHash: generateSha256(JSON.stringify({ cittaGatewayUrl: updated.cittaGatewayUrl, cittaWritebackTarget: updated.cittaWritebackTarget })),
         performedBy: req.user?.email || "Admin",
       });
-      res.json(updated);
+      res.json({ ...updated, _sharedPropagation: sharedUpdated, _envOverridesDb: !!process.env.CITTAEFS_API_KEY });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Global CittaEFS gateway config — preferred way when using single shared key
+  app.get("/api/system/citta-config", async (req: any, res) => {
+    try {
+      const envKey = process.env.CITTAEFS_API_KEY?.trim() || process.env.CITTA_EFS_API_KEY?.trim() || "";
+      const envGateway = process.env.CITTAEFS_GATEWAY_URL?.trim() || process.env.CITTA_GATEWAY_URL?.trim() || "https://ei-api.azurewebsites.net";
+      const dbSample = await prisma.tenant.findFirst({ select: { cittaApiKey: true, cittaGatewayUrl: true } });
+      res.json({
+        mode: "single_shared_key",
+        envHasKey: !!envKey && !envKey.includes("placeholder"),
+        envGatewayUrl: envGateway,
+        dbSharedKeyPreview: dbSample?.cittaApiKey ? `${String(dbSample.cittaApiKey).slice(0, 12)}...` : null,
+        dbSharedGatewayUrl: dbSample?.cittaGatewayUrl || null,
+        effectiveApiKeyPreview: (envKey && !envKey.includes("placeholder") ? envKey : dbSample?.cittaApiKey || "") ? `${String(envKey && !envKey.includes("placeholder") ? envKey : dbSample?.cittaApiKey).slice(0, 12)}...` : "not configured",
+        effectiveGatewayUrl: envGateway || dbSample?.cittaGatewayUrl || "https://ei-api.azurewebsites.net",
+        note: "All tenants send through ONE CittaEFS API key. Set CITTAEFS_API_KEY env var to override DB. PATCH /api/tenants/:id/citta-config propagates to all tenants.",
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/system/citta-config", async (req: any, res) => {
+    try {
+      const role = req.user?.role;
+      if (req.user && role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      const { cittaApiKey, cittaGatewayUrl, cittaWritebackTarget } = req.body;
+      const data: any = {};
+      if (cittaGatewayUrl !== undefined) {
+        if (cittaGatewayUrl && !/^https?:\/\/.+/.test(cittaGatewayUrl)) return res.status(400).json({ success: false, error: "cittaGatewayUrl must be http(s) URL" });
+        data.cittaGatewayUrl = cittaGatewayUrl || null;
+      }
+      if (cittaApiKey !== undefined) {
+        if (cittaApiKey && cittaApiKey.length < 10) return res.status(400).json({ success: false, error: "cittaApiKey looks too short" });
+        if (cittaApiKey) data.cittaApiKey = cittaApiKey;
+      }
+      if (cittaWritebackTarget !== undefined) {
+        if (!["HUB", "CITTAEFS", "BOTH"].includes(cittaWritebackTarget)) return res.status(400).json({ success: false, error: "cittaWritebackTarget must be HUB, CITTAEFS, or BOTH" });
+        data.cittaWritebackTarget = cittaWritebackTarget;
+      }
+      if (Object.keys(data).length === 0) return res.status(400).json({ success: false, error: "No citta config fields provided" });
+      const result = await prisma.tenant.updateMany({ data });
+      await safeAuditLogCreate(prisma, {
+        tenantId: (await prisma.tenant.findFirst({ select: { id: true } }))?.id || "system",
+        action: "CITTA_GLOBAL_CONFIG_UPDATED",
+        entityType: "TENANT",
+        entityRef: "ALL_TENANTS",
+        details: `Global CittaEFS config propagated to ${result.count} tenant(s). Gateway: ${data.cittaGatewayUrl ?? 'unchanged'}, writeback: ${data.cittaWritebackTarget ?? 'unchanged'}`,
+        sha256PayloadHash: generateSha256(JSON.stringify(data)),
+        performedBy: req.user?.email || "Admin",
+      });
+      res.json({ success: true, updatedCount: result.count, note: "All tenants now share the same gateway key/url. If CITTAEFS_API_KEY env is set, it still takes precedence at runtime." });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1153,10 +1222,13 @@ async function startServer() {
   app.post("/api/tenants/:id/citta-config/test", async (req: any, res) => {
     try {
       const { cittaGatewayUrl, cittaApiKey } = req.body;
-      const gateway = (cittaGatewayUrl || "https://ei-api.azurewebsites.net").replace(/\/$/, "");
+      const envKey = process.env.CITTAEFS_API_KEY?.trim() || process.env.CITTA_EFS_API_KEY?.trim() || "";
+      const envHasKey = !!envKey && !envKey.includes("placeholder");
+      const gateway = (cittaGatewayUrl || process.env.CITTAEFS_GATEWAY_URL?.trim() || process.env.CITTA_GATEWAY_URL?.trim() || "https://ei-api.azurewebsites.net").replace(/\/$/, "");
       const testUrl = `${gateway}/api/einvoice/archive?fromDate=2026-01-01&toDate=2026-01-02`;
-      const key = cittaApiKey || (await prisma.tenant.findUnique({ where: { id: req.params.id }, select: { cittaApiKey: true } }))?.cittaApiKey;
-      if (!key) return res.json({ success: false, message: "No API key configured" });
+      const dbKey = (await prisma.tenant.findUnique({ where: { id: req.params.id }, select: { cittaApiKey: true } }))?.cittaApiKey || (await prisma.tenant.findFirst({ select: { cittaApiKey: true } }))?.cittaApiKey;
+      const key = cittaApiKey || (envHasKey ? envKey : dbKey);
+      if (!key) return res.json({ success: false, message: "No API key configured — set CITTAEFS_API_KEY env var or save a key via CittaGateway tab (it propagates to all tenants)" });
       try {
         const r = await fetch(testUrl, { method: "GET", headers: { Authorization: `Bearer ${key}` } });
         if (r.ok || r.status === 404 || r.status === 400) return res.json({ success: true, message: `Gateway reachable (HTTP ${r.status}). Credentials appear valid.` });

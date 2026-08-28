@@ -61,7 +61,8 @@ export function CittaGatewayTab() {
           <ShieldCheck className="w-5 h-5 text-indigo-400" />
           <h1 className="text-base font-bold tracking-tight">CittaEFS Integration Credentials & Writeback</h1>
         </div>
-        <p className="text-slate-400 text-xs mt-1">Per-tenant credentials <span className="text-indigo-300 font-semibold">provided by CittaEFS</span> to receive normalized invoices. The hub normalizes from <span className="text-white font-medium">{erp.label}</span> → fiscal matrix → sends to CittaEFS, then writes IRN/QR back to <span className="text-white font-medium">{writebackTarget === 'BOTH' ? 'CittaEFS + Hub' : writebackTarget === 'CITTAEFS' ? 'CittaEFS only' : 'Hub only'}</span>.</p>
+        <p className="text-slate-400 text-xs mt-1">Single shared gateway key — <span className="text-emerald-300 font-semibold">all tenants send through ONE CittaEFS API key</span> (<span className="font-mono text-indigo-300">CITTAEFS_API_KEY</span> env if set, else DB shared pool). Hub normalizes from <span className="text-white font-medium">{erp.label}</span> → fiscal matrix → sends to CittaEFS, then writes IRN/QR back to <span className="text-white font-medium">{writebackTarget === 'BOTH' ? 'CittaEFS + Hub' : writebackTarget === 'CITTAEFS' ? 'CittaEFS only' : 'Hub only'}</span>.</p>
+        <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-emerald-200">All tenants share one gateway. Saving here propagates the key & URL to every tenant. Set <span className="font-mono text-emerald-300">CITTAEFS_API_KEY</span> in env (Render Secret File) to override DB at runtime.</div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 shadow-sm">
@@ -84,17 +85,17 @@ export function CittaGatewayTab() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 shadow-sm">
-        <h3 className="font-bold text-slate-900 flex items-center gap-2"><Globe className="w-4 h-4 text-indigo-600" /> CittaEFS Gateway Credentials (provided by CittaEFS)</h3>
-        <p className="text-slate-500 text-xs">CittaEFS supplies these per tenant after onboarding. The hub encrypts the API key with AES-256-GCM and uses it for every normalized invoice transmission. Leave Gateway URL blank to use the global default.</p>
+        <h3 className="font-bold text-slate-900 flex items-center gap-2"><Globe className="w-4 h-4 text-indigo-600" /> CittaEFS Gateway Credentials — Single Shared Key (provided by CittaEFS)</h3>
+        <p className="text-slate-500 text-xs">One key for all tenants. Hub reads <span className="font-mono bg-slate-100 px-1 py-0.5 rounded border">CITTAEFS_API_KEY</span> env first (recommended: set in Render Secret File), otherwise the DB shared pool. Saving here updates <span className="font-semibold">every</span> tenant so they stay in sync. Env always wins at runtime.</p>
 
         <div className="space-y-4">
           <div>
-            <label className="block font-medium text-slate-700 mb-1">CittaEFS Gateway Base URL</label>
+            <label className="block font-medium text-slate-700 mb-1">CittaEFS Gateway Base URL — shared</label>
             <input value={gatewayUrl} onChange={e => setGatewayUrl(e.target.value)} placeholder="https://ei-api.azurewebsites.net" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none" />
-            <span className="text-[11px] text-slate-500">Per-tenant override. If empty, the global <span className="font-mono">https://ei-api.azurewebsites.net</span> is used.</span>
+            <span className="text-[11px] text-slate-500">Shared by all tenants. Env <span className="font-mono">CITTAEFS_GATEWAY_URL</span> overrides this. Saving propagates to every tenant.</span>
           </div>
           <div>
-            <label className="block font-medium text-slate-700 mb-1 flex items-center gap-2"><Key className="w-3.5 h-3.5" /> CittaEFS API Key (Tenant-scoped)</label>
+            <label className="block font-medium text-slate-700 mb-1 flex items-center gap-2"><Key className="w-3.5 h-3.5" /> CittaEFS API Key — Shared (all tenants)</label>
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <input type={showKey ? 'text' : 'password'} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk_live_..." className="w-full px-3.5 py-2 pr-9 border border-slate-200 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none" />
@@ -102,10 +103,10 @@ export function CittaGatewayTab() {
               </div>
               <button onClick={handleTest} disabled={testing || !apiKey} className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center gap-1.5"><Plug className="w-3.5 h-3.5" /><span>{testing ? 'Testing...' : 'Test'}</span></button>
             </div>
-            <span className="text-[11px] text-slate-500">Stored encrypted. CittaEFS can rotate this — paste the new key and Save. Never commit to git.</span>
+            <span className="text-[11px] text-slate-500">Shared by all tenants. Rotating here rotates for everyone. Recommended: set <span className="font-mono">CITTAEFS_API_KEY</span> env var instead — env takes precedence and survives restarts. Never commit to git.</span>
           </div>
           <div>
-            <label className="block font-medium text-slate-700 mb-1">Writeback Target — where to write IRN/QR after NRS stamp</label>
+            <label className="block font-medium text-slate-700 mb-1">Writeback Target — where to write IRN/QR after NRS stamp (per tenant, but gateway is shared)</label>
             <select value={writebackTarget} onChange={e => setWritebackTarget(e.target.value)} className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white text-xs cursor-pointer">
               <option value="HUB">Hub only (ledgerWritebackStatus = SYNCED in hub DB) — default</option>
               <option value="CITTAEFS">CittaEFS only (POST IRN/QR to CittaEFS writeback URL)</option>
@@ -117,7 +118,7 @@ export function CittaGatewayTab() {
 
         <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
           {msg && <span className={`text-xs font-medium flex items-center gap-1 ${msg.type==='success'?'text-emerald-700':'text-rose-700'}`}>{msg.type==='success'?<CheckCircle2 className="w-3.5 h-3.5"/>:<AlertCircle className="w-3.5 h-3.5"/>}{msg.text}</span>}
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2"><Save className="w-3.5 h-3.5" /><span>{saving ? 'Saving...' : 'Save CittaEFS Credentials'}</span></button>
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2"><Save className="w-3.5 h-3.5" /><span>{saving ? 'Saving...' : 'Save & Propagate to All Tenants'}</span></button>
         </div>
       </div>
 
@@ -125,7 +126,7 @@ export function CittaGatewayTab() {
         <span className="font-bold flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> How it works</span>
         <ol className="list-decimal list-inside space-y-1 text-indigo-800">
           <li><strong>Hub normalizes</strong> ERP data (QBO/Excel/…) → EFS fiscal matrix (clientInvoiceNumber, HS, VAT, TIN).</li>
-          <li><strong>Hub sends</strong> normalized payload to <span className="font-mono bg-white px-1 py-0.5 rounded border border-indigo-200">{gatewayUrl || 'https://ei-api.azurewebsites.net'}/api/integration/gen/invoices</span> with this tenant's Bearer key.</li>
+          <li><strong>Hub sends</strong> normalized payload to <span className="font-mono bg-white px-1 py-0.5 rounded border border-indigo-200">{gatewayUrl || 'https://ei-api.azurewebsites.net'}/api/integration/gen/invoices</span> with the <span className="font-semibold">single shared</span> Bearer key (<span className="font-mono">CITTAEFS_API_KEY</span> env wins over DB).</li>
           <li><strong>CittaEFS/NRS stamps</strong> IRN + QR. Hub persists IRN/QR and — per writeback target — writes back to Hub ledger and/or CittaEFS.</li>
         </ol>
       </div>
