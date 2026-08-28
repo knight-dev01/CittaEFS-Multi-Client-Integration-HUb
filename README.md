@@ -8,7 +8,7 @@
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
 ![WebSockets](https://img.shields.io/badge/WebSockets-Live_Telemetry-brightgreen)
 
-A high-performance enterprise integration platform and middleware built for multi-tenant ERP connectivity, automated fiscal normalization, and national tax authority (**KRA NRS**) e-invoicing compliance.
+A high-performance enterprise integration platform and middleware built for multi-tenant ERP connectivity, automated fiscal normalization, and national tax authority (**FIRS NRS — Nigeria**) e-invoicing compliance.
 
 CittaEFS normalizes heterogeneous ERP data—from live REST APIs and database staging views to native Excel/CSV spreadsheet drops—into a standardized fiscal matrix for real-time validation, cryptographic Internal Reference Number (IRN) generation, QR code generation, and direct tax authority submission.
 
@@ -35,7 +35,7 @@ Pre-middleware authentication gate providing isolated interfaces and permissions
 * 👑 **Administrator (`ADMIN`)**: Full access across all multi-tenant configurations, client onboarding, security policies, and system purges.
 * ⚙️ **Integration Manager (`INTEGRATION_MANAGER`)**: Manages connector API keys, OAuth credentials, field mapping rules, and webhook streams.
 * 📋 **Ingestion Operator (`OPERATOR`)**: Oversees day-to-day invoice creation, batch spreadsheet uploads, and customer directory management.
-* 🔍 **Compliance Auditor (`AUDITOR`)**: Read-only access to cryptographic audit logs, KRA NRS submission statuses, and tax reconciliation metrics.
+* 🔍 **Compliance Auditor (`AUDITOR`)**: Read-only access to cryptographic audit logs, FIRS NRS submission statuses, and tax reconciliation metrics.
 
 ### 5. CittaEFS Gateway Credentials & Writeback (Per-Tenant)
 * **CittaEFS-Provided Credentials**: `CittaGatewayTab` (`src/components/erp/CittaGatewayTab.tsx`) lets CittaEFS (or ADMIN) paste per-tenant `cittaGatewayUrl` and `cittaApiKey` (AES-256-GCM `encryptedSecret`); stored in `Tenant.cittaGatewayUrl / cittaApiKey / cittaWritebackTarget`. Test button `POST /api/tenants/:id/citta-config/test` hits `/api/einvoice/archive` with Bearer key.
@@ -44,7 +44,7 @@ Pre-middleware authentication gate providing isolated interfaces and permissions
 ### 6. 4-Stage Fiscal Data Normalization Pipeline
 1. **Stage 01 — Source Extraction**: Ingestion via live Webhook, API pull, SQL staging poller, or Excel drop — per-ERP UI.
 2. **Stage 02 — EFS Excel Matrix**: Normalization of source fields into standardized schema columns (`clientInvoiceNumber`, `customerTin`, `hsCode`, `vatRate`, `currency`) using per-tenant `erpConfig` rules.
-3. **Stage 03 — Taxonomy & Rule Verification**: Real-time validation against KRA NRS rules, including B2B TIN lookup, 8-digit HS code verification, and 7.5% VAT auto-calculation (Nigeria NRS standard, per-tenant `defaultVatRate`).
+3. **Stage 03 — Taxonomy & Rule Verification**: Real-time validation against FIRS/NRS Nigeria rules, including B2B TIN lookup, 8-digit HS code verification, and 7.5% VAT auto-calculation (Nigeria NRS standard, per-tenant `defaultVatRate`).
 4. **Stage 04 — NRS Gateway Transmission**: Per-tenant gateway URL submission with SHA-256 hashing (`crypto.createHash`), IRN assignment, and QR generation.
 
 ### 7. Asynchronous Queue & Live Telemetry Engine
@@ -86,7 +86,7 @@ Pre-middleware authentication gate providing isolated interfaces and permissions
                                          |
                                          v
 +-----------------------------------------------------------------------------------+
-|                            KRA NRS TAX AUTHORITY PORTAL                           |
+|                         FIRS NRS TAX AUTHORITY PORTAL (NIGERIA)                    |
 |      (Cryptographic Stamp Verification, IRN Validation & Tax Certification)       |
 +-----------------------------------------------------------------------------------+
 ```
@@ -266,7 +266,7 @@ After stamping, hub persists `irn/csid/qrCodeUrl` (`APPROVED`, `ledgerWritebackS
 ## 🔒 Security & Compliance Standards
 
 * **Credential Encryption**: Per-tenant `cittaApiKey` and `cittaGatewayUrl` are encrypted with AES-256-GCM (`ENCRYPTION_KEY` hex or `ENCRYPTION_SECRET` scrypt) before storage; `Tenant.erpConfig` JSON is tenant-isolated. No defaults in production (`JWT_SECRET`/`ENCRYPTION_KEY` fail-closed).
-* **KRA NRS Tax Standard Alignment**: Per-tenant `defaultVatRate` (7.5% NRS standard, Nigeria), mandatory B2B TIN 10-14 alphanum + `postcode` for B2B, 8-digit HS validation, `headerDiscount/Charges`, and real `SHA-256` (`crypto.createHash`) IRN/QR with writeback per `cittaWritebackTarget`.
+* **FIRS/NRS Nigeria Tax Standard Alignment**: Per-tenant `defaultVatRate` (7.5% NRS standard, Nigeria), mandatory B2B TIN 10-14 alphanum + `postcode` for B2B, 8-digit HS validation, `headerDiscount/Charges`, and real `SHA-256` (`crypto.createHash`) IRN/QR with writeback per `cittaWritebackTarget`.
 * **Tenant Data Boundary Isolation**: Multi-tenant schema enforces `where: { tenantId }` isolation; ERP workspaces are UI- and data-isolated (QBO vs Excel vs future ERPs via `ERP_REGISTRY`).
 * **Network**: `CORS` allowlist (`ALLOWED_ORIGINS`/`APP_URL` + `*.vercel.app`), security headers (`X-Content-Type-Options`, `X-Frame-Options`, `HSTS`), rate-limit 120/min (15/min auth), health `GET /api/health`.
 

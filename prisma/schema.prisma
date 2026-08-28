@@ -52,6 +52,9 @@ model Customer {
   street             String?
   city               String?
   country            String?
+  countryCode        String    @default("NGA") @map("country_code")
+  stateCode          String?   @map("state_code") // NG-LA etc.
+  localGovernmentCode String?  @map("local_government_code") // NG-LA-ETI etc.
   cittaCustomerId    String?  @map("citta_customer_id")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
@@ -73,6 +76,9 @@ model Item {
   hsOrServiceCode String   @map("hs_or_service_code")
   categoryType    String   @default("GOODS") @map("category_type")
   defaultVatRate  Float    @default(7.5) @map("default_vat_rate")
+  taxCategoryCode String?  @map("tax_category_code") // NRS Nigeria: STANDARD_VAT, EXEMPT, ZERO_RATED etc.
+  productCategory String?  @map("product_category")
+  isService       Boolean   @default(false) @map("is_service")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -101,6 +107,7 @@ model Invoice {
   totalAmount           Float     @map("total_amount")
   headerDiscount        Float     @default(0) @map("header_discount")
   headerCharges         Float     @default(0) @map("header_charges")
+  callbackUrl           String?   @map("callback_url") // async signed callback when NRS completes (NRS MBS pattern)
   status                String    @default("PENDING_NRS_STAMP")
   irn                   String?   @unique
   csid                  String?

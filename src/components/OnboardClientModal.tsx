@@ -29,7 +29,7 @@ interface QboOAuthResult {
   error?: string;
 }
 
-// Kenyan KRA PIN format: one letter, 9 digits, one letter (e.g. P051123456Z)
+// Nigeria FIRS/NRS TIN format: one letter, 9 digits, one letter (e.g. P051123456Z)
 const TIN_PATTERN = /^[A-Z]\d{9}[A-Z]$/;
 
 function validateCompanyName(value: string): string | null {
