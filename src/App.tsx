@@ -2,14 +2,7 @@ import { useState, useEffect } from 'react';
 import { HubProvider, useHub } from './lib/store';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
-import { OverviewTab } from './components/OverviewTab';
-import { ConnectorsTab } from './components/ConnectorsTab';
-import { ImportTab } from './components/ImportTab';
-import { InvoicesTab } from './components/InvoicesTab';
-import { CustomerSyncTab } from './components/CustomerSyncTab';
-import { ItemDictionaryTab } from './components/ItemDictionaryTab';
-import { ValidationErrorsTab } from './components/ValidationErrorsTab';
-import { SettingsTab } from './components/SettingsTab';
+import { ErpWorkspace } from './components/erp/ErpWorkspace';
 import { NewInvoiceModal } from './components/NewInvoiceModal';
 import { OnboardClientModal } from './components/OnboardClientModal';
 import { Layers } from 'lucide-react';
@@ -130,29 +123,16 @@ function HubMainContent() {
         onOpenOnboardModal={() => setIsOnboardModalOpen(true)}
       />
 
-      {/* Main Content Area next to Sidebar */}
+      {/* Main Content Area next to Sidebar — ERP-isolated */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64 xl:pl-72">
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full mx-auto max-w-7xl">
           
-          {/* Render Tab Content */}
+          {/* ERP-dedicated workspace */}
           <div className="transition-all duration-150">
             {!activeTenant ? (
               <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>
             ) : (
-              <>
-                {activeTab === 'clients' && (
-                  <OverviewTab onOpenOnboardModal={() => setIsOnboardModalOpen(true)} />
-                )}
-                {activeTab === 'connectors' && <ConnectorsTab />}
-                {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
-                {activeTab === 'invoices' && <InvoicesTab />}
-                {activeTab === 'validation' && <ValidationErrorsTab />}
-                {activeTab === 'settings' && <SettingsTab />}
-
-                {/* Secondary Modules */}
-                {activeTab === 'customers' && <CustomerSyncTab />}
-                {activeTab === 'items' && <ItemDictionaryTab />}
-              </>
+              <ErpWorkspace activeTab={activeTab} setActiveTab={setActiveTab} onOpenOnboard={() => setIsOnboardModalOpen(true)} />
             )}
           </div>
 

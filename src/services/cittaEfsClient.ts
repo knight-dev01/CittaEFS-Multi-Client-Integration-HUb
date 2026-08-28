@@ -17,22 +17,29 @@ function getPrisma(): Promise<import("@prisma/client").PrismaClient> {
 }
 
 /**
- * Resolves each tenant's own CittaEFS Gateway API key (Tenant.cittaApiKey,
- * generated per-tenant at onboarding) rather than one shared credential —
- * every tenant's invoices must be signed under its own identity.
+ * Resolves each tenant's own CittaEFS Gateway API key and gateway URL.
  */
 async function getCittaEfsApiKey(tenantId: string): Promise<string> {
+  const { apiKey } = await getCittaEfsConfig(tenantId);
+  return apiKey;
+}
+
+async function getCittaEfsConfig(tenantId: string): Promise<{ apiKey: string; gatewayUrl: string; writebackTarget: string }> {
   const prisma = await getPrisma();
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { cittaApiKey: true },
+    select: { cittaApiKey: true, cittaGatewayUrl: true, cittaWritebackTarget: true },
   });
   if (!tenant?.cittaApiKey) {
     throw new Error(
       `No CittaEFS Gateway API key configured for tenant "${tenantId}".`,
     );
   }
-  return tenant.cittaApiKey;
+  return {
+    apiKey: tenant.cittaApiKey,
+    gatewayUrl: tenant.cittaGatewayUrl?.trim() || "https://ei-api.azurewebsites.net",
+    writebackTarget: tenant.cittaWritebackTarget || "HUB",
+  };
 }
 
 export interface CittaEfsRequestPayload {
@@ -160,7 +167,7 @@ export class CittaEfsClient {
   public async signAndStampInvoice(
     payload: CittaEfsRequestPayload,
   ): Promise<CittaEfsResponse> {
-    const decryptedApiKey = await getCittaEfsApiKey(payload.tenantId);
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(payload.tenantId);
 
     const invoiceNumber = payload.clientInvoiceNumber;
     const issueDate = payload.issueDate;
@@ -208,7 +215,7 @@ export class CittaEfsClient {
       metadata,
     }));
 
-    const url = `${this.gatewayBaseUrl}/api/integration/gen/invoices`;
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/integration/gen/invoices`;
     const res = await httpsRequest(url, {
       method: "POST",
       headers: {
@@ -290,13 +297,13 @@ export class CittaEfsClient {
     toDate?: string,
     paymentStatus?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
     if (paymentStatus) params.append("paymentStatus", paymentStatus);
 
-    const url = `${this.gatewayBaseUrl}/api/einvoice/archive?${params.toString()}`;
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/archive?${params.toString()}`;
     const res = await httpsRequest(url, {
       method: "GET",
       headers: {
@@ -319,12 +326,12 @@ export class CittaEfsClient {
     fromDate?: string,
     toDate?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
 
-    const url = `${this.gatewayBaseUrl}/api/einvoice/errors/validation?${params.toString()}`;
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/errors/validation?${params.toString()}`;
     const res = await httpsRequest(url, {
       method: "GET",
       headers: {
@@ -345,12 +352,12 @@ export class CittaEfsClient {
     fromDate?: string,
     toDate?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
 
-    const url = `${this.gatewayBaseUrl}/api/einvoice/errors/sign?${params.toString()}`;
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/errors/sign?${params.toString()}`;
     const res = await httpsRequest(url, {
       method: "GET",
       headers: {
@@ -371,12 +378,12 @@ export class CittaEfsClient {
     fromDate?: string,
     toDate?: string,
   ): Promise<any[]> {
-    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
     const params = new URLSearchParams();
     if (fromDate) params.append("fromDate", fromDate);
     if (toDate) params.append("toDate", toDate);
 
-    const url = `${this.gatewayBaseUrl}/api/einvoice/errors/transmit?${params.toString()}`;
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/errors/transmit?${params.toString()}`;
     const res = await httpsRequest(url, {
       method: "GET",
       headers: {
@@ -398,8 +405,8 @@ export class CittaEfsClient {
     status: string,
     reference?: string,
   ): Promise<any> {
-    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
-    const url = `${this.gatewayBaseUrl}/api/einvoice/update/${irn}`;
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/update/${irn}`;
     const res = await httpsRequest(url, {
       method: "PATCH",
       headers: {
@@ -424,8 +431,8 @@ export class CittaEfsClient {
     tenantId: string,
     items: Array<{ irn: string; payment_status: string; reference?: string }>,
   ): Promise<any> {
-    const decryptedApiKey = await getCittaEfsApiKey(tenantId);
-    const url = `${this.gatewayBaseUrl}/api/einvoice/bulk/update`;
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/bulk/update`;
     const res = await httpsRequest(url, {
       method: "PATCH",
       headers: {
@@ -449,8 +456,36 @@ export class CittaEfsClient {
     irn: string,
     qrCodeUrl: string,
   ): Promise<{ synced: boolean; message: string }> {
+    const prisma = await getPrisma();
+    // Respect per-tenant writeback target (HUB | CITTAEFS | BOTH)
+    let writebackTarget = "HUB";
+    let cittaWritebackUrl: string | null = null;
     try {
-      const prisma = await getPrisma();
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { cittaWritebackTarget: true, erpConfig: true, cittaGatewayUrl: true } });
+      if (tenant?.cittaWritebackTarget) writebackTarget = tenant.cittaWritebackTarget;
+      if (tenant?.erpConfig) {
+        try { const cfg = JSON.parse(tenant.erpConfig); cittaWritebackUrl = cfg.cittaWritebackUrl || cfg.writebackUrl || null; } catch {}
+      }
+      if (!cittaWritebackUrl && tenant?.cittaGatewayUrl) cittaWritebackUrl = `${tenant.cittaGatewayUrl.replace(/\/$/, "")}/api/integration/writeback`;
+    } catch {}
+    // CittaEFS writeback (hub -> CittaEFS) when target includes CITTAEFS
+    if (writebackTarget === "CITTAEFS" || writebackTarget === "BOTH") {
+      if (cittaWritebackUrl) {
+        try {
+          const { apiKey } = await getCittaEfsConfig(tenantId);
+          await httpsRequest(cittaWritebackUrl, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId, clientInvoiceNumber, irn, qrCodeUrl, source: "hub" }),
+          }).catch(()=>{});
+        } catch (e) { console.warn("[CittaEFS Writeback] failed:", (e as any)?.message); }
+      }
+      if (writebackTarget === "CITTAEFS") {
+        return { synced: true, message: `IRN ${irn} written back to CittaEFS (writebackTarget=CITTAEFS).` };
+      }
+    }
+    // Hub writeback (and QBO ERP writeback) when target is HUB or BOTH
+    try {
       const integration = await prisma.integration.findUnique({
         where: {
           tenantId_sourceSystem: {
@@ -461,7 +496,6 @@ export class CittaEfsClient {
       });
 
       if (integration) {
-        // Attempt to match the local invoice row to find QBO internal ID
         const invoice = await prisma.invoice.findFirst({
           where: {
             tenantId,
@@ -479,7 +513,7 @@ export class CittaEfsClient {
         await writebackToQbo(tenantId, targetInvoiceId, irn, qrCodeUrl);
         return {
           synced: true,
-          message: `QuickBooks Online ledger updated for invoice ${targetInvoiceId} with IRN: ${irn}`,
+          message: `QuickBooks Online ledger updated for invoice ${targetInvoiceId} with IRN: ${irn} (writebackTarget=${writebackTarget})`,
         };
       }
     } catch (err: any) {

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useHub } from '../lib/store';
+import { getErpForTenant, groupTenantsByErp, ERP_REGISTRY } from '../config/erpRegistry';
 import { 
   Building2, 
   Plug, 
@@ -21,7 +22,10 @@ import {
   Plus, 
   User, 
   Zap, 
-  ChevronDown
+  ChevronDown,
+  Globe,
+  Database,
+  Cloud
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -55,29 +59,43 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   };
 
   const userRole = currentUser?.role || 'OPERATOR';
+  const erp = getErpForTenant(activeTenant?.platformType);
+  const erpTabs = erp.tabs;
 
   const categories = userRole === 'ADMIN' ? [
     { id: 'main', label: 'Main' },
+    { id: 'erp', label: `${erp.shortLabel} Workspace` },
     { id: 'admin', label: 'Administration' }
   ] : [
-    { id: 'main', label: 'Main' }
+    { id: 'main', label: 'Main' },
+    { id: 'erp', label: `${erp.shortLabel} Workspace` }
   ];
 
   const allTabs = [
     // Main tabs (Available to all roles)
     { id: 'clients', label: 'Overview', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'import', label: 'Import', icon: Download, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'import', label: 'Import', icon: Download, category: 'erp', requiredRoles: ['ADMIN', 'OPERATOR'], erpOnly: true },
     { id: 'customers', label: 'Customers', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'items', label: 'Items', icon: Tag, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
 
+    // ERP-dedicated
+    { id: 'connectors', label: erp.id === 'qbo' ? 'QBO Connect' : 'Connectors', icon: Plug, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
+    { id: 'mapping', label: 'Field Mapping', icon: Sliders, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
+    { id: 'gateway', label: 'CittaEFS Gateway', icon: Globe, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
+
     // Admin tabs
-    { id: 'connectors', label: 'Connectors', icon: Plug, category: 'admin', requiredRoles: ['ADMIN'] },
     { id: 'settings', label: 'Settings', icon: Settings, category: 'admin', requiredRoles: ['ADMIN'] }
   ];
 
-  const visibleTabs = allTabs.filter(tab => tab.requiredRoles.includes(userRole));
+  const visibleTabs = allTabs.filter(tab => {
+    if (!tab.requiredRoles.includes(userRole)) return false;
+    if ((tab as any).erpOnly && !erpTabs.includes(tab.id)) return false;
+    return true;
+  });
+
+  const grouped = useMemo(() => groupTenantsByErp(tenants as any), [tenants]);
 
   const canOnboard = userRole === 'ADMIN';
   const canIngest = userRole === 'ADMIN' || userRole === 'OPERATOR';
@@ -106,9 +124,12 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       </div>
 
-      {/* Tenant Selector */}
+      {/* Tenant Selector — grouped by ERP */}
       <div className="p-4 border-b border-slate-800/80 shrink-0 bg-slate-950/30">
-        <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider">Active Workspace Client:</label>
+        <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider flex items-center justify-between">
+          <span>Active Workspace Client:</span>
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${erp.id==='qbo'?'bg-amber-500/20 text-amber-300 border-amber-500/30': erp.id==='excel'?'bg-indigo-500/20 text-indigo-300 border-indigo-500/30':'bg-slate-700 text-slate-300 border-slate-600'}`}>{erp.shortLabel} MODE</span>
+        </label>
         <div className="relative">
           <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 w-full focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
             <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
@@ -123,18 +144,20 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
               }}
               className="bg-transparent text-white font-medium focus:outline-none cursor-pointer text-xs w-full pr-4 appearance-none"
             >
-              {tenants.filter(t => t.platformType === 'QuickBooks Online' || t.platformType === 'Excel & CSV Import' || !t.platformType).length === 0 ? (
+              {tenants.length === 0 ? (
                 <option value="" className="bg-slate-900 text-indigo-400 font-medium">
                   + Onboard Client Entity
                 </option>
               ) : (
-                tenants
-                  .filter(t => t.platformType === 'QuickBooks Online' || t.platformType === 'Excel & CSV Import' || !t.platformType)
-                  .map((t) => (
-                    <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                      {t.name} ({t.platformType === 'QuickBooks Online' ? 'QBO' : 'Excel/CSV'})
-                    </option>
-                  ))
+                Object.entries(grouped).map(([groupLabel, groupTenants]: any) => (
+                  <optgroup key={groupLabel} label={`${groupLabel} — ${groupTenants.length} tenant(s)`} className="bg-slate-900 text-slate-400">
+                    {groupTenants.map((t: any) => (
+                      <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                        {t.name} ({getErpForTenant(t.platformType).shortLabel})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
               )}
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />

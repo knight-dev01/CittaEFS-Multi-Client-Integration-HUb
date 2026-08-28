@@ -1112,6 +1112,83 @@ async function startServer() {
     }
   });
 
+  // Per-tenant CittaEFS gateway credentials (provided by CittaEFS) + writeback target
+  app.patch("/api/tenants/:id/citta-config", async (req: any, res) => {
+    try {
+      const role = req.user?.role;
+      if (req.user && role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      const { id } = req.params;
+      const { cittaGatewayUrl, cittaApiKey, cittaWritebackTarget } = req.body;
+      const existing = await prisma.tenant.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: "Tenant not found" });
+      const data: any = {};
+      if (cittaGatewayUrl !== undefined) {
+        if (cittaGatewayUrl && !/^https?:\/\/.+/.test(cittaGatewayUrl)) return res.status(400).json({ success: false, error: "cittaGatewayUrl must be http(s) URL" });
+        data.cittaGatewayUrl = cittaGatewayUrl || null;
+      }
+      if (cittaWritebackTarget !== undefined) {
+        if (!["HUB", "CITTAEFS", "BOTH"].includes(cittaWritebackTarget)) return res.status(400).json({ success: false, error: "cittaWritebackTarget must be HUB, CITTAEFS, or BOTH" });
+        data.cittaWritebackTarget = cittaWritebackTarget;
+      }
+      if (cittaApiKey !== undefined) {
+        if (cittaApiKey && cittaApiKey.length < 10) return res.status(400).json({ success: false, error: "cittaApiKey looks too short" });
+        if (cittaApiKey) data.cittaApiKey = cittaApiKey;
+      }
+      const updated = await prisma.tenant.update({ where: { id }, data });
+      await safeAuditLogCreate(prisma, {
+        tenantId: id,
+        action: "CITTA_CONFIG_UPDATED",
+        entityType: "TENANT",
+        entityRef: updated.name,
+        details: `CittaEFS gateway config updated. Gateway: ${updated.cittaGatewayUrl || 'global'}, writeback: ${updated.cittaWritebackTarget}`,
+        sha256PayloadHash: generateSha256(JSON.stringify({ cittaGatewayUrl: updated.cittaGatewayUrl, cittaWritebackTarget: updated.cittaWritebackTarget })),
+        performedBy: req.user?.email || "Admin",
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/tenants/:id/citta-config/test", async (req: any, res) => {
+    try {
+      const { cittaGatewayUrl, cittaApiKey } = req.body;
+      const gateway = (cittaGatewayUrl || "https://ei-api.azurewebsites.net").replace(/\/$/, "");
+      const testUrl = `${gateway}/api/einvoice/archive?fromDate=2026-01-01&toDate=2026-01-02`;
+      const key = cittaApiKey || (await prisma.tenant.findUnique({ where: { id: req.params.id }, select: { cittaApiKey: true } }))?.cittaApiKey;
+      if (!key) return res.json({ success: false, message: "No API key configured" });
+      try {
+        const r = await fetch(testUrl, { method: "GET", headers: { Authorization: `Bearer ${key}` } });
+        if (r.ok || r.status === 404 || r.status === 400) return res.json({ success: true, message: `Gateway reachable (HTTP ${r.status}). Credentials appear valid.` });
+        const txt = await r.text().catch(() => "");
+        return res.json({ success: false, message: `Gateway responded HTTP ${r.status}: ${txt.slice(0, 200)}` });
+      } catch (err: any) {
+        return res.json({ success: false, message: `Network error: ${err.message}` });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/tenants/:id/erp-config", async (req: any, res) => {
+    try {
+      const role = req.user?.role;
+      if (req.user && role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      const { id } = req.params;
+      const { erpConfig } = req.body;
+      if (erpConfig !== undefined) {
+        try { if (typeof erpConfig === 'string') JSON.parse(erpConfig); else JSON.stringify(erpConfig); } catch { return res.status(400).json({ success: false, error: "erpConfig must be valid JSON string" }); }
+      }
+      const updated = await prisma.tenant.update({
+        where: { id },
+        data: { erpConfig: typeof erpConfig === 'string' ? erpConfig : JSON.stringify(erpConfig) },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/system/purge-demo-data", async (req, res) => {
     try {
       try {

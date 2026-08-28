@@ -10,6 +10,9 @@ export interface Tenant {
   marketTier: 'Tier 1 (SMB)' | 'Tier 2 (Mid-Market)' | 'Tier 3 (Enterprise)' | string;
   cittaApiKey?: string;
   cittaApiSecretEncrypted?: string;
+  cittaGatewayUrl?: string | null;
+  cittaWritebackTarget?: 'HUB' | 'CITTAEFS' | 'BOTH';
+  erpConfig?: string | null;
   onboardingStatus: 'SANDBOX_TESTING' | 'NRS_VERIFIED' | 'LIVE_PRODUCTION' | 'PENDING_MAPPING' | 'VERIFIED_READY';
   monthlyAllowance: number;
   monthlyUsed: number;

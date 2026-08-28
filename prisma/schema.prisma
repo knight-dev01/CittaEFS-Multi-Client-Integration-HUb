@@ -20,6 +20,9 @@ model Tenant {
   monthlyAllowance Int      @default(1000) @map("monthly_allowance")
   monthlyUsed      Int      @default(0) @map("monthly_used")
   defaultVatRate   Float    @default(7.5) @map("default_vat_rate")
+  cittaGatewayUrl  String?  @map("citta_gateway_url")
+  cittaWritebackTarget String @default("HUB") @map("citta_writeback_target") // HUB | CITTAEFS | BOTH
+  erpConfig        String?  @map("erp_config") // JSON string per-ERP config & matching rules
   lastSyncAt       DateTime @default(now()) @map("last_sync_at")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
