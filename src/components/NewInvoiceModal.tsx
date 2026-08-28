@@ -1,7 +1,8 @@
 import React, { useState, FormEvent } from 'react';
 import { useHub } from '../lib/store';
 import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
-import { Send, Plus, Trash2, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { InvoicePreview } from './InvoicePreview';
+import { Send, Plus, Trash2, X, AlertCircle, CheckCircle2, Eye } from 'lucide-react';
 
 interface NewInvoiceModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
 
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [responseResult, setResponseResult] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   if (!isOpen) return null;
 
@@ -57,27 +59,42 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
     setLineItems(updated);
   };
 
+  const buildPayload = () => ({
+    clientInvoiceNumber: invNum,
+    invoiceKind: kind,
+    invoiceType: type,
+    issueDate: new Date().toISOString().substring(0, 10),
+    customerCode: 'CUST-TEST-001',
+    customerName: custName,
+    customerTin: kind === 'B2B' || kind === 'B2G' ? custTin : undefined,
+    lineItems,
+  });
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // Validate required fields before preview
+    if (!custName.trim()) {
+      setResponseResult({ success: false, message: 'Customer Name is required.' });
+      return;
+    }
+    if (lineItems.length === 0) {
+      setResponseResult({ success: false, message: 'At least one line item is required.' });
+      return;
+    }
+    setResponseResult(null);
+    setShowPreview(true);
+  };
+
+  const handleConfirmTransmit = async () => {
     setIsTransmitting(true);
     setResponseResult(null);
-
-    const payload = {
-      clientInvoiceNumber: invNum,
-      invoiceKind: kind,
-      invoiceType: type,
-      issueDate: new Date().toISOString().substring(0, 10),
-      customerCode: 'CUST-TEST-001',
-      customerName: custName,
-      customerTin: kind === 'B2B' || kind === 'B2G' ? custTin : undefined,
-      lineItems
-    };
-
     try {
-      const result = await transmitInvoice(payload);
+      const result = await transmitInvoice(buildPayload());
       setResponseResult(result);
+      setShowPreview(false);
     } catch (err: any) {
       setResponseResult({ success: false, message: err.message || 'Transmission failed.' });
+      setShowPreview(false);
     } finally {
       setIsTransmitting(false);
     }
@@ -290,15 +307,43 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
             </button>
             <button
               type="submit"
-              disabled={isTransmitting}
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors disabled:opacity-50"
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors"
             >
-              <Send className="w-3.5 h-3.5" />
-              <span>{isTransmitting ? 'Transmitting to Gateway...' : 'Transmit Invoice'}</span>
+              <Eye className="w-3.5 h-3.5" />
+              <span>Preview Invoice</span>
             </button>
           </div>
 
         </form>
+
+        {/* Preview Overlay — shows everything before CittaEFS send */}
+        {showPreview && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-slate-50 max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4 my-8">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900">Confirm Invoice Transmission</h3>
+                <button onClick={() => setShowPreview(false)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
+              <InvoicePreview
+                clientInvoiceNumber={invNum}
+                invoiceKind={kind}
+                invoiceType={type}
+                issueDate={new Date().toISOString().substring(0, 10)}
+                customerName={custName || '— (enter customer name)'}
+                customerTin={kind === 'B2B' || kind === 'B2G' ? custTin : undefined}
+                lineItems={lineItems}
+                tenantName={activeTenant.name}
+                onEdit={() => setShowPreview(false)}
+                onConfirm={handleConfirmTransmit}
+                isProcessing={isTransmitting}
+                warnings={[
+                  !custName.trim() ? 'Customer Name is empty — will be rejected by gateway.' : '',
+                  invNum.trim().length < 3 ? 'Invoice number looks too short.' : '',
+                ].filter(Boolean) as string[]}
+              />
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { useHub } from '../lib/store';
 import { ExcelDocumentViewer } from './ExcelDocumentViewer';
@@ -16,16 +16,39 @@ import {
 export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { activeTenant, customers, itemMappings, invoices, refreshAll } = useHub();
 
-  // Selected ingestion source: 'excel' | 'qbo'
+  // Tenant-aware mode: QBO tenants default to QBO, Excel tenants to Excel
+  const tenantPlatform = activeTenant.platformType || '';
+  const isQboTenant = tenantPlatform === 'QuickBooks Online';
+  const isExcelTenant = tenantPlatform.includes('Excel') || tenantPlatform.includes('CSV');
+  const tenantDefault: 'excel' | 'qbo' = isQboTenant ? 'qbo' : 'excel';
   const [selectedSource, setSelectedSourceState] = useState<'excel' | 'qbo'>(() => {
+    // Respect tenant default first, then saved preference if compatible
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('citta_import_source');
-      if (saved === 'excel' || saved === 'qbo') return saved;
+      if (saved === 'excel' || saved === 'qbo') {
+        // If tenant is strictly one mode, ignore incompatible saved value
+        if (isQboTenant && saved === 'excel') return 'qbo';
+        if (isExcelTenant && saved === 'qbo') return 'excel';
+        return saved;
+      }
     }
-    return 'excel';
+    return tenantDefault;
   });
 
+  // Keep selection in sync when user switches workspace
+  const prevTenantIdRef = useRef<string>(activeTenant.id);
+  useEffect(() => {
+    if (prevTenantIdRef.current !== activeTenant.id) {
+      prevTenantIdRef.current = activeTenant.id;
+      const def: 'excel' | 'qbo' = (activeTenant.platformType === 'QuickBooks Online') ? 'qbo' : 'excel';
+      setSelectedSourceState(def);
+    }
+  }, [activeTenant.id, activeTenant.platformType]);
+
   const setSelectedSource = (source: 'excel' | 'qbo') => {
+    // Guard: QBO tenant cannot use Excel import via this tab, and vice versa
+    if (isQboTenant && source === 'excel') return;
+    if (isExcelTenant && source === 'qbo') return;
     setSelectedSourceState(source);
     if (typeof window !== 'undefined') {
       localStorage.setItem('citta_import_source', source);
@@ -166,7 +189,17 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
         </div>
       </div>
 
-      {/* Ingestion Source Switcher (Only QuickBooks & Excel/CSV) */}
+       {/* Tenant-aware Mode Banner */}
+      <div className={`rounded-xl p-3.5 border flex items-center gap-2.5 text-xs font-medium ${isQboTenant ? 'bg-amber-50 border-amber-200 text-amber-900' : isExcelTenant ? 'bg-indigo-50 border-indigo-200 text-indigo-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${isQboTenant ? 'bg-amber-500 text-white border-amber-600' : isExcelTenant ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-slate-200 text-slate-700 border-slate-300'}`}>
+          {isQboTenant ? 'QBO TENANT' : isExcelTenant ? 'EXCEL TENANT' : 'HYBRID'}
+        </span>
+        <span>
+          {isQboTenant ? `This workspace is QBO-only. Excel import is disabled — switch workspace in the sidebar to an Excel tenant to use spreadsheets.` : isExcelTenant ? `This workspace is Excel-only. QBO sync is disabled — switch workspace to a QBO tenant to use QuickBooks.` : `This workspace can use either channel. Choose below.`}
+        </span>
+      </div>
+
+      {/* Ingestion Source Switcher — tenant-locked */}
       <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 shadow-sm">
         <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Select Ingestion Channel:</h2>
 
@@ -175,19 +208,21 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
           {/* Excel & CSV Import Option */}
           <button
             onClick={() => setSelectedSource('excel')}
-            className={`p-5 rounded-xl border-2 text-left flex flex-col justify-between transition-all cursor-pointer ${
+            disabled={isQboTenant}
+            className={`p-5 rounded-xl border-2 text-left flex flex-col justify-between transition-all ${isQboTenant ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
               selectedSource === 'excel'
                 ? 'bg-indigo-50/60 border-indigo-600 ring-2 ring-indigo-500/20 shadow-sm'
                 : 'bg-white border-slate-200 hover:border-slate-300'
             }`}
+            title={isQboTenant ? 'Switch to an Excel tenant to use this' : undefined}
           >
             <div className="flex items-center justify-between">
               <span className="font-bold text-sm text-slate-900 flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
                 Excel & CSV Document Viewer
               </span>
-              <span className="px-2.5 py-0.5 bg-indigo-600 text-white font-semibold text-[10px] rounded-full">
-                ACTIVE
+              <span className={`px-2.5 py-0.5 font-semibold text-[10px] rounded-full ${selectedSource==='excel' && !isQboTenant ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                {isQboTenant ? 'LOCKED' : selectedSource==='excel' ? 'ACTIVE' : 'Available'}
               </span>
             </div>
             <p className="text-xs text-slate-500 my-3 leading-relaxed">
@@ -201,19 +236,21 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
           {/* QuickBooks Online Option */}
           <button
             onClick={() => setSelectedSource('qbo')}
-            className={`p-5 rounded-xl border-2 text-left flex flex-col justify-between transition-all cursor-pointer ${
+            disabled={isExcelTenant}
+            className={`p-5 rounded-xl border-2 text-left flex flex-col justify-between transition-all ${isExcelTenant ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
               selectedSource === 'qbo'
                 ? 'bg-indigo-50/60 border-indigo-600 ring-2 ring-indigo-500/20 shadow-sm'
                 : 'bg-white border-slate-200 hover:border-slate-300'
             }`}
+            title={isExcelTenant ? 'Switch to a QBO tenant to use this' : undefined}
           >
             <div className="flex items-center justify-between">
               <span className="font-bold text-sm text-slate-900 flex items-center gap-2">
                 <Zap className="w-5 h-5 text-amber-500" />
                 QuickBooks Online Direct Sync
               </span>
-              <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[10px] rounded-full">
-                ACTIVE
+              <span className={`px-2.5 py-0.5 font-semibold text-[10px] rounded-full ${selectedSource==='qbo' && !isExcelTenant ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                {isExcelTenant ? 'LOCKED' : selectedSource==='qbo' ? 'ACTIVE' : 'Available'}
               </span>
             </div>
             <p className="text-xs text-slate-500 my-3 leading-relaxed">

@@ -1,6 +1,7 @@
 import { useState, ChangeEvent } from 'react';
 import * as XLSX from 'xlsx';
 import { useHub } from '../lib/store';
+import { InvoicePreview } from './InvoicePreview';
 import {
   FileSpreadsheet,
   Upload,
@@ -135,6 +136,8 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
   const [isNormalized, setIsNormalized] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDictionaryPicker, setShowDictionaryPicker] = useState<{ rowId: string; type: 'customer' | 'item' } | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewGroups, setPreviewGroups] = useState<any[]>([]);
 
   // Cell Editing Handler
   const handleCellChange = (id: string, field: keyof SpreadsheetRow, value: any) => {
@@ -442,54 +445,54 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     setStatusMsg({ text: `Exported normalized spreadsheet data as .${format} workbook!`, type: 'success' });
   };
 
-  // Transmit Normalized Invoices to Gateway
+  // Build preview before gateway send
   const handleTransmitInvoices = async () => {
     if (rows.length === 0) {
       setStatusMsg({ text: 'Upload an Excel or CSV file before submitting invoices to the gateway.', type: 'error' });
       return;
     }
-
     if (!targetTenantId) {
       setStatusMsg({ text: 'Gateway Transmission Failure: no active client tenant is selected.', type: 'error' });
       return;
     }
-
-    setIsProcessing(true);
-    setStatusMsg({ text: 'Grouping multi-item invoices & transmitting to CittaEFS Gateway for IRN stamping...', type: 'info' });
-
-    try {
-      const groupedMap = new Map<string, any>();
-
-      rows.forEach(r => {
-        if (!groupedMap.has(r.clientInvoiceNumber)) {
-          groupedMap.set(r.clientInvoiceNumber, {
-            clientInvoiceNumber: r.clientInvoiceNumber,
-            invoiceKind: r.invoiceKind,
-            issueDate: r.issueDate,
-            customerCode: r.customerCode,
-            customerName: r.customerName,
-            customerTin: r.customerTin,
-            lineItems: []
-          });
-        }
-
-        const inv = groupedMap.get(r.clientInvoiceNumber);
-        inv.lineItems.push({
-          itemCode: r.itemCode,
-          description: r.description,
-          quantity: Number(r.quantity),
-          unitPrice: Number(r.unitPrice),
-          vatRate: Number(r.vatRate || 16),
-          hsOrServiceCode: r.hsOrServiceCode
+    const groupedMap = new Map<string, any>();
+    rows.forEach(r => {
+      if (!groupedMap.has(r.clientInvoiceNumber)) {
+        groupedMap.set(r.clientInvoiceNumber, {
+          clientInvoiceNumber: r.clientInvoiceNumber,
+          invoiceKind: r.invoiceKind,
+          issueDate: r.issueDate,
+          customerCode: r.customerCode,
+          customerName: r.customerName,
+          customerTin: r.customerTin,
+          lineItems: []
         });
+      }
+      const inv = groupedMap.get(r.clientInvoiceNumber);
+      inv.lineItems.push({
+        itemCode: r.itemCode,
+        description: r.description,
+        quantity: Number(r.quantity),
+        unitPrice: Number(r.unitPrice),
+        vatRate: Number(r.vatRate || 7.5),
+        hsOrServiceCode: r.hsOrServiceCode
       });
+    });
+    const grouped = Array.from(groupedMap.values());
+    setPreviewGroups(grouped);
+    setShowPreview(true);
+  };
 
-      const parsedInvoices = Array.from(groupedMap.values());
-      await ingestCsvInvoices(parsedInvoices, targetTenantId);
-
+  const handleConfirmTransmit = async () => {
+    if (previewGroups.length === 0) return;
+    setIsProcessing(true);
+    setShowPreview(false);
+    setStatusMsg({ text: 'Grouping multi-item invoices & transmitting to CittaEFS Gateway for IRN stamping...', type: 'info' });
+    try {
+      await ingestCsvInvoices(previewGroups, targetTenantId);
       setIsProcessing(false);
       setStatusMsg({
-        text: `🎉 Batch Transmission Complete! Transmitted ${parsedInvoices.length} fiscal invoices (${rows.length} total line items) to CittaEFS Gateway with IRN stamps & QR codes generated.`,
+        text: `🎉 Batch Transmission Complete! Transmitted ${previewGroups.length} fiscal invoices (${rows.length} total line items) to CittaEFS Gateway with IRN stamps & QR codes generated.`,
         type: 'success'
       });
       await refreshAll();
@@ -573,7 +576,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
               className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center gap-2 shadow-sm transition-all"
             >
               <Play className="w-4 h-4 text-emerald-400" />
-              <span>Submit to Gateway</span>
+              <span>Preview & Submit to Gateway</span>
             </button>
           </div>
         </div>
@@ -965,6 +968,52 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           <span>Sync Master Dictionary</span>
         </button>
       </div>
+
+      {/* Preview Modal — grouped invoices before gateway send */}
+      {showPreview && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-50 max-w-5xl w-full max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-6 my-8">
+            <div className="flex items-center justify-between sticky top-0 bg-slate-50 pb-3 border-b border-slate-200">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Preview Invoices Before Gateway Submission</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Review {previewGroups.length} invoice(s) grouped from {rows.length} rows — no data has been sent yet.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowPreview(false)} className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 font-semibold text-xs cursor-pointer">Back to Edit</button>
+                <button onClick={handleConfirmTransmit} disabled={isProcessing} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>{isProcessing ? 'Transmitting...' : `Confirm & Send ${previewGroups.length} Invoice(s)`}</span>
+                </button>
+              </div>
+            </div>
+            <div className="space-y-8">
+              {previewGroups.map((inv: any, idx: number) => (
+                <div key={inv.clientInvoiceNumber + idx} className="space-y-2">
+                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">Invoice {idx + 1} of {previewGroups.length}</span>
+                  <InvoicePreview
+                    clientInvoiceNumber={inv.clientInvoiceNumber}
+                    invoiceKind={inv.invoiceKind}
+                    invoiceType="STANDARD"
+                    issueDate={inv.issueDate}
+                    customerName={inv.customerName}
+                    customerTin={inv.customerTin}
+                    customerCode={inv.customerCode}
+                    lineItems={inv.lineItems}
+                    tenantName={activeTenant?.name || targetTenantId}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="sticky bottom-0 bg-slate-50 pt-3 border-t border-slate-200 flex justify-end gap-2">
+              <button onClick={() => setShowPreview(false)} className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-lg border border-slate-200 cursor-pointer">Cancel</button>
+              <button onClick={handleConfirmTransmit} disabled={isProcessing} className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2">
+                <Play className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Send {previewGroups.length} Invoice(s) to CittaEFS</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
