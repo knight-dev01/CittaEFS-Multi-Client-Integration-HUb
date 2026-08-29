@@ -13,6 +13,7 @@ import {
   Edit3, 
   Layers
 } from 'lucide-react';
+import { OverlaySelect } from './ui/OverlaySelect';
 
 export function ItemDictionaryTab() {
   const { itemMappings, activeTenant, addItemMapping, autoMapItems } = useHub();
@@ -137,18 +138,16 @@ export function ItemDictionaryTab() {
           />
         </div>
 
-        <div className="flex items-center space-x-2 text-xs text-slate-600">
-          <span className="font-medium">Status:</span>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
-          >
-            <option value="ALL">All Items</option>
-            <option value="MAPPED">MAPPED</option>
-            <option value="UNMAPPED">UNMAPPED</option>
-          </select>
-        </div>
+        <OverlaySelect
+          label="Status:"
+          value={filterStatus}
+          onChange={setFilterStatus}
+          options={[
+            { value: 'ALL', label: 'All Items' },
+            { value: 'MAPPED', label: 'MAPPED' },
+            { value: 'UNMAPPED', label: 'UNMAPPED' },
+          ]}
+        />
 
       </div>
 
@@ -300,26 +299,15 @@ export function ItemDictionaryTab() {
                 <label className="block font-medium text-slate-700 mb-1">
                   Regulatory Compliance Code (HS or Service Code) *
                 </label>
-                <select
+                <OverlaySelect
                   value={selectedCode}
-                  onChange={(e) => setSelectedCode(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
-                >
-                  <optgroup label="Physical Goods (HS Codes)">
-                    {CITTA_HS_CODES_REFERENCE.map(c => (
-                      <option key={c.code} value={c.code}>
-                        {c.code} - {c.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Services (Service Codes)">
-                    {CITTA_SERVICE_CODES_REFERENCE.map(s => (
-                      <option key={s.code} value={s.code}>
-                        {s.code} - {s.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                  onChange={setSelectedCode}
+                  options={[
+                    ...CITTA_HS_CODES_REFERENCE.map(c => ({ value: c.code, label: `${c.code} — ${c.name} (HS)` })),
+                    ...CITTA_SERVICE_CODES_REFERENCE.map(s => ({ value: s.code, label: `${s.code} — ${s.name} (Service)` })),
+                  ]}
+                  hint="Select HS/Service Code"
+                />
               </div>
 
               <div>

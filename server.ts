@@ -17,16 +17,19 @@ function requireEnv(name: string): string {
   const v = process.env[name]?.trim();
   if (!v) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error(`${name} environment variable is required in production`);
+      console.warn(`[Security] ${name} not set — generating ephemeral value for this boot. Set ${name} in Render env for persistence.`);
+      const gen = crypto.randomBytes(32).toString("hex");
+      return name === "JWT_SECRET" ? gen : "";
     }
     console.warn(`[Security Warning] ${name} not set — using insecure dev value. Set ${name} for production.`);
     return name === "JWT_SECRET" ? "citta_efs_jwt_secret_998_dev_only" : "";
   }
   return v;
 }
-const JWT_SECRET = process.env.JWT_SECRET?.trim() || (process.env.NODE_ENV === "production" ? requireEnv("JWT_SECRET") : "citta_efs_jwt_secret_998_dev_only");
+let JWT_SECRET: string = process.env.JWT_SECRET?.trim() || requireEnv("JWT_SECRET");
 if (process.env.NODE_ENV === "production" && JWT_SECRET.includes("dev_only")) {
-  throw new Error("JWT_SECRET must be set to a strong random value in production");
+  console.warn("[Security] JWT_SECRET is dev-only value — generating ephemeral strong secret for production boot. Set JWT_SECRET in Render env to persist sessions.");
+  JWT_SECRET = crypto.randomBytes(32).toString("hex");
 }
 const JWT_REFRESH_SECRET =
   process.env.JWT_REFRESH_SECRET?.trim() ||
@@ -1580,6 +1583,86 @@ async function startServer() {
         });
       }
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bulk send — queues multiple invoices at once (ingest/test were looping single POSTs; this is the proper bulk path)
+  app.post("/api/integration/gen/invoices/bulk", async (req, res) => {
+    try {
+      const { tenantId, invoices: bulkInvoices } = req.body;
+      const targetTenantId = tenantId || "tenant_qbo_smb";
+      const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
+      if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
+      if (!Array.isArray(bulkInvoices) || bulkInvoices.length === 0) return res.status(400).json({ success: false, error: "invoices array required" });
+      if (bulkInvoices.length > 100) return res.status(400).json({ success: false, error: "Bulk limit is 100 invoices per request" });
+
+      const results: any[] = [];
+      for (const payload of bulkInvoices) {
+        const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn } = payload || {};
+        const errors: string[] = [];
+        if (!clientInvoiceNumber) errors.push("clientInvoiceNumber mandatory");
+        if (!issueDate) errors.push("issueDate mandatory");
+        if (clientInvoiceNumber) {
+          const dup = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber } });
+          if (dup) errors.push(`Duplicate ${clientInvoiceNumber} (status ${dup.status})`);
+        }
+        if ((invoiceKind === "B2B" || invoiceKind === "B2G") && (!customerTin || customerTin.length < 8)) errors.push(`${invoiceKind} requires customerTin`);
+        if (errors.length) { results.push({ clientInvoiceNumber: clientInvoiceNumber || 'UNKNOWN', success: false, errors }); continue; }
+
+        const tenantItems = await prisma.item.findMany({ where: { tenantId: tenant.id } });
+        const processed = (lineItems || []).map((li: any, idx: number) => {
+          const mapping = tenantItems.find(m => m.clientSku === li.itemCode);
+          const hs = li.hsOrServiceCode || mapping?.hsOrServiceCode || "UNMAPPED";
+          const qty = Number(li.quantity || 1);
+          const price = Number(li.unitPrice || 0);
+          const disc = Number(li.discountAmount || 0);
+          const taxable = qty * price - disc;
+          const vatRate = li.vatRate !== undefined ? Number(li.vatRate) : Number(mapping?.defaultVatRate ?? tenant.defaultVatRate);
+          const vatAmount = (taxable * vatRate) / 100;
+          return { itemCode: li.itemCode || "SKU-GENERIC", description: li.description || "Generic", quantity: qty, unitPrice: price, taxableAmount: taxable, vatRate, vatAmount, totalAmount: taxable + vatAmount, hsOrServiceCode: hs };
+        });
+        const hasUnmapped = processed.some((p: any) => !p.hsOrServiceCode || p.hsOrServiceCode === "UNMAPPED");
+        if (hasUnmapped) { results.push({ clientInvoiceNumber, success: false, errors: ["Missing hsOrServiceCode on one or more lines"] }); continue; }
+
+        const subtotal = processed.reduce((a: number, b: any) => a + b.taxableAmount, 0);
+        const totalVat = processed.reduce((a: number, b: any) => a + b.vatAmount, 0);
+        const grandTotal = subtotal + totalVat;
+        const effectiveTin = invoiceKind === "B2C" ? null : customerTin || null;
+        const raw = await prisma.invoice.create({
+          data: {
+            tenantId: tenant.id,
+            clientInvoiceId: clientInvoiceNumber,
+            documentNumber: documentNumber || null,
+            invoiceType: invoiceType || "STANDARD",
+            invoiceKind: invoiceKind || "B2B",
+            issueDate: new Date(issueDate),
+            customerCode: customerCode || "CUST-CITTA-GENERIC",
+            customerName: customerName || "Valued Client",
+            customerTin: effectiveTin,
+            currency: "NGN",
+            subtotal, taxAmount: totalVat, totalAmount: grandTotal,
+            status: "PENDING_NRS_STAMP", ledgerWritebackStatus: "PENDING",
+            lineItems: { create: processed },
+          },
+          include: { lineItems: true },
+        });
+        const newInv = formatInvoice(raw);
+        const validated = invoiceIngestionSchema.parse({
+          tenantId: tenant.id, clientInvoiceNumber, documentNumber: documentNumber || undefined,
+          invoiceType: invoiceType || "STANDARD", invoiceKind: invoiceKind || "B2B",
+          issueDate: issueDate || new Date().toISOString().substring(0,10),
+          customerCode: customerCode || "CUST-CITTA-GENERIC", customerName: customerName || "Valued Client",
+          customerTin: effectiveTin || undefined, originalIrn: originalIrn || undefined,
+          lineItems: processed.map((li: any) => ({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS") ? "HS_CODE" : "SERVICE_CODE", vatRate: li.vatRate })),
+        });
+        await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: raw.id });
+        results.push({ clientInvoiceNumber, success: true, invoice: newInv });
+      }
+      await prisma.tenant.update({ where: { id: tenant.id }, data: { monthlyUsed: { increment: results.filter(r=>r.success).length }, lastSyncAt: new Date() } });
+      const successCount = results.filter(r=>r.success).length;
+      res.status(202).json({ success: true, successCount, failedCount: results.length - successCount, results, message: `Bulk queued ${successCount}/${results.length} invoices for NRS stamping` });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 

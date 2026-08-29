@@ -51,6 +51,7 @@ interface HubContextType {
   onboardTenant: (tenantData: any) => Promise<Tenant>;
   updateTenant: (tenantId: string, tenantData: any) => Promise<Tenant>;
   deleteTenant: (tenantId: string) => Promise<any>;
+  bulkTransmitInvoices: (payloads: any[], tenantIdOverride?: string) => Promise<any>;
   purgeDemoData: () => Promise<any>;
 }
 
@@ -482,7 +483,33 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const bulkTransmitInvoices = async (payloads: any[], tenantIdOverride?: string) => {
+    return withLoading(async () => {
+      try {
+        const targetTenantId = tenantIdOverride || activeTenantId;
+        const res = await fetchWithAuth('/api/integration/gen/invoices/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenantId: targetTenantId, invoices: payloads })
+        });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        return data;
+      } catch (e) {
+        console.error('Bulk transmit error:', e);
+        throw e;
+      }
+    });
+  };
+
   const ingestCsvInvoices = async (parsedInvoices: any[], tenantIdOverride?: TenantId) => {
+    if (parsedInvoices.length > 1) {
+      try {
+        return await bulkTransmitInvoices(parsedInvoices, tenantIdOverride);
+      } catch {
+        // secondary path: single transmits
+      }
+    }
     for (const inv of parsedInvoices) {
       await transmitInvoice(inv, tenantIdOverride);
     }
@@ -603,6 +630,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         onboardTenant,
         updateTenant,
         deleteTenant,
+        bulkTransmitInvoices,
         purgeDemoData
       }}
     >

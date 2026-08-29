@@ -20,9 +20,10 @@ import {
   Send,
   Eye
 } from 'lucide-react';
+import { OverlaySelect } from './ui/OverlaySelect';
 
 export function InvoicesTab() {
-  const { invoices, activeTenant, cancelInvoice, transmitInvoice, currentUser } = useHub();
+  const { invoices, activeTenant, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices } = useHub() as any;
 
   // Both Admin and Operator have access here.
 
@@ -90,6 +91,37 @@ export function InvoicesTab() {
     }
   };
 
+  const [isBulkSending, setIsBulkSending] = useState(false);
+  const pendingBulk = filteredInvoices.filter(inv => inv.status === 'PENDING_NRS_STAMP' || inv.status === 'QUEUED' || (inv.status as any) === 'PENDING');
+  const handleBulkSend = async () => {
+    if (pendingBulk.length === 0) { alert('No pending invoices to send.'); return; }
+    if (!confirm(`Bulk send ${pendingBulk.length} pending invoice(s) to CittaEFS gateway? This uses POST /api/integration/gen/invoices/bulk (single bulk request).`)) return;
+    setIsBulkSending(true);
+    try {
+      const payloads = pendingBulk.map(inv => ({
+        clientInvoiceNumber: inv.clientInvoiceNumber,
+        invoiceKind: inv.invoiceKind || 'B2B',
+        invoiceType: inv.invoiceType || 'STANDARD',
+        issueDate: inv.issueDate || new Date().toISOString().substring(0, 10),
+        customerCode: inv.customerCode || 'CUST-001',
+        customerName: inv.customerName,
+        customerTin: inv.customerTin,
+        lineItems: inv.lineItems?.length ? inv.lineItems.map((li: any) => ({
+          itemCode: li.itemCode,
+          description: li.description,
+          quantity: li.quantity,
+          unitPrice: li.unitPrice,
+          hsOrServiceCode: li.hsOrServiceCode,
+          vatRate: li.vatRate,
+        })) : [{ itemCode: 'SKU-001', description: 'Item', quantity: 1, unitPrice: inv.grandTotal || 5000, hsOrServiceCode: 'HS-8471.30', vatRate: 7.5 }]
+      }));
+      const res = await bulkTransmitInvoices(payloads);
+      alert(`Bulk send queued: ${res.successCount} succeeded, ${res.failedCount} failed. ${res.message || ''}`);
+    } catch (e: any) {
+      alert(e.message || 'Bulk send failed');
+    } finally { setIsBulkSending(false); }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -111,36 +143,30 @@ export function InvoicesTab() {
         {/* Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-3 font-sans">
 
-          <div className="flex items-center space-x-2 text-xs text-slate-600">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-medium">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="SIGNED">SIGNED (NRS Stamped)</option>
-              <option value="APPROVED">APPROVED</option>
-              <option value="PENDING_NRS_STAMP">PENDING STAMP</option>
-              <option value="REJECTED">REJECTED / ERROR</option>
-              <option value="CANCELLED">CANCELLED</option>
-            </select>
-          </div>
-
-          <div className="flex items-center space-x-2 text-xs text-slate-600">
-            <span className="font-medium">Type:</span>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
-            >
-              <option value="ALL">All Document Types</option>
-              <option value="STANDARD">Standard Invoice</option>
-              <option value="CREDIT_NOTE">Credit Note</option>
-              <option value="DEBIT_NOTE">Debit Note</option>
-            </select>
-          </div>
+          <OverlaySelect
+            label="Status:"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: 'ALL', label: 'All Statuses' },
+              { value: 'SIGNED', label: 'SIGNED (NRS Stamped)' },
+              { value: 'APPROVED', label: 'APPROVED' },
+              { value: 'PENDING_NRS_STAMP', label: 'PENDING STAMP' },
+              { value: 'REJECTED', label: 'REJECTED / ERROR' },
+              { value: 'CANCELLED', label: 'CANCELLED' },
+            ]}
+          />
+          <OverlaySelect
+            label="Type:"
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[
+              { value: 'ALL', label: 'All Document Types' },
+              { value: 'STANDARD', label: 'Standard Invoice' },
+              { value: 'CREDIT_NOTE', label: 'Credit Note' },
+              { value: 'DEBIT_NOTE', label: 'Debit Note' },
+            ]}
+          />
 
         </div>
 
@@ -150,14 +176,20 @@ export function InvoicesTab() {
       <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm font-sans">
         <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <FileText className="w-4 h-4 text-indigo-400" />
+            <FileText className="w-4 h-4 text-violet-400" />
             <h3 className="text-sm font-bold tracking-tight">
               {activeTenant.name} Invoices Ledger ({filteredInvoices.length})
             </h3>
           </div>
-          <span className="text-xs text-slate-300">
-            Format: <strong className="text-indigo-300">{activeTenant.platformType}</strong>
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-300 hidden sm:inline">
+              Format: <strong className="text-violet-300">{activeTenant.platformType}</strong>
+            </span>
+            <button onClick={handleBulkSend} disabled={isBulkSending || pendingBulk.length===0} className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer">
+              <Send className="w-3.5 h-3.5" />
+              <span>{isBulkSending ? 'Sending…' : `Bulk Send to CittaEFS (${pendingBulk.length})`}</span>
+            </button>
+          </div>
         </div>
 
         {filteredInvoices.length === 0 ? (
