@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useHub } from '../lib/store';
 import { getErpForTenant, groupTenantsByErp, ERP_REGISTRY } from '../config/erpRegistry';
 import { 
@@ -58,11 +58,20 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
   });
+  const navScrollRef = useRef<HTMLDivElement>(null);
+  const scrollTopRef = useRef<number>(0);
+  // restore scroll after tab/workspace switch — keep sidebar position persistent
+  useEffect(() => {
+    const el = navScrollRef.current;
+    if (el) el.scrollTop = scrollTopRef.current;
+  }, [activeTab, tenants.length, userRole, isCollapsed]);
+
   const toggleCollapsed = () => {
+    // preserve scroll before toggling layout
+    if (navScrollRef.current) scrollTopRef.current = navScrollRef.current.scrollTop;
     setIsCollapsed(v => {
       const nv = !v;
       try { localStorage.setItem('citta_sidebar_collapsed', nv ? '1' : '0'); } catch {}
-      // inform App to adjust padding via custom event
       try { window.dispatchEvent(new CustomEvent('citta_sidebar_collapsed', { detail: nv })); } catch {}
       return nv;
     });
@@ -222,8 +231,12 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         )}
       </div>
 
-      {/* Main navigation section grouped by categories — scrollable */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-5 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600">
+      {/* Main navigation section grouped by categories — scrollable, position persists */}
+      <div
+        ref={navScrollRef}
+        onScroll={e => { scrollTopRef.current = (e.target as HTMLDivElement).scrollTop; }}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-5 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600"
+      >
         {categories.map((category) => {
           const categoryTabs = visibleTabs.filter(tab => tab.category === category.id);
           if (categoryTabs.length === 0) return null;
