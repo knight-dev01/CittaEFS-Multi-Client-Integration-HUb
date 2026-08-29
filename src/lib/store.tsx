@@ -11,15 +11,6 @@ import {
   TenantId,
   UserSession 
 } from '../types';
-import { 
-  INITIAL_TENANTS, 
-  INITIAL_INVOICES, 
-  INITIAL_CUSTOMERS, 
-  INITIAL_ITEM_MAPPINGS, 
-  INITIAL_VALIDATION_ERRORS, 
-  INITIAL_AUDIT_LOGS, 
-  INITIAL_METRICS 
-} from '../data/referenceData';
 
 interface HubContextType {
   currentUser: UserSession | null;
@@ -143,13 +134,13 @@ export function HubProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const [tenants, setTenants] = useState<Tenant[]>(INITIAL_TENANTS);
-  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
-  const [customers, setCustomers] = useState<CustomerProfile[]>(INITIAL_CUSTOMERS);
-  const [itemMappings, setItemMappings] = useState<ItemCodeMapping[]>(INITIAL_ITEM_MAPPINGS);
-  const [validationErrors, setValidationErrors] = useState<ValidationErrorItem[]>(INITIAL_VALIDATION_ERRORS);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
-  const [metrics, setMetrics] = useState<SystemMetrics>(INITIAL_METRICS);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [customers, setCustomers] = useState<CustomerProfile[]>([]);
+  const [itemMappings, setItemMappings] = useState<ItemCodeMapping[]>([]);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrorItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [metrics, setMetrics] = useState<SystemMetrics>({ totalInvoicesProcessed: 0, nrsStampSuccessRate: 0, averageLatencyMs: 0, activeTenantsCount: 0, pendingValidationCount: 0, reconciliationCronStatus: 'IDLE' as any, cittaGatewayStatus: 'UNKNOWN' as any });
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Auto-select first tenant if none selected and tenants exist

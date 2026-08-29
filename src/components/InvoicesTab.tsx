@@ -4,7 +4,6 @@ import { Invoice, InvoiceType, InvoiceKind, InvoiceStatus } from '../types';
 import {
   FileText,
   Search,
-  Filter,
   ChevronDown,
   ChevronRight,
   QrCode,
@@ -12,13 +11,7 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
-  RotateCcw,
-  FileCode,
-  PlusCircle,
-  DollarSign,
-  ArrowLeftRight,
-  Send,
-  Eye
+  Send
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
 
@@ -32,14 +25,8 @@ export function InvoicesTab() {
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
 
-  // Modals / Drawers
-  const [selectedPayloadInvoice, setSelectedPayloadInvoice] = useState<Invoice | null>(null);
+  // Modals — keep only QR (per-row overlay is expandedInvoiceId)
   const [qrModalInvoice, setQrModalInvoice] = useState<Invoice | null>(null);
-  const [creditNoteModalInvoice, setCreditNoteModalInvoice] = useState<Invoice | null>(null);
-
-  // Credit Note form fields
-  const [cnAmount, setCnAmount] = useState<number>(10000);
-  const [cnReason, setCnReason] = useState<string>('Product return & damaged goods adjustment');
 
   const tenantInvoices = invoices.filter(inv => inv.tenantId === activeTenant.id);
 
@@ -54,36 +41,6 @@ export function InvoicesTab() {
 
     return matchesSearch && matchesStatus && matchesType;
   });
-
-  const handleIssueCreditNote = async () => {
-    if (!creditNoteModalInvoice) return;
-
-    const payload = {
-      tenantId: activeTenant.id,
-      clientInvoiceNumber: `CN-${creditNoteModalInvoice.clientInvoiceNumber}`,
-      invoiceType: 'CREDIT_NOTE',
-      invoiceKind: creditNoteModalInvoice.invoiceKind,
-      originalIrn: creditNoteModalInvoice.irn,
-      issueDate: new Date().toISOString().substring(0, 10),
-      customerCode: creditNoteModalInvoice.customerCode,
-      customerName: creditNoteModalInvoice.customerName,
-      customerTin: creditNoteModalInvoice.customerTin,
-      lineItems: [
-        {
-          itemCode: creditNoteModalInvoice.lineItems[0]?.itemCode || 'SKU-ADJUSTMENT',
-          description: `Credit Note Reversal: ${cnReason}`,
-          quantity: 1,
-          unitPrice: cnAmount,
-          discountAmount: 0,
-          vatRate: creditNoteModalInvoice.lineItems[0]?.vatRate ?? (activeTenant as any)?.defaultVatRate ?? 7.5,
-          hsOrServiceCode: creditNoteModalInvoice.lineItems[0]?.hsOrServiceCode || 'SRV-7414.00'
-        }
-      ]
-    };
-
-    await transmitInvoice(payload);
-    setCreditNoteModalInvoice(null);
-  };
 
   const handleCancelInvoice = async (inv: Invoice) => {
     if (confirm(`Are you sure you want to trigger regulatory revocation for IRN ${inv.irn || inv.clientInvoiceNumber}?`)) {
@@ -396,41 +353,7 @@ export function InvoicesTab() {
         );
       })()}
 
-      {/* MODAL 1: CittaEFS Raw JSON Payload Viewer */}
-      {selectedPayloadInvoice && (
-        <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-4 border-slate-900 max-w-2xl w-full p-5 text-white font-mono">
-            <div className="flex items-center justify-between pb-3 border-b-2 border-slate-800">
-              <h3 className="text-sm font-black text-amber-400 uppercase flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-amber-400" />
-                Raw CittaEFS JSON Payload ({selectedPayloadInvoice.clientInvoiceNumber})
-              </h3>
-              <button
-                onClick={() => setSelectedPayloadInvoice(null)}
-                className="text-xs text-slate-400 hover:text-white cursor-pointer font-black"
-              >
-                [X]
-              </button>
-            </div>
-            <p className="text-xs text-slate-400 my-2">
-              Exact JSON schema dispatched to CittaEFS API endpoint <code className="bg-slate-800 px-1 py-0.5 text-amber-400">POST /api/integration/gen/invoices</code>
-            </p>
-            <pre className="bg-slate-950 p-4 border-2 border-slate-800 text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-96">
-              {JSON.stringify(selectedPayloadInvoice, null, 2)}
-            </pre>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setSelectedPayloadInvoice(null)}
-                className="px-4 py-1.5 bg-amber-400 text-slate-950 hover:bg-amber-300 text-xs font-black uppercase cursor-pointer border border-slate-900"
-              >
-                Done Inspecting
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: QR Code Official Verification Modal */}
+      {/* QR Code Official Verification Modal */}
       {qrModalInvoice && (
         <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4">
           <div className="bg-white border-4 border-slate-900 max-w-md w-full p-6 text-slate-900 text-center space-y-4 font-mono">
@@ -477,73 +400,6 @@ export function InvoicesTab() {
                 className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-900 text-xs font-black uppercase border-2 border-slate-900 cursor-pointer"
               >
                 Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: Credit Note Linked Issuer */}
-      {creditNoteModalInvoice && (
-        <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-slate-900 max-w-lg w-full p-6 text-slate-900 space-y-4 font-mono">
-            <div className="flex items-center justify-between pb-2 border-b-2 border-slate-900">
-              <h3 className="text-base font-black text-slate-900 uppercase flex items-center gap-2">
-                <RotateCcw className="w-5 h-5 text-amber-500" />
-                Issue Linked Credit Note
-              </h3>
-              <button
-                onClick={() => setCreditNoteModalInvoice(null)}
-                className="text-xs text-slate-500 hover:text-slate-900 cursor-pointer font-black"
-              >
-                [CANCEL]
-              </button>
-            </div>
-
-            <div className="text-xs bg-amber-100 p-3 border-2 border-slate-900 text-slate-950 space-y-1">
-              <p>Original Invoice #: <strong>{creditNoteModalInvoice.clientInvoiceNumber}</strong></p>
-              <p>Original IRN: <strong className="font-mono">{creditNoteModalInvoice.irn}</strong></p>
-              <p>Customer: <strong>{creditNoteModalInvoice.customerName}</strong></p>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-black text-slate-900 uppercase mb-1">
-                  Credit Adjustment Amount (NGN)
-                </label>
-                <input
-                  type="number"
-                  value={cnAmount}
-                  onChange={(e) => setCnAmount(Number(e.target.value))}
-                  className="w-full px-3 py-2 border-2 border-slate-900 text-xs font-black text-slate-900 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-black text-slate-900 uppercase mb-1">
-                  Reason for Fiscal Adjustment
-                </label>
-                <textarea
-                  rows={2}
-                  value={cnReason}
-                  onChange={(e) => setCnReason(e.target.value)}
-                  className="w-full px-3 py-2 border-2 border-slate-900 text-xs text-slate-900 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end space-x-2">
-              <button
-                onClick={() => setCreditNoteModalInvoice(null)}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-900 text-xs font-black uppercase border-2 border-slate-900 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleIssueCreditNote}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-black uppercase border-2 border-slate-900 cursor-pointer"
-              >
-                Transmit Credit Note Payload
               </button>
             </div>
           </div>
