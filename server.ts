@@ -1091,18 +1091,22 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/tenants/:id", async (req: any, res) => {
+  async function handleDeleteTenant(req: any, res: any) {
     try {
       const role = req.user?.role;
       if (req.user && role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
-      await prisma.tenant.delete({ where: { id: req.params.id } });
+      const id = req.params.id;
+      // Allow both tenant_test_* ids and real ids; handle already-deleted gracefully
+      const existing = await prisma.tenant.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: "Tenant not found" });
+      await prisma.tenant.delete({ where: { id } });
       await safeAuditLogCreate(prisma, {
-        tenantId: req.params.id,
+        tenantId: id,
         action: "TENANT_DELETED",
         entityType: "TENANT",
-        entityRef: req.params.id,
-        details: `Tenant ${req.params.id} deleted`,
-        sha256PayloadHash: generateSha256(req.params.id),
+        entityRef: id,
+        details: `Tenant ${id} deleted`,
+        sha256PayloadHash: generateSha256(id),
         performedBy: req.user?.email || "Admin",
       });
       res.json({ success: true });
@@ -1110,7 +1114,10 @@ async function startServer() {
       if (e.code === "P2025") return res.status(404).json({ success: false, error: "Tenant not found" });
       res.status(500).json({ error: e.message });
     }
-  });
+  }
+  app.delete("/api/tenants/:id", handleDeleteTenant);
+  // POST alternate for environments/proxies that block DELETE verb
+  app.post("/api/tenants/:id/delete", handleDeleteTenant);
 
   // CittaEFS gateway credentials — GLOBAL single API key for all tenants (user requirement: "all tenant send through one API key")
   // Per-tenant PATCH now propagates gatewayUrl/apiKey to ALL tenants so behavior stays shared.

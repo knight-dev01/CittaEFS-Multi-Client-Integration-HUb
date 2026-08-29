@@ -24,6 +24,9 @@ function HubMainContent() {
   const [activeTab, setActiveTabState] = useState<string>('clients');
   const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return typeof window !== 'undefined' && localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
+  });
 
   // Load saved tab from localStorage after mount
   useEffect(() => {
@@ -47,6 +50,19 @@ function HubMainContent() {
     // Small delay to ensure smooth transition
     const timer = setTimeout(() => setIsInitializing(false), 50);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: any) => setSidebarCollapsed(!!e.detail);
+    const onStorage = () => {
+      try { setSidebarCollapsed(localStorage.getItem('citta_sidebar_collapsed') === '1'); } catch {}
+    };
+    window.addEventListener('citta_sidebar_collapsed' as any, handler);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('citta_sidebar_collapsed' as any, handler);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
   const setActiveTab = (tab: string) => {
@@ -94,22 +110,6 @@ function HubMainContent() {
   if (!allowedTabs.includes(activeTab)) {
     setActiveTab(userRole === 'ADMIN' ? 'clients' : 'invoices');
   }
-
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try { return typeof window !== 'undefined' && localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
-  });
-  useEffect(() => {
-    const handler = (e: any) => setSidebarCollapsed(!!e.detail);
-    const onStorage = () => {
-      try { setSidebarCollapsed(localStorage.getItem('citta_sidebar_collapsed') === '1'); } catch {}
-    };
-    window.addEventListener('citta_sidebar_collapsed' as any, handler);
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener('citta_sidebar_collapsed' as any, handler);
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col selection:bg-violet-400 selection:text-white">

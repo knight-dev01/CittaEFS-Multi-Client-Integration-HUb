@@ -530,18 +530,27 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const deleteTenant = async (tenantId: string) => {
     return withLoading(async () => {
       try {
-        const res = await fetchWithAuth(`/api/tenants/${tenantId}`, {
-          method: 'DELETE',
-        });
-        const data = await parseJsonResponse(res);
-        // If deleted tenant was active, clear active selection so refreshAll can auto-select next
+        let res: Response;
+        try {
+          res = await fetchWithAuth(`/api/tenants/${tenantId}`, { method: 'DELETE' });
+          if (res.status === 404) {
+            const txt = await res.clone().text().catch(() => '');
+            if (txt.includes('API route not found')) throw new Error('DELETE_ALT');
+          }
+        } catch (err: any) {
+          if (err.message === 'DELETE_ALT' || String(err.message).includes('API route not found')) {
+            res = await fetchWithAuth(`/api/tenants/${tenantId}/delete`, { method: 'POST' }) as Response;
+          } else {
+            throw err;
+          }
+        }
+        const data = await parseJsonResponse(res!);
         const wasActive = tenantId === activeTenantId;
         if (wasActive) {
           setActiveTenantId('');
           try { localStorage.removeItem('citta_active_tenant_id'); } catch {}
         }
         await refreshAll();
-        // refreshAll auto-selects first tenant; if none left, activeTenant becomes null
         return data;
       } catch (e) {
         console.error('Delete tenant error:', e);
