@@ -1,4 +1,4 @@
-export const DEFAULT_CITTA_ENDPOINT = 'https://gateway.cittaefs.com/api/v1';
+export const DEFAULT_CITTA_ENDPOINT = 'https://ei-api.azurewebsites.net';
 
 const CITTA_ENDPOINT_STORAGE_KEY = 'citta_gateway_rest_endpoint';
 

@@ -1,8 +1,6 @@
 import { useHub } from '../lib/store';
-import { getStoredCittaEndpoint } from '../lib/gatewaySettings';
 import { 
   Activity,
-  Layers,
   CheckCircle2,
   Clock,
   Building2,
@@ -16,7 +14,7 @@ interface OverviewTabProps {
 
 export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
   const { metrics, tenants, invoices, activeTenant, purgeDemoData, currentUser, deleteTenant, setActiveTenantId } = useHub() as any;
-  const cittaEndpoint = getStoredCittaEndpoint();
+  const cittaEndpoint = (activeTenant?.cittaGatewayUrl?.trim() || 'https://ei-api.azurewebsites.net');
 
   const userRole = currentUser?.role || 'OPERATOR';
   const canOnboard = userRole === 'ADMIN';
@@ -147,8 +145,9 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3"><span className="font-bold text-slate-900 text-xs">CittaEFS Gateway</span><span className="px-2.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-[10px]">{metrics.cittaGatewayStatus}</span></div>
           <div className="space-y-2 text-xs text-slate-600 mt-3">
-            <div className="flex justify-between"><span>Endpoint:</span><span className="font-semibold text-slate-900 break-all text-right">{cittaEndpoint}</span></div>
+            <div className="flex justify-between gap-3"><span className="shrink-0">Endpoint:</span><span className="font-mono font-semibold text-violet-700 break-all text-right">{cittaEndpoint}</span></div>
             <div className="flex justify-between"><span>Security:</span><span className="font-semibold text-violet-600">AES-256-GCM</span></div>
+            <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-100">Shared key: all tenants use <span className="font-mono text-violet-600">CITTAEFS_API_KEY</span> → {cittaEndpoint}/api/integration/gen/invoices</div>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
