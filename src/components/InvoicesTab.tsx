@@ -306,40 +306,29 @@ export function InvoicesTab() {
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
-
-                          {/* Inspect CittaEFS JSON Payload */}
+                        {(inv.status === 'APPROVED' || inv.status === 'SIGNED') ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
+                        ) : (
                           <button
-                            onClick={() => setSelectedPayloadInvoice(inv)}
-                            className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-md border border-slate-200 transition-colors cursor-pointer"
-                            title="Inspect CittaEFS JSON Payload"
+                            onClick={async () => {
+                              try {
+                                await transmitInvoice({
+                                  clientInvoiceNumber: inv.clientInvoiceNumber,
+                                  invoiceKind: inv.invoiceKind,
+                                  invoiceType: inv.invoiceType,
+                                  issueDate: inv.issueDate,
+                                  customerCode: inv.customerCode,
+                                  customerName: inv.customerName,
+                                  customerTin: inv.customerTin,
+                                  lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))
+                                });
+                              } catch (e:any) { alert(e.message); }
+                            }}
+                            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
                           >
-                            <FileCode className="w-3.5 h-3.5" />
+                            <Send className="w-3.5 h-3.5" /> Send to CittaEFS
                           </button>
-
-                          {/* Issue Credit Note Button */}
-                          {true && (inv.status === 'SIGNED' || inv.status === 'APPROVED') && inv.invoiceType === 'STANDARD' && (
-                            <button
-                              onClick={() => setCreditNoteModalInvoice(inv)}
-                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md border border-amber-200 transition-colors cursor-pointer"
-                              title="Issue Linked Credit Note"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* Cancel Invoice */}
-                          {true && inv.status !== 'CANCELLED' && (
-                            <button
-                              onClick={() => handleCancelInvoice(inv)}
-                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md border border-rose-200 transition-colors cursor-pointer"
-                              title="Revoke / Cancel Invoice"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                        </div>
+                        )}
                       </td>
                     </tr>
                   );
