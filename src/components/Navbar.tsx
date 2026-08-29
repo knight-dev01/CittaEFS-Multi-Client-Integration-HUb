@@ -55,19 +55,29 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDeletingTenant, setIsDeletingTenant] = useState(false);
+
+  const userRole = currentUser?.role || 'OPERATOR';
+  const erp = getErpForTenant(activeTenant?.platformType);
+  const erpTabs = erp.tabs;
+  const openErrorCount = tenants.length > 0 && activeTenant ? validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshAll();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
+
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
   });
   const navScrollRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef<number>(0);
-  // restore scroll after tab/workspace switch — keep sidebar position persistent
   useEffect(() => {
     const el = navScrollRef.current;
     if (el) el.scrollTop = scrollTopRef.current;
   }, [activeTab, tenants.length, userRole, isCollapsed]);
 
   const toggleCollapsed = () => {
-    // preserve scroll before toggling layout
     if (navScrollRef.current) scrollTopRef.current = navScrollRef.current.scrollTop;
     setIsCollapsed(v => {
       const nv = !v;
@@ -96,18 +106,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       setIsDeletingTenant(false);
     }
   };
-
-  const openErrorCount = tenants.length > 0 && activeTenant ? validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await refreshAll();
-    setTimeout(() => setIsRefreshing(false), 500);
-  };
-
-  const userRole = currentUser?.role || 'OPERATOR';
-  const erp = getErpForTenant(activeTenant?.platformType);
-  const erpTabs = erp.tabs;
 
   const categories = userRole === 'ADMIN' ? [
     { id: 'main', label: 'Main' },
