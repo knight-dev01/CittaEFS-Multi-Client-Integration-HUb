@@ -25,7 +25,8 @@ import {
   ChevronDown,
   Globe,
   Database,
-  Cloud
+  Cloud,
+  Trash2
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -44,13 +45,35 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     validationErrors, 
     refreshAll, 
     currentUser, 
-    logout 
-  } = useHub();
+    logout,
+    deleteTenant
+  } = useHub() as any;
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDeletingTenant, setIsDeletingTenant] = useState(false);
 
-  const openErrorCount = validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length;
+  const handleDeleteActiveTenant = async () => {
+    if (!activeTenant) return;
+    if (userRole !== 'ADMIN') return;
+    const confirmMsg = `Delete tenant "${activeTenant.name}" (${activeTenant.id})?\n\nThis will permanently delete the tenant and CASCADE delete its invoices, customers, items, queue jobs and integrations. This cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+    const doubleConfirm = window.prompt(`Type DELETE to confirm removal of "${activeTenant.name}":`, "");
+    if (doubleConfirm !== 'DELETE') {
+      if (doubleConfirm !== null) alert('Cancelled — type DELETE exactly to confirm.');
+      return;
+    }
+    setIsDeletingTenant(true);
+    try {
+      await deleteTenant(activeTenant.id);
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete tenant');
+    } finally {
+      setIsDeletingTenant(false);
+    }
+  };
+
+  const openErrorCount = tenants.length > 0 && activeTenant ? validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -130,8 +153,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           <span>Active Workspace Client:</span>
           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${erp.id==='qbo'?'bg-amber-500/20 text-amber-300 border-amber-500/30': erp.id==='excel'?'bg-indigo-500/20 text-indigo-300 border-indigo-500/30':'bg-slate-700 text-slate-300 border-slate-600'}`}>{erp.shortLabel} MODE</span>
         </label>
-        <div className="relative">
-          <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 w-full focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+        <div className="relative flex items-center gap-2">
+          <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 flex-1 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
             <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
             <select
               value={activeTenantId}
@@ -162,6 +185,16 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />
           </div>
+          {userRole === 'ADMIN' && activeTenant && (
+            <button
+              onClick={handleDeleteActiveTenant}
+              disabled={isDeletingTenant}
+              title={`Remove tenant "${activeTenant.name}"`}
+              className="p-2 bg-slate-800 hover:bg-rose-600 border border-slate-700 hover:border-rose-700 text-slate-400 hover:text-white rounded-lg transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              <Trash2 className={`w-3.5 h-3.5 ${isDeletingTenant ? 'animate-pulse' : ''}`} />
+            </button>
+          )}
         </div>
         <div className="text-[10px] text-slate-400 font-medium mt-2 flex justify-between items-center px-0.5">
           <span>{activeTenant?.platformType || 'QuickBooks / Excel'}</span>
@@ -169,6 +202,9 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             {activeTenant?.region || 'EU-WEST2'}
           </span>
         </div>
+        {userRole === 'ADMIN' && activeTenant && (
+          <p className="text-[10px] text-slate-500 mt-1">ADMIN: use trash icon to remove this workspace (cascades all data).</p>
+        )}
       </div>
 
       {/* Main navigation section grouped by categories */}

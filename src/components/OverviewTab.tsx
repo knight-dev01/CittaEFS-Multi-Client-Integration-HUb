@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   Building2,
   Sliders,
-  Radio
+  Radio,
+  Trash2
 } from 'lucide-react';
 
 interface OverviewTabProps {
@@ -22,18 +23,34 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
-  const { metrics, tenants, invoices, auditLogs, activeTenant, purgeDemoData, currentUser } = useHub();
+  const { metrics, tenants, invoices, auditLogs, activeTenant, purgeDemoData, currentUser, deleteTenant, setActiveTenantId } = useHub() as any;
   const cittaEndpoint = getStoredCittaEndpoint();
 
   const userRole = currentUser?.role || 'OPERATOR';
   const canOnboard = userRole === 'ADMIN';
   const canPurge = userRole === 'ADMIN';
+  const canDeleteTenant = userRole === 'ADMIN';
 
   const handlePurge = async () => {
     if (!canPurge) return;
     if (window.confirm('Are you sure you want to purge all test invoices, validation errors, and audit logs to reset staging data?')) {
       await purgeDemoData();
       alert('Staging test data purged! You can now onboard client entities or transmit real invoices.');
+    }
+  };
+
+  const handleDeleteTenant = async (tenant: any) => {
+    if (!canDeleteTenant) return;
+    if (!window.confirm(`Delete workspace "${tenant.name}" (${tenant.id})?\n\nThis cascades: invoices, customers, items, queue jobs, integrations will be permanently deleted.`)) return;
+    const typed = window.prompt(`Type DELETE to confirm removal of "${tenant.name}":`, "");
+    if (typed !== 'DELETE') {
+      if (typed !== null) alert('Cancelled — type DELETE exactly.');
+      return;
+    }
+    try {
+      await deleteTenant(tenant.id);
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete tenant');
     }
   };
 
@@ -111,6 +128,61 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
           </span>
         </div>
 
+      </div>
+
+      {/* Tenants / Workspaces — ADMIN can remove */}
+      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
+        <div className="px-5 py-4 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+          <span className="font-bold text-slate-900 text-xs flex items-center gap-2"><Building2 className="w-4 h-4 text-indigo-600" /> Workspaces ({tenants.length})</span>
+          <span className="text-[11px] text-slate-500">{canDeleteTenant ? 'ADMIN: trash icon removes tenant (cascade)' : 'Operator: view only'}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
+                <th className="py-2.5 px-4">Workspace / Tenant</th>
+                <th className="py-2.5 px-4">TIN</th>
+                <th className="py-2.5 px-4">Platform</th>
+                <th className="py-2.5 px-4">Mode</th>
+                <th className="py-2.5 px-4 text-right">Invoices</th>
+                <th className="py-2.5 px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {tenants.length === 0 ? (
+                <tr><td colSpan={6} className="p-6 text-center text-slate-400">No workspaces yet — onboard a client.</td></tr>
+              ) : tenants.map((t: any) => {
+                const count = invoices.filter((i: any) => i.tenantId === t.id).length;
+                const isActive = activeTenant?.id === t.id;
+                return (
+                  <tr key={t.id} className={`hover:bg-slate-50/80 ${isActive ? 'bg-indigo-50/30' : ''}`}>
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-slate-900 flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400" /> {t.name}
+                        {isActive && <span className="px-1.5 py-0.5 bg-indigo-600 text-white rounded text-[10px] font-bold">ACTIVE</span>}
+                      </div>
+                      <span className="font-mono text-[11px] text-slate-500">{t.id}</span>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-[11px] text-slate-600">{t.tin}</td>
+                    <td className="py-3 px-4 text-slate-700">{t.platformType}</td>
+                    <td className="py-3 px-4"><span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-[10px] font-semibold">{t.marketTier || 'Enterprise'}</span></td>
+                    <td className="py-3 px-4 text-right font-semibold text-slate-900">{count}</td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => setActiveTenantId(t.id)} disabled={isActive} className={`px-2.5 py-1 rounded-lg border text-xs font-semibold ${isActive ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 cursor-pointer'}`}>Switch</button>
+                        {canDeleteTenant && (
+                          <button onClick={() => handleDeleteTenant(t)} title={`Remove ${t.name}`} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-lg cursor-pointer">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* System Status Dashboard */}

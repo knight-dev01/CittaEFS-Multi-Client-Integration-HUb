@@ -50,6 +50,7 @@ interface HubContextType {
   ingestCsvInvoices: (parsedInvoices: any[], tenantIdOverride?: TenantId) => Promise<any>;
   onboardTenant: (tenantData: any) => Promise<Tenant>;
   updateTenant: (tenantId: string, tenantData: any) => Promise<Tenant>;
+  deleteTenant: (tenantId: string) => Promise<any>;
   purgeDemoData: () => Promise<any>;
 }
 
@@ -526,6 +527,29 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const deleteTenant = async (tenantId: string) => {
+    return withLoading(async () => {
+      try {
+        const res = await fetchWithAuth(`/api/tenants/${tenantId}`, {
+          method: 'DELETE',
+        });
+        const data = await parseJsonResponse(res);
+        // If deleted tenant was active, clear active selection so refreshAll can auto-select next
+        const wasActive = tenantId === activeTenantId;
+        if (wasActive) {
+          setActiveTenantId('');
+          try { localStorage.removeItem('citta_active_tenant_id'); } catch {}
+        }
+        await refreshAll();
+        // refreshAll auto-selects first tenant; if none left, activeTenant becomes null
+        return data;
+      } catch (e) {
+        console.error('Delete tenant error:', e);
+        throw e;
+      }
+    });
+  };
+
   const purgeDemoData = async () => {
     return withLoading(async () => {
       try {
@@ -569,6 +593,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         ingestCsvInvoices,
         onboardTenant,
         updateTenant,
+        deleteTenant,
         purgeDemoData
       }}
     >
