@@ -350,69 +350,59 @@ export function InvoicesTab() {
         )}
       </div>
 
-      {/* Expanded Line Item Details Panel (if selected) */}
+      {/* Per-row overlay for line items — purple, row-specific */}
       {expandedInvoiceId && (() => {
         const inv = tenantInvoices.find(i => i.id === expandedInvoiceId);
         if (!inv) return null;
-
         return (
-          <div className="bg-slate-900 text-white p-5 border-2 border-slate-900 font-mono space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b-2 border-slate-800">
-              <h4 className="text-sm font-black text-amber-400 uppercase tracking-tight flex items-center gap-2">
-                <FileText className="w-4 h-4 text-amber-400" />
-                Line Item Breakdown for {inv.clientInvoiceNumber} ({inv.lineItems.length} items)
-              </h4>
-              <button
-                onClick={() => setExpandedInvoiceId(null)}
-                className="text-xs text-slate-400 hover:text-amber-400 cursor-pointer uppercase font-black"
-              >
-                [CLOSE]
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300 border-2 border-slate-800">
-                <thead className="bg-slate-800 text-amber-400 uppercase text-[10px] tracking-wider border-b-2 border-slate-800">
-                  <tr>
-                    <th className="py-2 px-3 border-r border-slate-800">Item SKU</th>
-                    <th className="py-2 px-3 border-r border-slate-800">Description</th>
-                    <th className="py-2 px-3 border-r border-slate-800">Qty</th>
-                    <th className="py-2 px-3 border-r border-slate-800">Unit Price</th>
-                    <th className="py-2 px-3 border-r border-slate-800">Taxable</th>
-                    <th className="py-2 px-3 border-r border-slate-800">VAT %</th>
-                    <th className="py-2 px-3 border-r border-slate-800">Mandatory HS Code</th>
-                    <th className="py-2 px-3 text-right">Total Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {inv.lineItems.map((li) => (
-                    <tr key={li.id}>
-                      <td className="py-2 px-3 font-mono font-black text-amber-400 border-r border-slate-800">{li.itemCode}</td>
-                      <td className="py-2 px-3 border-r border-slate-800">{li.description}</td>
-                      <td className="py-2 px-3 border-r border-slate-800">{li.quantity}</td>
-                      <td className="py-2 px-3 border-r border-slate-800">NGN {li.unitPrice.toLocaleString()}</td>
-                      <td className="py-2 px-3 border-r border-slate-800">NGN {li.taxableAmount.toLocaleString()}</td>
-                      <td className="py-2 px-3 border-r border-slate-800">{li.vatRate}%</td>
-                      <td className="py-2 px-3 font-mono border-r border-slate-800">
-                        <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black border ${li.hsOrServiceCode === 'UNMAPPED' ? 'bg-red-950 text-red-300 border-red-800' : 'bg-emerald-400 text-slate-950 border-slate-900'
-                          }`}>
-                          {li.hsOrServiceCode} ({li.codeType})
-                        </span>
-                      </td>
-                      <td className="py-2 px-3 text-right font-black text-white">
-                        NGN {li.totalAmount.toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {inv.errorMessage && (
-              <div className="p-3 bg-red-950 border-2 border-red-600 text-xs text-red-200">
-                <strong>Pre-flight Exception:</strong> {inv.errorMessage}
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setExpandedInvoiceId(null)}>
+            <div className="bg-white w-full max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-violet-50">
+                <h4 className="text-sm font-bold text-violet-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-violet-600" />
+                  {inv.clientInvoiceNumber} — {inv.lineItems.length} item(s) • {inv.customerName}
+                </h4>
+                <button onClick={() => setExpandedInvoiceId(null)} className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-slate-700 border border-transparent hover:border-slate-200 cursor-pointer"><XCircle className="w-4 h-4" /></button>
               </div>
-            )}
+              <div className="overflow-y-auto p-4 space-y-3">
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
+                      <tr>
+                        <th className="py-2 px-3">SKU</th>
+                        <th className="py-2 px-3">Description</th>
+                        <th className="py-2 px-3 text-center">Qty</th>
+                        <th className="py-2 px-3 text-right">Unit Price</th>
+                        <th className="py-2 px-3 text-right">Taxable</th>
+                        <th className="py-2 px-3 text-center">VAT%</th>
+                        <th className="py-2 px-3">HS Code</th>
+                        <th className="py-2 px-3 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {inv.lineItems.map((li) => (
+                        <tr key={li.id} className="hover:bg-violet-50/30">
+                          <td className="py-2 px-3 font-mono font-semibold text-violet-700">{li.itemCode}</td>
+                          <td className="py-2 px-3 text-slate-700">{li.description}</td>
+                          <td className="py-2 px-3 text-center">{li.quantity}</td>
+                          <td className="py-2 px-3 text-right">NGN {li.unitPrice.toLocaleString()}</td>
+                          <td className="py-2 px-3 text-right">NGN {li.taxableAmount.toLocaleString()}</td>
+                          <td className="py-2 px-3 text-center">{li.vatRate}%</td>
+                          <td className="py-2 px-3 font-mono text-[11px]"><span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${li.hsOrServiceCode==='UNMAPPED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>{li.hsOrServiceCode}</span></td>
+                          <td className="py-2 px-3 text-right font-bold text-slate-900">NGN {li.totalAmount.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-xl"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setExpandedInvoiceId(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Close</button>
+                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING') && <button onClick={async () => { await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: inv.customerTin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setExpandedInvoiceId(null); }} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> Send to CittaEFS</button>}
+                  {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
+                </div>
+              </div>
+            </div>
           </div>
         );
       })()}

@@ -99,12 +99,10 @@ function HubMainContent() {
     return <LoginScreen onLogin={login} />;
   }
 
-  // Enforce role-based tab routing restrictions:
-  // Admin: Full access to all tabs
-  // Operator: Main tabs only (Invoices, Validation, Items, Import, Customers, Overview)
+  // Enforce role-based tab routing restrictions
   const userRole = currentUser?.role || 'OPERATOR';
   const allowedTabs = userRole === 'ADMIN'
-    ? ['clients', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'settings']
+    ? ['clients', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'settings', 'gateway', 'mapping']
     : ['clients', 'invoices', 'import', 'customers', 'items', 'validation'];
 
   if (!allowedTabs.includes(activeTab)) {

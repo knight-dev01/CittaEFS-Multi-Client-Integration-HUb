@@ -12,7 +12,8 @@ import {
   Trash2,
   Plus,
   QrCode,
-  CheckCircle2
+  CheckCircle2,
+  Send
 } from 'lucide-react';
 
 interface OverviewTabProps {
@@ -20,7 +21,7 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
-  const { tenants, invoices, activeTenant, purgeDemoData, currentUser, deleteTenant, setActiveTenantId } = useHub() as any;
+  const { tenants, invoices, activeTenant, purgeDemoData, currentUser, deleteTenant, setActiveTenantId, transmitInvoice } = useHub() as any;
 
   const userRole = currentUser?.role || 'OPERATOR';
   const canOnboard = userRole === 'ADMIN';
@@ -204,7 +205,11 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
                       <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${getStatusStyle(inv.status)}`}>{getStatusLabel(inv.status)}</span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button onClick={(e) => { e.stopPropagation(); setSelectedInvoice(inv); }} className="px-2.5 py-1 bg-white hover:bg-violet-50 text-slate-600 hover:text-violet-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">View</button>
+                      {inv.status === 'APPROVED' || inv.status === 'SIGNED' ? (
+                        <span className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
+                      ) : (
+                        <button onClick={async (e) => { e.stopPropagation(); try { await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: inv.customerTin, lineItems: (inv.lineItems || []).map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); } catch(err:any){ alert(err.message); } }} className="px-2.5 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"><Send className="w-3 h-3" /> Send to CittaEFS</button>
+                      )}
                     </td>
                   </tr>
                 );
