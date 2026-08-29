@@ -61,8 +61,8 @@ export function CittaGatewayTab() {
           <ShieldCheck className="w-5 h-5 text-indigo-400" />
           <h1 className="text-base font-bold tracking-tight">CittaEFS Integration Credentials & Writeback</h1>
         </div>
-        <p className="text-slate-400 text-xs mt-1">Single shared gateway key — <span className="text-emerald-300 font-semibold">all tenants send through ONE CittaEFS API key</span> (<span className="font-mono text-indigo-300">CITTAEFS_API_KEY</span> env if set, else DB shared pool). Hub normalizes from <span className="text-white font-medium">{erp.label}</span> → fiscal matrix → sends to CittaEFS, then writes IRN/QR back to <span className="text-white font-medium">{writebackTarget === 'BOTH' ? 'CittaEFS + Hub' : writebackTarget === 'CITTAEFS' ? 'CittaEFS only' : 'Hub only'}</span>.</p>
-        <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-emerald-200">All tenants share one gateway. Saving here propagates the key & URL to every tenant. Set <span className="font-mono text-emerald-300">CITTAEFS_API_KEY</span> in env (Render Secret File) to override DB at runtime.</div>
+        <p className="text-slate-400 text-xs mt-1">Single shared gateway key — <span className="text-violet-300 font-semibold">all tenants send through ONE CittaEFS API key</span> (<span className="font-mono text-violet-300">CITTAEFS_API_KEY</span> env if set, else DB shared pool). Hub normalizes from <span className="text-white font-medium">{erp.label}</span> → fiscal matrix → sends to CittaEFS, then writes IRN/QR back to <span className="text-white font-medium">{writebackTarget === 'BOTH' ? 'CittaEFS + Hub' : writebackTarget === 'CITTAEFS' ? 'CittaEFS only' : 'Hub only'}</span>.</p>
+        <div className="mt-3 bg-violet-500/10 border border-violet-500/20 rounded-lg px-3 py-2 text-xs text-violet-200">All tenants share one gateway. Saving here propagates the key & URL to every tenant. Set <span className="font-mono text-violet-300">CITTAEFS_API_KEY</span> in env (Render Secret File) to override DB at runtime.</div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 shadow-sm">
@@ -118,7 +118,7 @@ export function CittaGatewayTab() {
 
         <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
           {msg && <span className={`text-xs font-medium flex items-center gap-1 ${msg.type==='success'?'text-emerald-700':'text-rose-700'}`}>{msg.type==='success'?<CheckCircle2 className="w-3.5 h-3.5"/>:<AlertCircle className="w-3.5 h-3.5"/>}{msg.text}</span>}
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2"><Save className="w-3.5 h-3.5" /><span>{saving ? 'Saving...' : 'Save & Propagate to All Tenants'}</span></button>
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2"><Save className="w-3.5 h-3.5" /><span>{saving ? 'Saving...' : 'Save & Propagate to All Tenants'}</span></button>
         </div>
       </div>
 

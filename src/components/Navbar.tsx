@@ -26,7 +26,10 @@ import {
   Globe,
   Database,
   Cloud,
-  Trash2
+  Trash2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronsLeft
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -52,6 +55,18 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDeletingTenant, setIsDeletingTenant] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try { return localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
+  });
+  const toggleCollapsed = () => {
+    setIsCollapsed(v => {
+      const nv = !v;
+      try { localStorage.setItem('citta_sidebar_collapsed', nv ? '1' : '0'); } catch {}
+      // inform App to adjust padding via custom event
+      try { window.dispatchEvent(new CustomEvent('citta_sidebar_collapsed', { detail: nv })); } catch {}
+      return nv;
+    });
+  };
 
   const handleDeleteActiveTenant = async () => {
     if (!activeTenant) return;
@@ -377,12 +392,52 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       )}
 
-      {/* Desktop Persistent Sidebar (Large screen layout) */}
-      <aside className="hidden lg:flex lg:flex-shrink-0 lg:w-64 xl:w-72 fixed inset-y-0 left-0 z-30">
-        <div className="flex flex-col w-full h-full">
-          <SidebarContent />
+      {/* Desktop Persistent Sidebar (Large screen layout) — collapsible */}
+      <aside className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
+        <div className="flex flex-col w-full h-full relative">
+          {/* Collapse toggle — top-right of sidebar */}
+          <button
+            onClick={toggleCollapsed}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="absolute -right-3 top-5 z-40 w-6 h-6 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center text-slate-600 hover:text-violet-600 hover:border-violet-300 cursor-pointer"
+          >
+            {isCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+          </button>
+          <div className={isCollapsed ? 'opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto' : ''} style={isCollapsed ? { display: 'none' } : undefined}>
+            <SidebarContent />
+          </div>
+          {isCollapsed && (
+            <div className="flex flex-col h-full bg-slate-900 text-slate-100 border-r border-slate-800">
+              <div className="p-3 border-b border-slate-800 flex flex-col items-center gap-2">
+                <div className="bg-gradient-to-tr from-violet-600 to-indigo-500 p-2 rounded-xl text-white"><Layers className="w-4 h-4" /></div>
+                <button onClick={toggleCollapsed} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 cursor-pointer"><ChevronsLeft className="w-3.5 h-3.5 rotate-180" /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto py-3 space-y-1">
+                {visibleTabs.slice(0,8).map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} title={tab.label} className={`w-full flex justify-center py-2.5 ${isActive ? 'text-violet-400 bg-violet-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'} cursor-pointer`}>
+                      <Icon className="w-4 h-4" />
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="p-2 border-t border-slate-800 flex flex-col items-center gap-2">
+                {activeTenant && (
+                  <button onClick={handleDeleteActiveTenant} title="Remove workspace" className="p-2 bg-slate-800 hover:bg-rose-600 rounded-lg text-slate-400 hover:text-white cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                )}
+                <button onClick={handleRefresh} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 cursor-pointer"><RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /></button>
+                <button onClick={logout} className="p-2 bg-slate-800 hover:bg-rose-600 rounded-lg text-slate-300 hover:text-white cursor-pointer"><LogOut className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+          )}
         </div>
       </aside>
+      {/* Collapsed overlay to close when clicking outside — desktop */}
+      {isCollapsed && (
+        <button onClick={toggleCollapsed} className="hidden lg:block fixed inset-0 z-10 bg-transparent cursor-pointer" aria-label="Expand sidebar" />
+      )}
     </>
   );
 }

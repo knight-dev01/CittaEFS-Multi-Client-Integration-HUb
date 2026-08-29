@@ -95,13 +95,29 @@ function HubMainContent() {
     setActiveTab(userRole === 'ADMIN' ? 'clients' : 'invoices');
   }
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return typeof window !== 'undefined' && localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    const handler = (e: any) => setSidebarCollapsed(!!e.detail);
+    const onStorage = () => {
+      try { setSidebarCollapsed(localStorage.getItem('citta_sidebar_collapsed') === '1'); } catch {}
+    };
+    window.addEventListener('citta_sidebar_collapsed' as any, handler);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('citta_sidebar_collapsed' as any, handler);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col selection:bg-amber-400 selection:text-slate-950">
+    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col selection:bg-violet-400 selection:text-white">
       
-      {/* Real-time Background Activity Progress Bar */}
+      {/* Real-time Background Activity Progress Bar — purple */}
       {isBgRefreshing && (
-        <div className="fixed top-0 left-0 right-0 h-1 bg-amber-400/20 z-50 overflow-hidden pointer-events-none">
-          <div className="h-full bg-amber-400 rounded-full" style={{
+        <div className="fixed top-0 left-0 right-0 h-1 bg-violet-500/20 z-50 overflow-hidden pointer-events-none">
+          <div className="h-full bg-violet-500 rounded-full" style={{
             animation: 'shimmer-loading 1.5s infinite ease-in-out',
             transformOrigin: 'left'
           }} />
@@ -123,8 +139,8 @@ function HubMainContent() {
         onOpenOnboardModal={() => setIsOnboardModalOpen(true)}
       />
 
-      {/* Main Content Area next to Sidebar — ERP-isolated */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-64 xl:pl-72">
+      {/* Main Content Area next to Sidebar — ERP-isolated, collapsible purple theme */}
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64 xl:pl-72'}`}>
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full mx-auto max-w-7xl">
           
           {/* ERP-dedicated workspace */}
@@ -138,11 +154,11 @@ function HubMainContent() {
 
         </main>
 
-        {/* Footer */}
+        {/* Footer — purple */}
         <footer className="bg-white text-slate-500 border-t border-slate-200 text-xs py-6 mt-12 font-sans shrink-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <div className="w-5 h-5 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+              <div className="w-5 h-5 rounded bg-violet-100 text-violet-600 flex items-center justify-center font-bold text-xs">
                 C
               </div>
               <span className="font-semibold text-slate-700">CittaEFS Integration Hub</span>
@@ -152,7 +168,7 @@ function HubMainContent() {
               <span>•</span>
               <span>QuickBooks + Excel</span>
               <span>•</span>
-              <span>CittaEFS Gateway</span>
+              <span className="text-violet-600 font-semibold">CittaEFS Gateway</span>
             </div>
           </div>
         </footer>

@@ -86,7 +86,7 @@ export function InvoicePreview({
             <button onClick={onEdit} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-semibold text-xs cursor-pointer">Edit</button>
           )}
           {onConfirm && (
-            <button onClick={onConfirm} disabled={isProcessing} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2">
+            <button onClick={onConfirm} disabled={isProcessing} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>{isProcessing ? 'Transmitting...' : confirmLabel}</span>
             </button>
