@@ -398,32 +398,34 @@ async function startServer() {
     next();
   });
 
-  // Comprehensive request logging — every detail for anomaly detection
+  // Summarised request logging — concise for Render, detailed only on anomalies
+  const LOG_VERBOSE = process.env.LOG_VERBOSE === '1' || process.env.LOG_LEVEL === 'debug';
   app.use((req: any, res, next) => {
     const start = Date.now();
     const reqId = crypto.randomUUID().slice(0, 8);
     req.requestId = reqId;
     const tenantHint = (req.query.tenantId as string) || req.headers['x-tenant-id'] as string || '';
-    // Log inbound
-    logger.info(`→ ${req.method} ${req.originalUrl}`, {
-      ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
-      query: req.query,
-      body: sanitizeBody(req.body),
-      headers: sanitizeHeaders(req.headers as any),
-    }, { tenantId: tenantHint || undefined, requestId: reqId });
-    // Log on finish
+    if (LOG_VERBOSE) {
+      logger.info(`→ ${req.method} ${req.originalUrl}`, {
+        ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+        query: req.query,
+        body: sanitizeBody(req.body),
+      }, { tenantId: tenantHint || undefined, requestId: reqId });
+    }
     res.on('finish', () => {
       const duration = Date.now() - start;
       const status = res.statusCode;
-      const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'INFO';
-      const payload: any = { status, duration, tenantId: (req as any).tenantId || tenantHint || undefined };
-      if (level === 'ERROR') logger.error(`← ${req.method} ${req.originalUrl} ${status} ${duration}ms`, payload, { tenantId: payload.tenantId, requestId: reqId });
-      else if (level === 'WARN') logger.warn(`← ${req.method} ${req.originalUrl} ${status} ${duration}ms`, payload, { tenantId: payload.tenantId, requestId: reqId });
-      else logger.info(`← ${req.method} ${req.originalUrl} ${status} ${duration}ms`, payload, { tenantId: payload.tenantId, requestId: reqId });
+      // Summarised: METHOD path status duration tenant — no headers/body for 2xx/304
+      const summary = `${req.method} ${req.originalUrl} ${status} ${duration}ms`;
+      const ctx: any = { status, duration, tenantId: (req as any).tenantId || tenantHint || undefined };
+      if (status >= 500) logger.error(`← ${summary}`, ctx, { tenantId: ctx.tenantId, requestId: reqId });
+      else if (status >= 400) logger.warn(`← ${summary}`, ctx, { tenantId: ctx.tenantId, requestId: reqId });
+      else if (LOG_VERBOSE || status !== 304) logger.info(`← ${summary}`, status === 304 ? undefined : ctx, { tenantId: ctx.tenantId, requestId: reqId });
       if (status >= 400) {
+        // Detailed anomaly only for errors, with sanitized body/query
         logger.anomaly(`Anomaly ${req.method} ${req.originalUrl} → ${status}`, {
-          status, duration, query: req.query, body: sanitizeBody(req.body), tenantId: payload.tenantId,
-        }, { tenantId: payload.tenantId, requestId: reqId });
+          status, duration, query: req.query, body: sanitizeBody(req.body), tenantId: ctx.tenantId,
+        }, { tenantId: ctx.tenantId, requestId: reqId });
       }
     });
     next();

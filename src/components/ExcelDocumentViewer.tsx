@@ -163,6 +163,22 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     return itemMappings.some(m => m.clientSku === sku);
   };
 
+  // Strict validation — highlight missing editable fields before send
+  const getRowErrors = (row: SpreadsheetRow): string[] => {
+    const errs: string[] = [];
+    if (!row.clientInvoiceNumber || String(row.clientInvoiceNumber).trim().length < 3) errs.push('Invoice # missing/short');
+    if (!row.issueDate || isNaN(Date.parse(row.issueDate))) errs.push('Issue Date invalid');
+    if (!row.customerCode || String(row.customerCode).trim().length < 2) errs.push('Customer Code missing');
+    if (!row.customerName || String(row.customerName).trim().length < 2) errs.push('Customer Name missing');
+    if ((row.invoiceKind==='B2B' || row.invoiceKind==='B2G') && (!row.customerTin || !/^[A-Za-z0-9]{10,14}$/.test(String(row.customerTin).trim()))) errs.push('B2B TIN 10-14 alphanum required');
+    if (!row.itemCode || String(row.itemCode).trim().length < 2) errs.push('SKU missing');
+    if (!row.hsOrServiceCode || row.hsOrServiceCode==='UNMAPPED' || row.hsOrServiceCode==='SERV-DEFAULT') errs.push('HS code missing');
+    if (!row.quantity || Number(row.quantity) <=0) errs.push('Qty >0 required');
+    if (row.unitPrice===undefined || Number(row.unitPrice) <0) errs.push('Price required');
+    if (row.vatRate===undefined || Number(row.vatRate) <0 || Number(row.vatRate) >100) errs.push('VAT 0-100 required');
+    return errs;
+  };
+
   // Quick inline assignment from Master Dictionary
   const assignCustomerFromMaster = (rowId: string, custCode: string) => {
     const cust = customers.find(c => c.clientCustomerCode === custCode);
@@ -514,7 +530,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     setStatusMsg({ text: `Exported EFS Template (Invoices ${invoicesRows.length-1} lines, ${customerMap.size} customers, ${productMap.size} products) — matches EFS Template.xlsx`, type: 'success' });
   };
 
-  // Build preview before gateway send
+  // Build preview before gateway send — strict validation with highlights
   const handleTransmitInvoices = async () => {
     if (rows.length === 0) {
       setStatusMsg({ text: 'Upload an Excel or CSV file before submitting invoices to the gateway.', type: 'error' });
@@ -522,6 +538,11 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     }
     if (!targetTenantId) {
       setStatusMsg({ text: 'Gateway Transmission Failure: no active client tenant is selected.', type: 'error' });
+      return;
+    }
+    const invalidRows = rows.filter(r => getRowErrors(r).length>0);
+    if (invalidRows.length>0) {
+      setStatusMsg({ text: `${invalidRows.length} row(s) have missing/invalid fields (highlighted red below). Fix Invoice #, Customer TIN (10-14 alphanum for B2B), HS code, Qty/Price before Send.`, type: 'error' });
       return;
     }
     const groupedMap = new Map<string, any>();
@@ -660,6 +681,21 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           </div>
         )}
 
+        {/* Strict validation banner — highlights missing editable fields */}
+        {(() => {
+          const invalid = rows.filter(r => getRowErrors(r).length>0);
+          if (invalid.length===0) return null;
+          return (
+            <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs">
+              <div className="font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4 text-amber-600" /> {invalid.length} row(s) have missing/invalid fields — highlighted red below. Fix before Send.</div>
+              <ul className="list-disc list-inside mt-1 space-y-0.5">
+                {invalid.slice(0,3).map(r=> <li key={r.id}><span className="font-mono font-semibold">{r.clientInvoiceNumber}</span> — {getRowErrors(r).join('; ')}</li>)}
+                {invalid.length>3 && <li>…and {invalid.length-3} more</li>}
+              </ul>
+            </div>
+          );
+        })()}
+
         {/* Summary Metrics Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
           <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
@@ -790,7 +826,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         type="text"
                         value={row.clientInvoiceNumber}
                         onChange={(e) => handleCellChange(row.id, 'clientInvoiceNumber', e.target.value)}
-                        className="w-full px-2 py-1 font-semibold text-slate-900 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white uppercase text-xs"
+                        className={`w-full px-2 py-1 font-semibold text-slate-900 rounded border focus:ring-1 focus:outline-none uppercase text-xs ${getRowErrors(row).some(e=>e.includes('Invoice #')) ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 bg-white'}`}
                       />
                     </td>
 

@@ -59,13 +59,40 @@ export function InvoicesTab() {
     if (master?.taxId && master.taxId.length >= 8 && master.taxId !== 'N/A') return master.taxId;
     return inv.customerTin;
   };
+
+  // Strict validation — highlight missing editable fields before send
+  const getInvoiceErrors = (inv: any): string[] => {
+    const errs: string[] = [];
+    if (!inv.clientInvoiceNumber || String(inv.clientInvoiceNumber).trim().length < 3) errs.push('Invoice # missing/short');
+    if (!inv.issueDate || isNaN(Date.parse(inv.issueDate))) errs.push('Issue Date invalid');
+    if (!inv.customerCode || String(inv.customerCode).trim().length < 2) errs.push('Customer Code missing');
+    if (!inv.customerName || String(inv.customerName).trim().length < 2) errs.push('Customer Name missing');
+    const tin = resolveTin(inv);
+    if ((inv.invoiceKind==='B2B' || inv.invoiceKind==='B2G') && (!tin || !/^[A-Za-z0-9]{10,14}$/.test(String(tin).trim()))) errs.push('B2B TIN 10-14 alphanum required');
+    if (!inv.lineItems || inv.lineItems.length===0) errs.push('No line items');
+    else inv.lineItems.forEach((li:any, idx:number)=>{
+      if (!li.itemCode || String(li.itemCode).trim().length<2) errs.push(`Line ${idx+1}: SKU missing`);
+      if (!li.hsOrServiceCode || li.hsOrServiceCode==='UNMAPPED' || li.hsOrServiceCode==='SERV-DEFAULT') errs.push(`Line ${idx+1}: HS code missing`);
+      if (!li.quantity || Number(li.quantity) <=0) errs.push(`Line ${idx+1}: Qty >0 required`);
+      if (li.unitPrice===undefined || Number(li.unitPrice) <0) errs.push(`Line ${idx+1}: Price required`);
+      if (li.vatRate===undefined || Number(li.vatRate) <0 || Number(li.vatRate) >100) errs.push(`Line ${idx+1}: VAT 0-100 required`);
+    });
+    return errs;
+  };
   const handleBulkSend = async () => {
     if (pendingBulk.length === 0) { setBulkMsg({type:'error', text:'No invoices to send — all are already APPROVED/SIGNED.'}); return; }
-    if (!confirm(`Bulk send ${pendingBulk.length} invoice(s) to CittaEFS gateway? This uses POST /api/integration/gen/invoices/bulk (single bulk request).`)) return;
+    const invalidBulk = pendingBulk.filter(inv => getInvoiceErrors(inv).length>0);
+    if (invalidBulk.length>0) {
+      setBulkMsg({type:'error', text:`${invalidBulk.length} of ${pendingBulk.length} have missing fields (highlighted red). Fix TIN/HS code/Qty first — only valid will be sent. ${invalidBulk.slice(0,2).map((i:any)=>`${i.clientInvoiceNumber}: ${getInvoiceErrors(i).join('; ')}`).join(' | ')}`});
+      // continue with only valid
+    }
+    const toSend = pendingBulk.filter(inv => getInvoiceErrors(inv).length===0);
+    if (toSend.length===0) return;
+    if (!confirm(`Bulk send ${toSend.length} valid invoice(s) to CittaEFS gateway? This uses POST /api/integration/gen/invoices/bulk (single bulk request).`)) return;
     setIsBulkSending(true);
     setBulkMsg(null);
     try {
-      const payloads = pendingBulk.map(inv => ({
+      const payloads = toSend.map(inv => ({
         clientInvoiceNumber: inv.clientInvoiceNumber,
         invoiceKind: inv.invoiceKind || 'B2B',
         invoiceType: inv.invoiceType || 'STANDARD',
@@ -169,6 +196,20 @@ export function InvoicesTab() {
           </div>
         )}
 
+        {(() => {
+          const invalid = filteredInvoices.filter(inv => getInvoiceErrors(inv).length >0);
+          if (invalid.length===0) return null;
+          return (
+            <div className="mx-5 mt-3 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs">
+              <div className="font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4 text-amber-600" /> {invalid.length} invoice(s) have missing/invalid editable fields — highlighted in red below. Fix Customer TIN (10-14 alphanum), HS code, Qty/Price before Send.</div>
+              <ul className="list-disc list-inside mt-1 space-y-0.5">
+                {invalid.slice(0,3).map((inv:any)=><li key={inv.id}><span className="font-mono font-semibold">{inv.clientInvoiceNumber}</span> — {getInvoiceErrors(inv).join('; ')}</li>)}
+                {invalid.length>3 && <li>…and {invalid.length-3} more</li>}
+              </ul>
+            </div>
+          );
+        })()}
+
         {filteredInvoices.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-sans">
             <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
@@ -194,9 +235,11 @@ export function InvoicesTab() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredInvoices.map((inv) => {
                   const isExpanded = expandedInvoiceId === inv.id;
+                  const errs = getInvoiceErrors(inv);
+                  const hasErr = errs.length>0;
 
                   return (
-                    <tr key={inv.id} className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-indigo-50/30' : ''}`}>
+                    <tr key={inv.id} className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-indigo-50/30' : ''} ${hasErr ? 'bg-rose-50/40 ring-1 ring-rose-200' : ''}`}>
                       <td className="py-3 px-3">
                         <button
                           onClick={() => setExpandedInvoiceId(isExpanded ? null : inv.id)}
@@ -288,12 +331,10 @@ export function InvoicesTab() {
                         ) : (
                           <button
                             onClick={async () => {
+                              const errs = getInvoiceErrors(inv);
+                              if (errs.length>0) { setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted red fields first.`}); return; }
                               try {
                                 const tin = resolveTin(inv);
-                                if ((inv.invoiceKind==='B2B' || inv.invoiceKind==='B2G') && (!tin || tin.length < 8)) {
-                                  setBulkMsg({type:'error', text:`B2B requires TIN for ${inv.customerCode}. Fix customer master TIN (10-14 alphanum) then try again.`});
-                                  return;
-                                }
                                 await transmitInvoice({
                                   clientInvoiceNumber: inv.clientInvoiceNumber,
                                   invoiceKind: inv.invoiceKind,
@@ -307,7 +348,7 @@ export function InvoicesTab() {
                                 setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`});
                               } catch (e:any) {
                                 const msg = e.message || 'Send failed';
-                                if (msg.includes('Duplicate')) setBulkMsg({type:'error', text:`${msg} — use a new Invoice Number or delete the CANCELLED invoice from Invoices tab, or change filter to exclude CANCELLED.`});
+                                if (msg.includes('Duplicate')) setBulkMsg({type:'error', text:`${msg} — use a new Invoice Number or delete the CANCELLED invoice.`});
                                 else if (msg.includes('customerTin') || msg.includes('TIN')) setBulkMsg({type:'error', text:`${msg} — open Customers tab, set ${inv.customerCode} TIN to 10-14 alphanum (e.g. P051123456Z), postcode, then retry.`});
                                 else setBulkMsg({type:'error', text: msg});
                               }
@@ -375,7 +416,7 @@ export function InvoicesTab() {
                 {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-xl"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setExpandedInvoiceId(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Close</button>
-                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='REJECTED' || inv.status==='CANCELLED') && <button onClick={async () => { try { const tin = resolveTin(inv); if ((inv.invoiceKind==='B2B'||inv.invoiceKind==='B2G') && (!tin || tin.length<8)) { setBulkMsg({type:'error', text:`B2B requires TIN for ${inv.customerCode}. Fix Customers TIN then retry.`}); return; } await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } }} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> Send to CittaEFS</button>}
+                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='REJECTED' || inv.status==='CANCELLED') && <button onClick={async () => { const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); return; } try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } }} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> Send to CittaEFS</button>}
                   {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
                 </div>
               </div>

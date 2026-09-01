@@ -32,6 +32,23 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [responseResult, setResponseResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [triedSubmit, setTriedSubmit] = useState(false);
+  const isB2BKind = kind === 'B2B' || kind === 'B2G';
+  const getFieldErr = (field: string): string | null => {
+    if (field==='invNum' && (!invNum.trim() || invNum.trim().length < 3)) return 'Invoice # required (≥3 chars)';
+    if (field==='custName' && !custName.trim()) return 'Customer Name required';
+    if (field==='custTin' && isB2BKind && (!custTin.trim() || !/^[A-Za-z0-9]{10,14}$/.test(custTin.trim()))) return 'TIN 10-14 alphanum required for B2B/B2G';
+    if (field==='lineItems' && lineItems.length===0) return 'At least one line required';
+    return null;
+  };
+  const getLineErr = (idx:number, field:string): string | null => {
+    const it = lineItems[idx]; if (!it) return null;
+    if (field==='itemCode' && (!it.itemCode || String(it.itemCode).trim().length<2)) return 'SKU required';
+    if (field==='hs' && (!it.hsOrServiceCode || it.hsOrServiceCode==='UNMAPPED' || it.hsOrServiceCode==='SERV-DEFAULT')) return 'HS code required';
+    if (field==='qty' && (!it.quantity || Number(it.quantity) <=0)) return 'Qty >0';
+    if (field==='price' && (it.unitPrice===undefined || Number(it.unitPrice) <0)) return 'Price required';
+    return null;
+  };
 
   if (!isOpen) return null;
 
@@ -72,13 +89,20 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    // Validate required fields before preview
-    if (!custName.trim()) {
-      setResponseResult({ success: false, message: 'Customer Name is required.' });
-      return;
-    }
-    if (lineItems.length === 0) {
-      setResponseResult({ success: false, message: 'At least one line item is required.' });
+    setTriedSubmit(true);
+    const errs: string[] = [];
+    const f1 = getFieldErr('invNum'); if (f1) errs.push(f1);
+    const f2 = getFieldErr('custName'); if (f2) errs.push(f2);
+    const f3 = getFieldErr('custTin'); if (f3) errs.push(f3);
+    const f4 = getFieldErr('lineItems'); if (f4) errs.push(f4);
+    lineItems.forEach((_, idx) => {
+      const e1 = getLineErr(idx, 'itemCode'); if (e1) errs.push(`Line ${idx+1}: ${e1}`);
+      const e2 = getLineErr(idx, 'hs'); if (e2) errs.push(`Line ${idx+1}: ${e2}`);
+      const e3 = getLineErr(idx, 'qty'); if (e3) errs.push(`Line ${idx+1}: ${e3}`);
+      const e4 = getLineErr(idx, 'price'); if (e4) errs.push(`Line ${idx+1}: ${e4}`);
+    });
+    if (errs.length>0) {
+      setResponseResult({ success: false, message: `Fix highlighted fields: ${errs.slice(0,4).join(' | ')}${errs.length>4 ? ` +${errs.length-4} more` : ''}` });
       return;
     }
     setResponseResult(null);
@@ -131,9 +155,10 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                 type="text"
                 value={invNum}
                 onChange={(e) => setInvNum(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
+                className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${triedSubmit && getFieldErr('invNum') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
                 required
               />
+              {triedSubmit && getFieldErr('invNum') && <span className="text-[11px] text-rose-600 font-medium">{getFieldErr('invNum')}</span>}
             </div>
 
             <div>
@@ -170,9 +195,10 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                 type="text"
                 value={custName}
                 onChange={(e) => setCustName(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                className={`w-full px-3.5 py-2 border rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all ${triedSubmit && getFieldErr('custName') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
                 required
               />
+              {triedSubmit && getFieldErr('custName') && <span className="text-[11px] text-rose-600 font-medium">{getFieldErr('custName')}</span>}
             </div>
 
             {(kind === 'B2B' || kind === 'B2G') && (
@@ -183,9 +209,10 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                   value={custTin}
                   onChange={(e) => setCustTin(e.target.value)}
                   placeholder="e.g. P019283746Z"
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
+                  className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${triedSubmit && getFieldErr('custTin') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
                   required
                 />
+                {triedSubmit && getFieldErr('custTin') && <span className="text-[11px] text-rose-600 font-medium">{getFieldErr('custTin')}</span>}
               </div>
             )}
           </div>
