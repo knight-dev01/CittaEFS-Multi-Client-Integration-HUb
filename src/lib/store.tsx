@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, createContext, useContext, ReactNode } from 'react';
 import { fetchWithAuth, parseJsonResponse, safeFetchJson, getApiBaseUrl } from './api';
+import { toastGlobal } from '../components/ui/Toast';
 import { 
   Tenant, 
   TenantErp,
@@ -373,9 +374,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', `Invoice ${payload.clientInvoiceNumber || payload.documentNumber || ''} queued`, 'Sent to CittaEFS gateway for NRS stamping');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Transmission error:', e);
+        toastGlobal('error', 'Failed to send invoice', e.message || String(e));
         throw e;
       }
     });
@@ -391,9 +394,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Invoice cancelled', 'Revocation sent to NRS portal');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Cancel error:', e);
+        toastGlobal('error', 'Cancel failed', e.message || String(e));
         throw e;
       }
     });
@@ -409,9 +414,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Validation error resolved');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Resolve error:', e);
+        toastGlobal('error', 'Resolve failed', e.message || String(e));
         throw e;
       }
     });
@@ -423,9 +430,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         const res = await fetchWithAuth('/api/cron/reconcile', { method: 'POST' });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Reconciliation complete', `${data?.reconciled ?? ''} records checked`);
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Reconciliation error:', e);
+        toastGlobal('error', 'Reconciliation failed', e.message || String(e));
         throw e;
       }
     });
@@ -441,9 +450,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Items auto-mapped', `${data?.mapped ?? data?.count ?? ''} items mapped`);
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Auto map error:', e);
+        toastGlobal('error', 'Auto-map failed', e.message || String(e));
         throw e;
       }
     });
@@ -460,9 +471,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Customer saved', (cust as any).companyName || (cust as any).clientSystemCustId || '');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Add customer error:', e);
+        toastGlobal('error', 'Failed to save customer', e.message || String(e));
         throw e;
       }
     });
@@ -479,9 +492,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Item mapping saved', (mapping as any).clientSku || (mapping as any).name || '');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Add item mapping error:', e);
+        toastGlobal('error', 'Failed to save item mapping', e.message || String(e));
         throw e;
       }
     });
@@ -498,9 +513,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', `Bulk queued ${data?.successCount ?? payloads.length} invoice(s)`, data?.message || 'Sent to CittaEFS gateway');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Bulk transmit error:', e);
+        toastGlobal('error', 'Bulk send failed', e.message || String(e));
         throw e;
       }
     });
@@ -532,9 +549,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         if (data && data.id) {
           setActiveTenantId(data.id);
         }
+        toastGlobal('success', 'Workspace created', (data as any)?.companyName || (data as any)?.name || 'Tenant onboarded');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Onboard tenant error:', e);
+        toastGlobal('error', 'Failed to create workspace', e.message || String(e));
         throw e;
       }
     });
@@ -550,9 +569,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data: Tenant = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Workspace updated');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Update tenant error:', e);
+        toastGlobal('error', 'Update failed', e.message || String(e));
         throw e;
       }
     });
@@ -582,9 +603,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
           try { localStorage.removeItem('citta_active_tenant_id'); } catch {}
         }
         await refreshAll();
+        toastGlobal('success', 'Workspace deleted');
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Delete tenant error:', e);
+        toastGlobal('error', 'Delete failed', e.message || String(e));
         throw e;
       }
     });
@@ -592,59 +615,89 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
   const addTenantErp = async (tenantId: string, platformType: string, displayName?: string, config?: any) => {
     return withLoading(async () => {
-      const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platformType, displayName, config }),
-      });
-      const data = await parseJsonResponse(res);
-      await refreshAll();
-      return data;
+      try {
+        const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platformType, displayName, config }),
+        });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', 'ERP connector added', platformType);
+        return data;
+      } catch (e: any) {
+        toastGlobal('error', 'Failed to add ERP', e.message || String(e));
+        throw e;
+      }
     });
   };
   const updateTenantErp = async (tenantId: string, erpId: string, data: any) => {
     return withLoading(async () => {
-      const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps/${erpId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const parsed = await parseJsonResponse(res);
-      await refreshAll();
-      return parsed;
+      try {
+        const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps/${erpId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const parsed = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', 'ERP connector updated');
+        return parsed;
+      } catch (e: any) {
+        toastGlobal('error', 'ERP update failed', e.message || String(e));
+        throw e;
+      }
     });
   };
   const removeTenantErp = async (tenantId: string, erpId: string) => {
     return withLoading(async () => {
-      const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps/${erpId}`, { method: 'DELETE' });
-      const data = await parseJsonResponse(res);
-      await refreshAll();
-      return data;
+      try {
+        const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps/${erpId}`, { method: 'DELETE' });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', 'ERP connector removed');
+        return data;
+      } catch (e: any) {
+        toastGlobal('error', 'Failed to remove ERP', e.message || String(e));
+        throw e;
+      }
     });
   };
   const createTenantUser = async (userData: { email: string; password: string; name: string; role?: string; organization?: string; tenantId: string }) => {
     return withLoading(async () => {
-      const res = await fetchWithAuth('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData),
-      });
-      const data = await parseJsonResponse(res);
-      await refreshAll();
-      return data;
+      try {
+        const res = await fetchWithAuth('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userData),
+        });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', 'User created', `${userData.name} (${userData.email})`);
+        return data;
+      } catch (e: any) {
+        toastGlobal('error', 'Failed to create user', e.message || String(e));
+        throw e;
+      }
     });
   };
 
   const updateInvoice = async (invoiceId: string, data: any) => {
     return withLoading(async () => {
-      const res = await fetchWithAuth(`/api/invoices/${invoiceId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const parsed = await parseJsonResponse(res);
-      await refreshAll();
-      return parsed;
+      try {
+        const res = await fetchWithAuth(`/api/invoices/${invoiceId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const parsed = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', 'Invoice updated', data?.clientInvoiceNumber || invoiceId);
+        return parsed;
+      } catch (e: any) {
+        toastGlobal('error', 'Invoice update failed', e.message || String(e));
+        throw e;
+      }
     });
   };
 
@@ -654,9 +707,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         const res = await fetchWithAuth('/api/system/purge-demo-data', { method: 'POST' });
         const data = await parseJsonResponse(res);
         await refreshAll();
+        toastGlobal('success', 'Demo data purged', `${data?.deletedInvoices ?? ''} invoices cleared`);
         return data;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Purge test data error:', e);
+        toastGlobal('error', 'Purge failed', e.message || String(e));
         throw e;
       }
     });

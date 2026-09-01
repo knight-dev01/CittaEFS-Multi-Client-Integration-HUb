@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { useHub } from '../lib/store';
+import { toastGlobal } from './ui/Toast';
 import {
   Plug,
   AlertTriangle,
@@ -78,19 +79,19 @@ export function ConnectorsTab() {
       const data = await parseJsonResponse(res);
       setSyncingQbo(false);
       if (data.success) {
-        alert(`✅ QuickBooks Historical Sync Complete!\n\n• Total Invoices Found: ${data.totalFound}\n• New Invoices Synced: ${data.newSynced}\n• Already Synced (Idempotent): ${data.alreadySynced}`);
+        toastGlobal('success', 'QuickBooks sync complete', `Found ${data.totalFound} · New ${data.newSynced} · Already synced ${data.alreadySynced}`);
       } else {
-        alert(`❌ Sync Failed: ${data.error || 'Unknown error'}`);
+        toastGlobal('error', 'Sync failed', data.error || 'Unknown error');
       }
       await loadStatus();
     } catch (err: any) {
       setSyncingQbo(false);
       const isReauth = err.message?.toLowerCase().includes('reauthorization');
-      if (isReauth && confirm(`⚠️ QuickBooks Connection Needs Reauthorization!\n\n${err.message}\n\nReconnect QuickBooks Online now?`)) {
+      if (isReauth && confirm(`QuickBooks needs reauthorization:\n${err.message}\n\nReconnect now?`)) {
         window.location.href = `/api/integrations/qbo/connect?tenantId=${activeTenant.id}`;
         return;
       }
-      alert(`❌ Sync Error: ${err.message}`);
+      toastGlobal('error', 'Sync error', err.message);
       await loadStatus();
     }
   };
@@ -106,19 +107,19 @@ export function ConnectorsTab() {
       const data = await parseJsonResponse(res);
       setTestingQbo(false);
       if (data.success) {
-        alert(`✅ LIVE QUICKBOOKS API TEST PASSED!\n\nCompany: ${data.companyInfo?.CompanyName}\nCountry: ${data.companyInfo?.Country}\nLatency: ${data.latencyMs} ms`);
+        toastGlobal('success', 'Live QuickBooks test passed', `Company: ${data.companyInfo?.CompanyName} · ${data.companyInfo?.Country} · ${data.latencyMs}ms`);
       } else {
-        alert(`❌ Connection Test Failed: ${data.error || 'Unknown error'}`);
+        toastGlobal('error', 'Connection test failed', data.error || 'Unknown error');
       }
       await loadStatus();
     } catch (err: any) {
       setTestingQbo(false);
-      alert(`❌ API Error testing connector: ${err.message}`);
+      toastGlobal('error', 'API error testing connector', err.message);
     }
   };
 
   const handleAddConnector = (newConn: Connector) => {
-    alert(`${newConn.platform} adapter registration noted. Only QuickBooks Online and Excel/CSV are wired to live functionality in this release — other adapters remain frozen for a future release.`);
+    toastGlobal('info', `${newConn.platform} noted`, 'Only QuickBooks Online and Excel/CSV are live in this release — other adapters are coming soon.');
   };
 
   return (

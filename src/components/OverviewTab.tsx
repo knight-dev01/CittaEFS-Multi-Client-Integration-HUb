@@ -23,18 +23,16 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
 
   const handlePurge = async () => {
     if (!canPurge) return;
-    if (window.confirm('Purge test invoices, validation errors and audit logs?')) {
-      await purgeDemoData();
-      alert('Staging data purged.');
-    }
+    if (!window.confirm('Purge test invoices, validation errors and audit logs? This cannot be undone.')) return;
+    try { await purgeDemoData(); } catch {}
   };
 
   const handleDeleteTenant = async (tenant: any) => {
     if (!canDeleteTenant) return;
     if (!window.confirm(`Delete workspace "${tenant.name}" (${tenant.id})? Cascades all data.`)) return;
     const typed = window.prompt(`Type DELETE to confirm removal of "${tenant.name}":`, "");
-    if (typed !== 'DELETE') { if (typed !== null) alert('Cancelled.'); return; }
-    try { await deleteTenant(tenant.id); } catch (e: any) { alert(e.message || 'Failed'); }
+    if (typed !== 'DELETE') return;
+    try { await deleteTenant(tenant.id); } catch {}
   };
 
   const totalInvoices = invoices.length;

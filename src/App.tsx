@@ -6,6 +6,7 @@ import { ErpWorkspace } from './components/erp/ErpWorkspace';
 import { NewInvoiceModal } from './components/NewInvoiceModal';
 import { OnboardClientModal } from './components/OnboardClientModal';
 import { Layers } from 'lucide-react';
+import { ToastProvider, useToast, setGlobalToast } from './components/ui/Toast';
 
 function LoadingScreen() {
   return (
@@ -186,10 +187,20 @@ function HubMainContent() {
   );
 }
 
+function ToastBridge({ children }: { children: React.ReactNode }) {
+  const t = useToast();
+  useEffect(() => { setGlobalToast(t); }, [t]);
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
-    <HubProvider>
-      <HubMainContent />
-    </HubProvider>
+    <ToastProvider>
+      <ToastBridge>
+        <HubProvider>
+          <HubMainContent />
+        </HubProvider>
+      </ToastBridge>
+    </ToastProvider>
   );
 }
