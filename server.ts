@@ -1472,6 +1472,59 @@ async function startServer() {
     }
   });
 
+  app.put("/api/invoices/:id", async (req: any, res) => {
+    try {
+      const role = req.user?.role;
+      if (req.user && !["ADMIN","OPERATOR","INTEGRATION_MANAGER"].includes(role)) return res.status(403).json({ success: false, error: "Forbidden" });
+      const { id } = req.params;
+      const existing = await prisma.invoice.findUnique({ where: { id }, include: { lineItems: true } });
+      if (!existing) return res.status(404).json({ success: false, error: "Invoice not found" });
+      if (["APPROVED","SIGNED"].includes(existing.status)) return res.status(400).json({ success: false, error: "Approved invoices cannot be edited" });
+      const { clientInvoiceNumber, issueDate, customerCode, customerName, customerTin, invoiceKind, invoiceType, lineItems } = req.body;
+      // Validate duplicate if changing number
+      if (clientInvoiceNumber && clientInvoiceNumber !== existing.clientInvoiceId) {
+        const dup = await prisma.invoice.findFirst({ where: { tenantId: existing.tenantId, clientInvoiceId: clientInvoiceNumber } });
+        if (dup) return res.status(409).json({ success: false, error: `Duplicate invoice number ${clientInvoiceNumber}` });
+      }
+      // If lineItems provided, recompute totals
+      let data: any = {};
+      if (clientInvoiceNumber) data.clientInvoiceId = clientInvoiceNumber;
+      if (issueDate) data.issueDate = new Date(issueDate);
+      if (customerCode) data.customerCode = customerCode;
+      if (customerName) data.customerName = customerName;
+      if (customerTin !== undefined) data.customerTin = customerTin || null;
+      if (invoiceKind) data.invoiceKind = invoiceKind;
+      if (invoiceType) data.invoiceType = invoiceType;
+      if (lineItems && Array.isArray(lineItems) && lineItems.length>0) {
+        // Recompute totals from new line items
+        const tenant = await prisma.tenant.findUnique({ where: { id: existing.tenantId } });
+        const tenantItems = await prisma.item.findMany({ where: { tenantId: existing.tenantId } });
+        const processed = lineItems.map((li:any) => {
+          const mapping = tenantItems.find(m=>m.clientSku===li.itemCode);
+          const hs = li.hsOrServiceCode || mapping?.hsOrServiceCode || "UNMAPPED";
+          const qty = Number(li.quantity||1);
+          const price = Number(li.unitPrice||0);
+          const vatRate = li.vatRate!==undefined ? Number(li.vatRate) : Number(mapping?.defaultVatRate ?? tenant?.defaultVatRate ?? 7.5);
+          const taxable = qty*price;
+          const vatAmount = taxable*vatRate/100;
+          return { itemCode: li.itemCode || "SKU-GENERIC", description: li.description||"Item", quantity: qty, unitPrice: price, taxableAmount: taxable, vatRate, vatAmount, totalAmount: taxable+vatAmount, hsOrServiceCode: hs };
+        });
+        const subtotal = processed.reduce((a:any,b:any)=>a+b.taxableAmount,0);
+        const taxAmount = processed.reduce((a:any,b:any)=>a+b.vatAmount,0);
+        const totalAmount = subtotal+taxAmount;
+        data.subtotal = subtotal;
+        data.taxAmount = taxAmount;
+        data.totalAmount = totalAmount;
+        // Replace line items
+        await prisma.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
+        data.lineItems = { create: processed };
+      }
+      const updated = await prisma.invoice.update({ where: { id }, data, include: { lineItems: true } });
+      await safeAuditLogCreate(prisma, { tenantId: existing.tenantId, action: "INVOICE_EDITED", entityType: "INVOICE", entityRef: updated.clientInvoiceId, details: `Invoice ${updated.clientInvoiceId} edited via overlay`, sha256PayloadHash: generateSha256(JSON.stringify(updated)), performedBy: req.user?.email || "Editor", rawJson: updated });
+      res.json(formatInvoice(updated));
+    } catch (e:any) { res.status(500).json({ error: e.message }); }
+  });
+
   app.post("/api/integration/gen/invoices", async (req, res) => {
     try {
       const {

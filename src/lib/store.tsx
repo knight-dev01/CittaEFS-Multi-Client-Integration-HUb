@@ -48,6 +48,8 @@ interface HubContextType {
   addTenantErp: (tenantId: string, platformType: string, displayName?: string, config?: any) => Promise<any>;
   updateTenantErp: (tenantId: string, erpId: string, data: any) => Promise<any>;
   removeTenantErp: (tenantId: string, erpId: string) => Promise<any>;
+  createTenantUser: (userData: { email: string; password: string; name: string; role?: string; organization?: string; tenantId: string }) => Promise<any>;
+  updateInvoice: (invoiceId: string, data: any) => Promise<any>;
   purgeDemoData: () => Promise<any>;
 }
 
@@ -633,6 +635,19 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const updateInvoice = async (invoiceId: string, data: any) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth(`/api/invoices/${invoiceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const parsed = await parseJsonResponse(res);
+      await refreshAll();
+      return parsed;
+    });
+  };
+
   const purgeDemoData = async () => {
     return withLoading(async () => {
       try {
@@ -683,6 +698,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         updateTenantErp,
         removeTenantErp,
         createTenantUser,
+        updateInvoice,
         purgeDemoData
       }}
     >

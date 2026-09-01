@@ -11,12 +11,14 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
-  Send
+  Send,
+  Pencil,
+  Save
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
 
 export function InvoicesTab() {
-  const { invoices, activeTenant, customers, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices } = useHub() as any;
+  const { invoices, activeTenant, customers, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices, updateInvoice, refreshAll } = useHub() as any;
 
   // Both Admin and Operator have access here.
 
@@ -27,6 +29,8 @@ export function InvoicesTab() {
 
   // Modals — keep only QR (per-row overlay is expandedInvoiceId)
   const [qrModalInvoice, setQrModalInvoice] = useState<Invoice | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
   const tenantInvoices = invoices.filter(inv => inv.tenantId === activeTenant.id);
 
@@ -326,38 +330,49 @@ export function InvoicesTab() {
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        {(inv.status === 'APPROVED' || inv.status === 'SIGNED') ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
-                        ) : (
-                          <button
-                            onClick={async () => {
-                              const errs = getInvoiceErrors(inv);
-                              if (errs.length>0) { setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted red fields first.`}); return; }
-                              try {
-                                const tin = resolveTin(inv);
-                                await transmitInvoice({
-                                  clientInvoiceNumber: inv.clientInvoiceNumber,
-                                  invoiceKind: inv.invoiceKind,
-                                  invoiceType: inv.invoiceType,
-                                  issueDate: inv.issueDate,
-                                  customerCode: inv.customerCode,
-                                  customerName: inv.customerName,
-                                  customerTin: tin,
-                                  lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))
-                                });
-                                setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`});
-                              } catch (e:any) {
-                                const msg = e.message || 'Send failed';
-                                if (msg.includes('Duplicate')) setBulkMsg({type:'error', text:`${msg} — use a new Invoice Number or delete the CANCELLED invoice.`});
-                                else if (msg.includes('customerTin') || msg.includes('TIN')) setBulkMsg({type:'error', text:`${msg} — open Customers tab, set ${inv.customerCode} TIN to 10-14 alphanum (e.g. P051123456Z), postcode, then retry.`});
-                                else setBulkMsg({type:'error', text: msg});
-                              }
-                            }}
-                            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Send className="w-3.5 h-3.5" /> Send to CittaEFS
-                          </button>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5">
+                          {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && (
+                            <button
+                              onClick={() => setEditingInvoice(JSON.parse(JSON.stringify(inv)))}
+                              className="p-1.5 bg-white hover:bg-violet-50 text-slate-500 hover:text-violet-600 border border-slate-200 hover:border-violet-200 rounded-lg cursor-pointer"
+                              title="Edit invoice"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {(inv.status === 'APPROVED' || inv.status === 'SIGNED') ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                const errs = getInvoiceErrors(inv);
+                                if (errs.length>0) { setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted red fields first (use Edit).`}); return; }
+                                try {
+                                  const tin = resolveTin(inv);
+                                  await transmitInvoice({
+                                    clientInvoiceNumber: inv.clientInvoiceNumber,
+                                    invoiceKind: inv.invoiceKind,
+                                    invoiceType: inv.invoiceType,
+                                    issueDate: inv.issueDate,
+                                    customerCode: inv.customerCode,
+                                    customerName: inv.customerName,
+                                    customerTin: tin,
+                                    lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))
+                                  });
+                                  setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`});
+                                } catch (e:any) {
+                                  const msg = e.message || 'Send failed';
+                                  if (msg.includes('Duplicate')) setBulkMsg({type:'error', text:`${msg} — use Edit to change Invoice Number or delete the CANCELLED invoice.`});
+                                  else if (msg.includes('customerTin') || msg.includes('TIN')) setBulkMsg({type:'error', text:`${msg} — open Customers tab or Edit to set ${inv.customerCode} TIN to 10-14 alphanum (e.g. P051123456Z), postcode, then retry.`});
+                                  else setBulkMsg({type:'error', text: msg});
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Send className="w-3.5 h-3.5" /> Send
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -424,6 +439,93 @@ export function InvoicesTab() {
           </div>
         );
       })()}
+
+      {/* Edit Invoice Overlay */}
+      {editingInvoice && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditingInvoice(null)}>
+          <div className="bg-white w-full max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-violet-50">
+              <h4 className="text-sm font-bold text-violet-900 flex items-center gap-2"><Pencil className="w-4 h-4 text-violet-600" /> Edit Invoice {editingInvoice.clientInvoiceNumber}</h4>
+              <button onClick={() => setEditingInvoice(null)} className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-slate-700 border border-transparent hover:border-slate-200 cursor-pointer"><XCircle className="w-4 h-4" /></button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Invoice # *</label>
+                  <input value={editingInvoice.clientInvoiceNumber} onChange={e=>setEditingInvoice({...editingInvoice, clientInvoiceNumber: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Issue Date *</label>
+                  <input type="date" value={editingInvoice.issueDate ? new Date(editingInvoice.issueDate).toISOString().slice(0,10) : ''} onChange={e=>setEditingInvoice({...editingInvoice, issueDate: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Name *</label>
+                  <input value={editingInvoice.customerName} onChange={e=>setEditingInvoice({...editingInvoice, customerName: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer TIN {editingInvoice.invoiceKind==='B2B' || editingInvoice.invoiceKind==='B2G' ? '*' : '(B2C optional)'}</label>
+                  <input value={editingInvoice.customerTin || ''} onChange={e=>setEditingInvoice({...editingInvoice, customerTin: e.target.value})} placeholder="P051123456Z" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Code</label>
+                  <input value={editingInvoice.customerCode} onChange={e=>setEditingInvoice({...editingInvoice, customerCode: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                </div>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-600">Line Items ({editingInvoice.lineItems?.length || 0}) — Qty/Price/HS editable</span>
+                <div className="mt-2 space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-xl p-2 bg-slate-50/50">
+                  {(editingInvoice.lineItems || []).map((li:any, idx:number)=>(
+                    <div key={idx} className="grid grid-cols-12 gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                      <div className="col-span-3">
+                        <input value={li.itemCode} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].itemCode=e.target.value; setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="SKU" className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono" />
+                      </div>
+                      <div className="col-span-4">
+                        <input value={li.description} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].description=e.target.value; setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Description" className="w-full px-2 py-1 border border-slate-200 rounded text-xs" />
+                      </div>
+                      <div className="col-span-2">
+                        <input type="number" value={li.quantity} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].quantity=Number(e.target.value); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Qty" className="w-full px-2 py-1 border border-slate-200 rounded text-xs text-right" />
+                      </div>
+                      <div className="col-span-2">
+                        <input type="number" value={li.unitPrice} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].unitPrice=Number(e.target.value); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Price" className="w-full px-2 py-1 border border-slate-200 rounded text-xs text-right" />
+                      </div>
+                      <div className="col-span-1">
+                        <input value={li.hsOrServiceCode} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].hsOrServiceCode=e.target.value; setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="HS" className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={()=>setEditingInvoice(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Cancel</button>
+                <button
+                  onClick={async ()=>{
+                    const errs = getInvoiceErrors(editingInvoice);
+                    if (errs.length>0) { setBulkMsg({type:'error', text: `Fix highlighted: ${errs.join('; ')}`}); return; }
+                    setEditSaving(true);
+                    try {
+                      await updateInvoice(editingInvoice.id, {
+                        clientInvoiceNumber: editingInvoice.clientInvoiceNumber,
+                        issueDate: editingInvoice.issueDate,
+                        customerCode: editingInvoice.customerCode,
+                        customerName: editingInvoice.customerName,
+                        customerTin: editingInvoice.customerTin,
+                        lineItems: editingInvoice.lineItems,
+                      });
+                      setBulkMsg({type:'success', text:`Invoice ${editingInvoice.clientInvoiceNumber} updated.`});
+                      setEditingInvoice(null);
+                    } catch(e:any){ setBulkMsg({type:'error', text: e.message}); }
+                    finally { setEditSaving(false); }
+                  }}
+                  disabled={editSaving}
+                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" /> {editSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QR Code Official Verification Modal */}
       {qrModalInvoice && (
