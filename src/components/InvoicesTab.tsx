@@ -65,22 +65,31 @@ export function InvoicesTab() {
     return inv.customerTin;
   };
 
-  // Strict validation — highlight missing editable fields before send
+  // Strict validation — clear, actionable messages (user-fixable)
   const getInvoiceErrors = (inv: any): string[] => {
     const errs: string[] = [];
-    if (!inv.clientInvoiceNumber || String(inv.clientInvoiceNumber).trim().length < 3) errs.push('Invoice # missing/short');
-    if (!inv.issueDate || isNaN(Date.parse(inv.issueDate))) errs.push('Issue Date invalid');
-    if (!inv.customerCode || String(inv.customerCode).trim().length < 2) errs.push('Customer Code missing');
-    if (!inv.customerName || String(inv.customerName).trim().length < 2) errs.push('Customer Name missing');
+    const num = String(inv.clientInvoiceNumber || '').trim();
+    if (!num) errs.push('Invoice Number is required — enter at least 3 characters (e.g. INV-001)');
+    else if (num.length < 3) errs.push(`Invoice Number "${num}" is too short — use at least 3 characters (e.g. INV-001)`);
+    if (!inv.issueDate || isNaN(Date.parse(inv.issueDate))) errs.push('Issue Date is missing or invalid — pick a valid calendar date');
+    if (!inv.customerCode || String(inv.customerCode).trim().length < 2) errs.push('Customer Code is required — enter at least 2 characters (e.g. CUST-001). Check Customers tab');
+    if (!inv.customerName || String(inv.customerName).trim().length < 2) errs.push('Customer Name is required — enter at least 2 characters');
     const tin = resolveTin(inv);
-    if ((inv.invoiceKind==='B2B' || inv.invoiceKind==='B2G') && (!tin || !/^[A-Za-z0-9]{10,14}$/.test(String(tin).trim()))) errs.push('B2B TIN 10-14 alphanum required');
-    if (!inv.lineItems || inv.lineItems.length===0) errs.push('No line items');
+    const isB2B = inv.invoiceKind==='B2B' || inv.invoiceKind==='B2G';
+    if (isB2B) {
+      if (!tin || String(tin).trim()==='' || String(tin).trim()==='N/A') errs.push('Customer TIN is required for B2B/B2G — enter 8-14 alphanumeric chars (e.g. 12345678-0001). Edit TIN in this overlay or in Customers tab');
+      else if (!/^[A-Za-z0-9-]{8,14}$/.test(String(tin).trim())) errs.push(`Customer TIN "${String(tin).trim()}" is invalid — use 8-14 letters/numbers/hyphens (e.g. 12345678-0001)`);
+    }
+    if (!inv.lineItems || inv.lineItems.length===0) errs.push('At least one line item is required — add an item row');
     else inv.lineItems.forEach((li:any, idx:number)=>{
-      if (!li.itemCode || String(li.itemCode).trim().length<2) errs.push(`Line ${idx+1}: SKU missing`);
-      if (!li.hsOrServiceCode || li.hsOrServiceCode==='UNMAPPED' || li.hsOrServiceCode==='SERV-DEFAULT') errs.push(`Line ${idx+1}: HS code missing`);
-      if (!li.quantity || Number(li.quantity) <=0) errs.push(`Line ${idx+1}: Qty >0 required`);
-      if (li.unitPrice===undefined || Number(li.unitPrice) <0) errs.push(`Line ${idx+1}: Price required`);
-      if (li.vatRate===undefined || Number(li.vatRate) <0 || Number(li.vatRate) >100) errs.push(`Line ${idx+1}: VAT 0-100 required`);
+      const line = `Line ${idx+1}`;
+      if (!li.itemCode || String(li.itemCode).trim().length<2) errs.push(`${line}: SKU / Item Code is required — enter at least 2 characters (e.g. SKU-001)`);
+      if (!li.hsOrServiceCode || li.hsOrServiceCode==='UNMAPPED' || li.hsOrServiceCode==='SERV-DEFAULT' || String(li.hsOrServiceCode).trim()==='') errs.push(`${line} ("${li.description||li.itemCode||'item'}"): HS/Service Code is missing or UNMAPPED — enter a valid HS code (e.g. 8471.30) or map it in Items`);
+      if (li.quantity===undefined || li.quantity==='' || Number(li.quantity) <=0) errs.push(`${line}: Quantity must be greater than 0 — enter a positive number`);
+      if (li.unitPrice===undefined || li.unitPrice==='' || isNaN(Number(li.unitPrice)) ) errs.push(`${line}: Unit Price is required — enter a number (e.g. 5000)`);
+      else if (Number(li.unitPrice) <0) errs.push(`${line}: Unit Price cannot be negative`);
+      if (li.vatRate===undefined || li.vatRate==='' || isNaN(Number(li.vatRate))) errs.push(`${line}: VAT Rate is required — enter 0 to 100 (e.g. 7.5)`);
+      else if (Number(li.vatRate) <0 || Number(li.vatRate) >100) errs.push(`${line}: VAT Rate must be between 0 and 100 (got ${li.vatRate})`);
     });
     return errs;
   };
@@ -451,10 +460,17 @@ export function InvoicesTab() {
             </div>
             <div className="overflow-y-auto p-6 space-y-4">
               {editError && (
-                <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span className="flex-1">{editError}</span>
-                  <button onClick={()=>setEditError(null)} className="text-rose-600 hover:text-rose-800 font-semibold cursor-pointer">Dismiss</button>
+                <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 space-y-1">
+                      <p className="font-bold">Please fix the following before saving:</p>
+                      <ul className="list-disc list-inside space-y-0.5 whitespace-pre-wrap">
+                        {editError.split('; ').map((e,i)=><li key={i}>{e.replace(/^Fix:\s*/,'').replace(/^•\s*/,'')}</li>)}
+                      </ul>
+                    </div>
+                    <button onClick={()=>setEditError(null)} className="text-rose-600 hover:text-rose-800 font-semibold cursor-pointer shrink-0">Dismiss</button>
+                  </div>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
