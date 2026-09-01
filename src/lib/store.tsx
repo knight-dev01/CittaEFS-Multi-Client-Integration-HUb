@@ -148,12 +148,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [metrics, setMetrics] = useState<SystemMetrics>({ totalInvoicesProcessed: 0, nrsStampSuccessRate: 0, averageLatencyMs: 0, activeTenantsCount: 0, pendingValidationCount: 0, reconciliationCronStatus: 'IDLE' as any, cittaGatewayStatus: 'UNKNOWN' as any });
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const tenantErps: TenantErp[] = useMemo(() => {
-    const t: any = activeTenant as any;
-    if (t?.tenantErps && Array.isArray(t.tenantErps)) return t.tenantErps;
-    return [];
-  }, [activeTenant]);
-
   // Auto-select first tenant if none selected and tenants exist
   const effectiveTenantId = tenants.length > 0 && !activeTenantId ? tenants[0].id : activeTenantId;
   const activeTenant = tenants.find(t => t.id === effectiveTenantId) || tenants[0] || null;
@@ -164,6 +158,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
       setActiveTenantId(tenants[0].id);
     }
   }, [tenants, activeTenantId, setActiveTenantId]);
+
+  const tenantErps: TenantErp[] = useMemo(() => {
+    const t: any = activeTenant as any;
+    if (t?.tenantErps && Array.isArray(t.tenantErps)) return t.tenantErps;
+    return [];
+  }, [activeTenant]);
 
   const [activeRequests, setActiveRequests] = useState(0);
   const isBgRefreshing = activeRequests > 0;
