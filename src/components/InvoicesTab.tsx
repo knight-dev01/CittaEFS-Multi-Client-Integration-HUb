@@ -16,6 +16,7 @@ import {
   Save
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
+import { toastGlobal } from './ui/Toast';
 
 export function InvoicesTab() {
   const { invoices, activeTenant, customers, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices, updateInvoice, refreshAll } = useHub() as any;
@@ -32,6 +33,8 @@ export function InvoicesTab() {
   const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [expandedSending, setExpandedSending] = useState(false);
 
   const tenantInvoices = invoices.filter(inv => inv.tenantId === activeTenant.id);
 
@@ -94,17 +97,19 @@ export function InvoicesTab() {
     return errs;
   };
   const handleBulkSend = async () => {
-    if (pendingBulk.length === 0) { setBulkMsg({type:'error', text:'No invoices to send — all are already APPROVED/SIGNED.'}); return; }
+    if (pendingBulk.length === 0) { setBulkMsg({type:'error', text:'No invoices to send — all are already APPROVED/SIGNED.'}); toastGlobal('info', 'Nothing to send', 'All filtered invoices are already APPROVED/SIGNED'); return; }
     const invalidBulk = pendingBulk.filter(inv => getInvoiceErrors(inv).length>0);
     if (invalidBulk.length>0) {
       setBulkMsg({type:'error', text:`${invalidBulk.length} of ${pendingBulk.length} have missing fields (highlighted red). Fix TIN/HS code/Qty first — only valid will be sent. ${invalidBulk.slice(0,2).map((i:any)=>`${i.clientInvoiceNumber}: ${getInvoiceErrors(i).join('; ')}`).join(' | ')}`});
+      toastGlobal('error', `${invalidBulk.length} invoice(s) need fixing`, 'Highlighted red — TIN/HS/Qty');
       // continue with only valid
     }
     const toSend = pendingBulk.filter(inv => getInvoiceErrors(inv).length===0);
     if (toSend.length===0) return;
-    if (!confirm(`Bulk send ${toSend.length} valid invoice(s) to CittaEFS gateway? This uses POST /api/integration/gen/invoices/bulk (single bulk request).`)) return;
+    if (!confirm(`Bulk send ${toSend.length} valid invoice(s) to CittaEFS gateway? (idempotent — duplicates ignored)`)) return;
     setIsBulkSending(true);
     setBulkMsg(null);
+    toastGlobal('info', `Queuing ${toSend.length} invoice(s)…`, 'Bulk is idempotent — already queued will be skipped');
     try {
       const payloads = toSend.map(inv => ({
         clientInvoiceNumber: inv.clientInvoiceNumber,
@@ -220,6 +225,42 @@ export function InvoicesTab() {
                 {invalid.slice(0,3).map((inv:any)=><li key={inv.id}><span className="font-mono font-semibold">{inv.clientInvoiceNumber}</span> — {getInvoiceErrors(inv).join('; ')}</li>)}
                 {invalid.length>3 && <li>…and {invalid.length-3} more</li>}
               </ul>
+            </div>
+          );
+        })()}
+
+        {/* Staging Area — minimal, uses invoice status as source of truth */}
+        {(() => {
+          const stagingPending = tenantInvoices.filter((inv:any) => inv.status === 'PENDING_NRS_STAMP' || inv.status === 'PENDING' || inv.status === 'QUEUED').length;
+          const stagingApproved = tenantInvoices.filter((inv:any) => inv.status === 'APPROVED' || inv.status === 'SIGNED').length;
+          const stagingFailed = tenantInvoices.filter((inv:any) => inv.status === 'REJECTED' || inv.status === 'FAILED').length;
+          const totalStaging = tenantInvoices.length;
+          const isFilteringStaging = statusFilter === 'PENDING_NRS_STAMP';
+          return (
+            <div className="mx-5 mt-4 p-4 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-indigo-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-6 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-xs font-bold text-slate-800">Staging</span>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold">{stagingPending} pending</span>
+                </div>
+                <div className="h-4 w-px bg-violet-200 hidden sm:block" />
+                <div className="flex items-center gap-3 text-[11px] font-medium">
+                  <span className="text-slate-600">Total <strong className="text-slate-900">{totalStaging}</strong></span>
+                  <span className="text-emerald-700">✓ {stagingApproved} stamped</span>
+                  {stagingFailed>0 && <span className="text-rose-700">✗ {stagingFailed} failed</span>}
+                </div>
+                <span className="text-[11px] text-slate-500 hidden lg:inline">Idempotent — resending a queued invoice shows “Already queued — staging”</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 hidden sm:inline">{isBulkSending || sendingId ? 'Queuing…' : 'Live via WS'}</span>
+                <button
+                  onClick={() => setStatusFilter(isFilteringStaging ? 'ALL' : 'PENDING_NRS_STAMP')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${isFilteringStaging ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50'}`}
+                >
+                  {isFilteringStaging ? 'Show all' : `View staging (${stagingPending})`}
+                </button>
+              </div>
             </div>
           );
         })()}
@@ -354,9 +395,13 @@ export function InvoicesTab() {
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
                           ) : (
                             <button
+                              disabled={sendingId === inv.id}
                               onClick={async () => {
+                                if (sendingId) return;
                                 const errs = getInvoiceErrors(inv);
-                                if (errs.length>0) { setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted red fields first (use Edit).`}); return; }
+                                if (errs.length>0) { setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted red fields first (use Edit).`}); toastGlobal('error', 'Fix before sending', errs[0]); return; }
+                                setSendingId(inv.id);
+                                toastGlobal('info', `Queuing ${inv.clientInvoiceNumber}…`, 'Idempotent — duplicate clicks ignored');
                                 try {
                                   const tin = resolveTin(inv);
                                   await transmitInvoice({
@@ -372,14 +417,15 @@ export function InvoicesTab() {
                                   setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`});
                                 } catch (e:any) {
                                   const msg = e.message || 'Send failed';
-                                  if (msg.includes('Duplicate')) setBulkMsg({type:'error', text:`${msg} — use Edit to change Invoice Number or delete the CANCELLED invoice.`});
-                                  else if (msg.includes('customerTin') || msg.includes('TIN')) setBulkMsg({type:'error', text:`${msg} — open Customers tab or Edit to set ${inv.customerCode} TIN to 10-14 alphanum (e.g. P051123456Z), postcode, then retry.`});
+                                  if (msg.includes('Duplicate') || msg.toLowerCase().includes('already queued') || msg.toLowerCase().includes('idempotent')) {
+                                    setBulkMsg({type:'success', text: `${inv.clientInvoiceNumber} already queued — staging.`});
+                                  } else if (msg.includes('customerTin') || msg.includes('TIN')) setBulkMsg({type:'error', text:`${msg} — open Customers tab or Edit to set ${inv.customerCode} TIN to 10-14 alphanum (e.g. P051123456Z), postcode, then retry.`});
                                   else setBulkMsg({type:'error', text: msg});
-                                }
+                                } finally { setSendingId(null); }
                               }}
-                              className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
+                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border ${sendingId===inv.id ? 'bg-violet-400 text-white border-violet-300 cursor-wait opacity-80 backdrop-blur-sm' : 'bg-violet-600 hover:bg-violet-700 text-white border-transparent cursor-pointer'} disabled:opacity-60`}
                             >
-                              <Send className="w-3.5 h-3.5" /> Send
+                              <Send className={`w-3.5 h-3.5 ${sendingId===inv.id ? 'animate-pulse' : ''}`} /> {sendingId===inv.id ? 'Queuing…' : 'Send'}
                             </button>
                           )}
                         </div>
@@ -441,7 +487,7 @@ export function InvoicesTab() {
                 {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-xl"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setExpandedInvoiceId(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Close</button>
-                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='REJECTED' || inv.status==='CANCELLED') && <button onClick={async () => { const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); return; } try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } }} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> Send to CittaEFS</button>}
+                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='REJECTED' || inv.status==='CANCELLED') && <button disabled={expandedSending} onClick={async () => { if(expandedSending) return; const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); toastGlobal('error','Fix before sending', errs[0]); return; } setExpandedSending(true); toastGlobal('info',`Queuing ${inv.clientInvoiceNumber}…`,'Idempotent'); try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } finally{ setExpandedSending(false);} }} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 ${expandedSending ? 'bg-violet-400 cursor-wait opacity-80' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className={`w-3.5 h-3.5 ${expandedSending ? 'animate-pulse' : ''}`} /> {expandedSending ? 'Queuing…' : 'Send to CittaEFS'}</button>}
                   {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
                 </div>
               </div>

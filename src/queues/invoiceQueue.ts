@@ -135,10 +135,23 @@ class InvoiceQueueManager {
   public async add(
     jobName: string,
     payload: QueueablePayload,
-    options: { attempts?: number; backoff?: { type: string; delay: number } } = {}
+    options: { attempts?: number; backoff?: { type: string; delay: number }; idempotencyKey?: string } = {}
   ): Promise<QueueJob<QueueablePayload>> {
+    // Idempotency: if key provided and job already queued/processing for same payload, return existing
+    const idemId = options.idempotencyKey ? `idem_${options.idempotencyKey.replace(/[^a-zA-Z0-9:_\-]/g,'_')}` : null;
+    if (idemId) {
+      await this.hydrateIfNeeded();
+      const existing = this.queue.find(j => j.id === idemId || (j.data as any).dbInvoiceId === payload.dbInvoiceId);
+      if (existing) return existing;
+      try {
+        const prisma = getPrisma();
+        const row = await prisma.queueJob.findFirst({ where: { id: idemId } });
+        if (row) { await prisma.$disconnect().catch(()=>{}); return this.mapDbRow(row); }
+        await prisma.$disconnect().catch(()=>{});
+      } catch {}
+    }
     const job: QueueJob<QueueablePayload> = {
-      id: `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: idemId || `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       tenantId: payload.tenantId,
       data: payload,
       attempts: 0,

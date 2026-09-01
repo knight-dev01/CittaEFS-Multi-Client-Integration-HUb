@@ -1574,12 +1574,17 @@ async function startServer() {
       if (clientInvoiceNumber) {
         const duplicate = await prisma.invoice.findFirst({
           where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber },
+          include: { lineItems: true },
         });
-        // Allow resend if previous invoice was cancelled/rejected (common test flow with short numbers like "16")
+        // Idempotency: if invoice already exists and not cancelled/rejected, return existing (200) instead of 409
         if (duplicate && !["CANCELLED", "REJECTED"].includes(duplicate.status)) {
-          errors.push(
-            `Duplicate invoice: clientInvoiceNumber "${clientInvoiceNumber}" already exists for this tenant (existing status: ${duplicate.status})`,
-          );
+          const existingFmt = formatInvoice(duplicate);
+          return res.status(200).json({
+            success: true,
+            idempotent: true,
+            message: `Invoice "${clientInvoiceNumber}" already queued (status ${duplicate.status}) — idempotent`,
+            cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true },
+          });
         }
       }
 
@@ -1754,10 +1759,11 @@ async function startServer() {
         })),
       });
 
+      const idemKey = `${tenant.id}:${clientInvoiceNumber || rawNewInvoice.clientInvoiceId}`;
       await invoiceQueue.add("signInvoice", {
         ...validatedPayload,
         dbInvoiceId: rawNewInvoice.id,
-      });
+      }, { idempotencyKey: idemKey });
 
       await prisma.tenant.update({
         where: { id: tenant.id },
@@ -1786,6 +1792,10 @@ async function startServer() {
       });
     } catch (e: any) {
       if (e.code === "P2002" && e.meta?.target?.includes("client_invoice_id")) {
+        try {
+          const existing = await prisma.invoice.findFirst({ where: { tenantId: (await prisma.tenant.findFirst({ where: { id: tenantId || "tenant_qbo_smb" } }))?.id || tenant.id, clientInvoiceId: req.body.clientInvoiceNumber }, include: { lineItems: true } });
+          if (existing) return res.status(200).json({ success: true, idempotent: true, message: `Already queued — idempotent`, cittaResponse: { status: existing.status, invoice: formatInvoice(existing), idempotent: true } });
+        } catch {}
         return res.status(409).json({
           error: `Duplicate invoice: clientInvoiceNumber "${req.body.clientInvoiceNumber}" already exists for this tenant`,
         });
@@ -1811,8 +1821,11 @@ async function startServer() {
         if (!clientInvoiceNumber) errors.push("clientInvoiceNumber mandatory");
         if (!issueDate) errors.push("issueDate mandatory");
         if (clientInvoiceNumber) {
-          const dup = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber } });
-          if (dup && !["CANCELLED", "REJECTED"].includes(dup.status)) errors.push(`Duplicate ${clientInvoiceNumber} (status ${dup.status})`);
+          const dup = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber }, include: { lineItems: true } });
+          if (dup && !["CANCELLED", "REJECTED"].includes(dup.status)) {
+            results.push({ clientInvoiceNumber, success: true, idempotent: true, invoice: formatInvoice(dup), message: `Already queued (status ${dup.status}) — idempotent` });
+            continue;
+          }
         }
         let bulkResolvedTin: string | undefined = customerTin;
         if ((invoiceKind === "B2B" || invoiceKind === "B2G") && (!bulkResolvedTin || bulkResolvedTin.length < 8)) {
@@ -1872,7 +1885,8 @@ async function startServer() {
           customerTin: effectiveTin || undefined, originalIrn: originalIrn || undefined,
           lineItems: processed.map((li: any) => ({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS") ? "HS_CODE" : "SERVICE_CODE", vatRate: li.vatRate })),
         });
-        await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: raw.id });
+        const bulkIdemKey = `${tenant.id}:${clientInvoiceNumber}`;
+        await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: raw.id }, { idempotencyKey: bulkIdemKey });
         results.push({ clientInvoiceNumber, success: true, invoice: newInv });
       }
       await prisma.tenant.update({ where: { id: tenant.id }, data: { monthlyUsed: { increment: results.filter(r=>r.success).length }, lastSyncAt: new Date() } });
