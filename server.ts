@@ -429,7 +429,7 @@ async function startServer() {
     next();
   });
 
-  // Simple in-memory rate limiter (100 req/min per IP, 15/min for auth)
+  // Rate limiter — relaxed for polling (was 120/min too strict for 7 parallel GETs every 30s + preflights)
   const rateBuckets = new Map<string, number[]>();
   function isRateLimited(key: string, limit: number, windowMs: number): boolean {
     const now = Date.now();
@@ -448,9 +448,11 @@ async function startServer() {
     }
   }, 60000).unref();
   app.use((req, res, next) => {
+    // Don't rate-limit preflight or health
+    if (req.method === "OPTIONS" || req.path.startsWith("/health") || req.path === "/api/health") return next();
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || (req.socket as any)?.remoteAddress || "unknown";
     const isAuth = req.path.startsWith("/api/auth/");
-    const limit = isAuth ? 15 : 120;
+    const limit = isAuth ? 30 : 300; // 300/min for API (polling + bulk), 30/min for auth
     const key = `${ip}:${isAuth ? "auth" : "api"}`;
     if (isRateLimited(key, limit, 60000)) {
       return res.status(429).json({ success: false, error: "Too many requests, please try again later." });
@@ -1504,20 +1506,32 @@ async function startServer() {
         const duplicate = await prisma.invoice.findFirst({
           where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber },
         });
-        if (duplicate) {
+        // Allow resend if previous invoice was cancelled/rejected (common test flow with short numbers like "16")
+        if (duplicate && !["CANCELLED", "REJECTED"].includes(duplicate.status)) {
           errors.push(
             `Duplicate invoice: clientInvoiceNumber "${clientInvoiceNumber}" already exists for this tenant (existing status: ${duplicate.status})`,
           );
         }
       }
 
+      // For B2B/B2G, try to resolve TIN from customer master if not supplied in payload
+      let resolvedTin = customerTin;
+      if ((invoiceKind === "B2B" || invoiceKind === "B2G") && (!resolvedTin || resolvedTin.length < 8)) {
+        try {
+          const custMaster = await prisma.customer.findFirst({ where: { tenantId: tenant.id, clientSystemCustId: customerCode } });
+          if (custMaster?.taxId && custMaster.taxId.length >= 8 && custMaster.taxId !== "N/A") resolvedTin = custMaster.taxId;
+        } catch {}
+      }
       if (
         (invoiceKind === "B2B" || invoiceKind === "B2G") &&
-        (!customerTin || customerTin.length < 8)
+        (!resolvedTin || resolvedTin.length < 8)
       ) {
         errors.push(
-          `${invoiceKind} Invoices require a valid Tax Identification Number (customerTin)`,
+          `${invoiceKind} Invoices require a valid Tax Identification Number (customerTin) — not found in payload nor customer master for ${customerCode}`,
         );
+      } else if (resolvedTin) {
+        // use resolved TIN downstream
+        (req.body as any)._resolvedTin = resolvedTin;
       }
 
       const tenantItems = await prisma.item.findMany({
@@ -1603,11 +1617,10 @@ async function startServer() {
       );
       const grandTotal = subtotal + totalVat;
 
-      // A buyer TIN is never permitted on a B2C invoice (spec: it would weaken
-      // the B2B/B2C misclassification alert) -- strip it regardless of whether
-      // the caller mistakenly included one alongside invoiceKind: "B2C".
+      // A buyer TIN is never permitted on a B2C invoice — strip it; for B2B/B2G use resolved TIN from master if payload missing
+      const _resolved = (req.body as any)._resolvedTin as string | undefined;
       const effectiveCustomerTin =
-        invoiceKind === "B2C" ? undefined : customerTin || undefined;
+        invoiceKind === "B2C" ? undefined : (_resolved || customerTin || undefined);
 
       // Resolve source ERP for multi-ERP tenant (which ERP this invoice came from)
       let resolvedSourceErp: string | null = (sourceErp as string) || (erpId as string) || null;
@@ -1730,9 +1743,13 @@ async function startServer() {
         if (!issueDate) errors.push("issueDate mandatory");
         if (clientInvoiceNumber) {
           const dup = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber } });
-          if (dup) errors.push(`Duplicate ${clientInvoiceNumber} (status ${dup.status})`);
+          if (dup && !["CANCELLED", "REJECTED"].includes(dup.status)) errors.push(`Duplicate ${clientInvoiceNumber} (status ${dup.status})`);
         }
-        if ((invoiceKind === "B2B" || invoiceKind === "B2G") && (!customerTin || customerTin.length < 8)) errors.push(`${invoiceKind} requires customerTin`);
+        let bulkResolvedTin: string | undefined = customerTin;
+        if ((invoiceKind === "B2B" || invoiceKind === "B2G") && (!bulkResolvedTin || bulkResolvedTin.length < 8)) {
+          try { const cm = await prisma.customer.findFirst({ where: { tenantId: tenant.id, clientSystemCustId: customerCode } }); if (cm?.taxId && cm.taxId.length >= 8 && cm.taxId !== "N/A") bulkResolvedTin = cm.taxId; } catch {}
+        }
+        if ((invoiceKind === "B2B" || invoiceKind === "B2G") && (!bulkResolvedTin || bulkResolvedTin.length < 8)) errors.push(`${invoiceKind} requires customerTin — not in payload nor customer master for ${customerCode}`);
         if (errors.length) { results.push({ clientInvoiceNumber: clientInvoiceNumber || 'UNKNOWN', success: false, errors }); continue; }
 
         const tenantItems = await prisma.item.findMany({ where: { tenantId: tenant.id } });
@@ -1753,7 +1770,7 @@ async function startServer() {
         const subtotal = processed.reduce((a: number, b: any) => a + b.taxableAmount, 0);
         const totalVat = processed.reduce((a: number, b: any) => a + b.vatAmount, 0);
         const grandTotal = subtotal + totalVat;
-        const effectiveTin = invoiceKind === "B2C" ? null : customerTin || null;
+        const effectiveTin = invoiceKind === "B2C" ? null : bulkResolvedTin || null;
         let bulkSourceErp: string | null = (sourceErp as string) || (erpId as string) || null;
         if (!bulkSourceErp) {
           try { const firstErp = await prisma.tenantErp.findFirst({ where: { tenantId: tenant.id, status: "ACTIVE" }, select: { erpId: true } }); bulkSourceErp = firstErp?.erpId || null; } catch {}

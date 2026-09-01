@@ -16,7 +16,7 @@ import {
 import { OverlaySelect } from './ui/OverlaySelect';
 
 export function InvoicesTab() {
-  const { invoices, activeTenant, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices } = useHub() as any;
+  const { invoices, activeTenant, customers, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices } = useHub() as any;
 
   // Both Admin and Operator have access here.
 
@@ -49,11 +49,21 @@ export function InvoicesTab() {
   };
 
   const [isBulkSending, setIsBulkSending] = useState(false);
-  const pendingBulk = filteredInvoices.filter(inv => inv.status === 'PENDING_NRS_STAMP' || inv.status === 'QUEUED' || (inv.status as any) === 'PENDING');
+  const [bulkMsg, setBulkMsg] = useState<{type:'success'|'error', text:string} | null>(null);
+  // Bulk should be highlighted whenever there is anything to send (not yet APPROVED/SIGNED); include REJECTED/CANCELLED for resend, hence broad filter
+  const pendingBulk = filteredInvoices.filter(inv => !['APPROVED','SIGNED'].includes(inv.status));
+  const resolveTin = (inv: any): string | undefined => {
+    if (inv.customerTin && inv.customerTin.length >= 8 && inv.customerTin !== 'N/A') return inv.customerTin;
+    const master = (customers || []).find((c:any) => c.clientCustomerCode === inv.customerCode || c.clientSystemCustId === inv.customerCode);
+    if (master?.tin && master.tin.length >= 8 && master.tin !== 'N/A') return master.tin;
+    if (master?.taxId && master.taxId.length >= 8 && master.taxId !== 'N/A') return master.taxId;
+    return inv.customerTin;
+  };
   const handleBulkSend = async () => {
-    if (pendingBulk.length === 0) { alert('No pending invoices to send.'); return; }
-    if (!confirm(`Bulk send ${pendingBulk.length} pending invoice(s) to CittaEFS gateway? This uses POST /api/integration/gen/invoices/bulk (single bulk request).`)) return;
+    if (pendingBulk.length === 0) { setBulkMsg({type:'error', text:'No invoices to send — all are already APPROVED/SIGNED.'}); return; }
+    if (!confirm(`Bulk send ${pendingBulk.length} invoice(s) to CittaEFS gateway? This uses POST /api/integration/gen/invoices/bulk (single bulk request).`)) return;
     setIsBulkSending(true);
+    setBulkMsg(null);
     try {
       const payloads = pendingBulk.map(inv => ({
         clientInvoiceNumber: inv.clientInvoiceNumber,
@@ -62,7 +72,7 @@ export function InvoicesTab() {
         issueDate: inv.issueDate || new Date().toISOString().substring(0, 10),
         customerCode: inv.customerCode || 'CUST-001',
         customerName: inv.customerName,
-        customerTin: inv.customerTin,
+        customerTin: resolveTin(inv),
         lineItems: inv.lineItems?.length ? inv.lineItems.map((li: any) => ({
           itemCode: li.itemCode,
           description: li.description,
@@ -73,9 +83,11 @@ export function InvoicesTab() {
         })) : [{ itemCode: 'SKU-001', description: 'Item', quantity: 1, unitPrice: inv.grandTotal || 5000, hsOrServiceCode: 'HS-8471.30', vatRate: 7.5 }]
       }));
       const res = await bulkTransmitInvoices(payloads);
-      alert(`Bulk send queued: ${res.successCount} succeeded, ${res.failedCount} failed. ${res.message || ''}`);
+      const detail = res.results?.filter((r:any)=>!r.success).map((r:any)=> `${r.clientInvoiceNumber}: ${r.errors?.join(', ')}`).join(' | ');
+      if (res.failedCount > 0) setBulkMsg({type:'error', text:`Bulk: ${res.successCount} ok, ${res.failedCount} failed. ${detail || res.message || ''}`});
+      else setBulkMsg({type:'success', text:`Bulk queued ${res.successCount} invoice(s) for NRS stamping. ${res.message || ''}`});
     } catch (e: any) {
-      alert(e.message || 'Bulk send failed');
+      setBulkMsg({type:'error', text: e.message || 'Bulk send failed — check TIN/duplicate/HS code. See Validation tab.'});
     } finally { setIsBulkSending(false); }
   };
 
@@ -142,12 +154,20 @@ export function InvoicesTab() {
             <span className="text-xs text-slate-300 hidden sm:inline">
               Format: <strong className="text-violet-300">{activeTenant.platformType}</strong>
             </span>
-            <button onClick={handleBulkSend} disabled={isBulkSending || pendingBulk.length===0} className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer">
+            <button onClick={handleBulkSend} disabled={isBulkSending || pendingBulk.length===0} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all ${pendingBulk.length>0 ? 'bg-violet-600 hover:bg-violet-700 text-white ring-2 ring-violet-300/50 shadow-violet-600/20' : 'bg-slate-700 text-slate-400 opacity-60'}`}>
               <Send className="w-3.5 h-3.5" />
               <span>{isBulkSending ? 'Sending…' : `Bulk Send to CittaEFS (${pendingBulk.length})`}</span>
             </button>
           </div>
         </div>
+
+        {bulkMsg && (
+          <div className={`mx-5 mt-4 p-3 rounded-xl border text-xs flex items-center gap-2 ${bulkMsg.type==='error' ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-violet-50 text-violet-900 border-violet-200'}`}>
+            {bulkMsg.type==='error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-violet-600" />}
+            <span className="flex-1">{bulkMsg.text}</span>
+            <button onClick={()=>setBulkMsg(null)} className="text-xs font-semibold hover:underline cursor-pointer">Dismiss</button>
+          </div>
+        )}
 
         {filteredInvoices.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-sans">
@@ -269,6 +289,11 @@ export function InvoicesTab() {
                           <button
                             onClick={async () => {
                               try {
+                                const tin = resolveTin(inv);
+                                if ((inv.invoiceKind==='B2B' || inv.invoiceKind==='B2G') && (!tin || tin.length < 8)) {
+                                  setBulkMsg({type:'error', text:`B2B requires TIN for ${inv.customerCode}. Fix customer master TIN (10-14 alphanum) then try again.`});
+                                  return;
+                                }
                                 await transmitInvoice({
                                   clientInvoiceNumber: inv.clientInvoiceNumber,
                                   invoiceKind: inv.invoiceKind,
@@ -276,10 +301,16 @@ export function InvoicesTab() {
                                   issueDate: inv.issueDate,
                                   customerCode: inv.customerCode,
                                   customerName: inv.customerName,
-                                  customerTin: inv.customerTin,
+                                  customerTin: tin,
                                   lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))
                                 });
-                              } catch (e:any) { alert(e.message); }
+                                setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`});
+                              } catch (e:any) {
+                                const msg = e.message || 'Send failed';
+                                if (msg.includes('Duplicate')) setBulkMsg({type:'error', text:`${msg} — use a new Invoice Number or delete the CANCELLED invoice from Invoices tab, or change filter to exclude CANCELLED.`});
+                                else if (msg.includes('customerTin') || msg.includes('TIN')) setBulkMsg({type:'error', text:`${msg} — open Customers tab, set ${inv.customerCode} TIN to 10-14 alphanum (e.g. P051123456Z), postcode, then retry.`});
+                                else setBulkMsg({type:'error', text: msg});
+                              }
                             }}
                             className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
                           >
@@ -344,7 +375,7 @@ export function InvoicesTab() {
                 {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-xl"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setExpandedInvoiceId(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Close</button>
-                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING') && <button onClick={async () => { await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: inv.customerTin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setExpandedInvoiceId(null); }} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> Send to CittaEFS</button>}
+                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='REJECTED' || inv.status==='CANCELLED') && <button onClick={async () => { try { const tin = resolveTin(inv); if ((inv.invoiceKind==='B2B'||inv.invoiceKind==='B2G') && (!tin || tin.length<8)) { setBulkMsg({type:'error', text:`B2B requires TIN for ${inv.customerCode}. Fix Customers TIN then retry.`}); return; } await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } }} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> Send to CittaEFS</button>}
                   {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
                 </div>
               </div>
