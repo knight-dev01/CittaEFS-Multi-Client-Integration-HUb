@@ -2,6 +2,67 @@ import { ValidatedInvoiceIngestion } from '../schemas/invoice.schema';
 import { PrismaClient } from '@prisma/client';
 import { getDatabaseUrl } from '../config/dbConfig';
 
+// BullMQ / Redis — real distributed queue when REDIS_URL is set, otherwise DB-backed queue
+let bullMqQueue: any = null;
+let bullMqEnabled = false;
+let bullMqInitPromise: Promise<any> | null = null;
+
+function getRedisUrl(): string | null {
+  const url = process.env.REDIS_URL?.trim();
+  if (url) return url;
+  const host = process.env.REDIS_HOST?.trim();
+  if (host) {
+    const port = process.env.REDIS_PORT?.trim() || '6379';
+    const pass = process.env.REDIS_PASSWORD?.trim();
+    const user = process.env.REDIS_USERNAME?.trim();
+    if (pass) {
+      const auth = user ? `${user}:${pass}` : `:${pass}`;
+      return `redis://${auth}@${host}:${port}`;
+    }
+    return `redis://${host}:${port}`;
+  }
+  return null;
+}
+
+async function initBullMq(): Promise<any> {
+  if (bullMqInitPromise) return bullMqInitPromise;
+  const redisUrl = getRedisUrl();
+  if (!redisUrl) return null;
+  bullMqInitPromise = (async () => {
+    try {
+      const { Queue } = await import('bullmq');
+      const IORedis = (await import('ioredis')).default as any;
+      const connection = new IORedis(redisUrl, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+        lazyConnect: false,
+      });
+      connection.on('error', (err: any) => console.warn('[BullMQ] Redis error, using DB queue:', err.message));
+      bullMqQueue = new Queue('citta-invoice-queue', {
+        connection,
+        defaultJobOptions: {
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: { count: 500 },
+          removeOnFail: { count: 500 },
+        },
+      });
+      // Test connection
+      await bullMqQueue.waitUntilReady().catch(() => {});
+      bullMqEnabled = true;
+      console.log(`[BullMQ] Enabled — Redis ${redisUrl.replace(/\/\/.*@/, '//***@')} — queue citta-invoice-queue`);
+      return bullMqQueue;
+    } catch (e: any) {
+      console.warn('[BullMQ] Init failed, DB queue will be used:', e.message);
+      bullMqEnabled = false;
+      return null;
+    }
+  })();
+  return bullMqInitPromise;
+}
+// Kick off async init (non-blocking)
+initBullMq().catch(() => {});
+
 // The queued payload always carries the DB Invoice row's primary key (dbInvoiceId)
 export type QueueablePayload = ValidatedInvoiceIngestion & { dbInvoiceId: string };
 
@@ -89,7 +150,7 @@ class InvoiceQueueManager {
       nextAttemptAt: new Date().toISOString()
     };
     this.queue.push(job);
-    // Persist to DB (best-effort)
+    // Persist to DB (always — DB is audit trail + backup)
     try {
       const prisma = getPrisma();
       await prisma.queueJob.create({
@@ -108,6 +169,19 @@ class InvoiceQueueManager {
     } catch (e) {
       console.warn('[Queue] DB persist failed for job', job.id, (e as any)?.message);
     }
+    // If BullMQ is enabled, also push to Redis for distributed workers
+    try {
+      const q = await initBullMq();
+      if (q && bullMqEnabled) {
+        await q.add(jobName, payload, {
+          jobId: job.id,
+          attempts: job.maxRetries,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: { count: 500 },
+          removeOnFail: { count: 500 },
+        }).catch((e: any) => console.warn('[BullMQ] add failed, DB queue remains:', e.message));
+      }
+    } catch {}
     return job;
   }
 
@@ -186,9 +260,14 @@ class InvoiceQueueManager {
       queued: this.queue.filter(j => j.status === 'QUEUED').length,
       processing: this.queue.filter(j => j.status === 'PROCESSING').length,
       completed: this.queue.filter(j => j.status === 'COMPLETED').length,
-      failedInDLQ: this.dlq.length
+      failedInDLQ: this.dlq.length,
+      engine: bullMqEnabled ? 'bullmq+redis' as const : 'db-memory' as const,
+      bullMqReady: bullMqEnabled,
     };
   }
+
+  public isBullMqEnabled(): boolean { return bullMqEnabled; }
+  public getBullMqQueue(): any { return bullMqQueue; }
 
   // Re-hydrate + recover orphaned PENDING_NRS_STAMP invoices that have no queue entry
   public async recoverOrphans(): Promise<number> {

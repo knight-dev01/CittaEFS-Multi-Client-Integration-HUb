@@ -3020,6 +3020,8 @@ async function startServer() {
 
   // Drain the invoice signing queue: dispatches queued jobs to the CittaEFS Gateway
   // and persists the resulting IRN/status back onto the DB invoice row.
+  // If BullMQ+Redis is configured (REDIS_URL), a dedicated Worker will also consume
+  // jobs from Redis for horizontal scaling; interval keeps DB queue active.
   setInterval(() => {
     runWorkerBatch()
       .then((results) => {
@@ -3035,6 +3037,59 @@ async function startServer() {
         console.error("[Worker] Queue drain error:", err);
       });
   }, 5000);
+
+  // BullMQ dedicated Worker (when REDIS_URL is set) — real Redis-backed distributed processing
+  (async () => {
+    const redisUrl = process.env.REDIS_URL?.trim() || process.env.REDIS_HOST?.trim();
+    if (!redisUrl) {
+      console.log("[BullMQ] REDIS_URL not set — using DB-memory queue (set REDIS_URL to enable real BullMQ/Redis)");
+      return;
+    }
+    try {
+      const { Worker } = await import('bullmq');
+      const IORedis = (await import('ioredis')).default as any;
+      const { getDatabaseUrl } = await import("./src/config/dbConfig");
+      const redisConnUrl = process.env.REDIS_URL?.trim() || `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || '6379'}`;
+      const connection: any = new IORedis(redisConnUrl, { maxRetriesPerRequest: null, enableReadyCheck: false });
+      connection.on('error', (e: any) => console.warn('[BullMQ Worker] Redis error:', e.message));
+      const worker = new Worker('citta-invoice-queue', async (job: any) => {
+        const payload = job.data as any;
+        // DB row id is in payload.dbInvoiceId or job id
+        const { processInvoiceJob } = await import("./src/workers/invoiceWorker");
+        const { invoiceQueue } = await import("./src/queues/invoiceQueue");
+        // Reconstruct QueueJob shape expected by processInvoiceJob
+        const qJob: any = {
+          id: job.id || payload.dbInvoiceId || `bull_${Date.now()}`,
+          tenantId: payload.tenantId,
+          data: payload,
+          attempts: job.attemptsMade || 0,
+          maxRetries: 5,
+          backoffMs: [5000, 30000, 120000, 600000, 1800000],
+          status: 'PROCESSING',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          nextAttemptAt: new Date().toISOString(),
+        };
+        const result = await processInvoiceJob(qJob);
+        if (!result.success && !result.movedToDLQ) throw new Error(result.error || 'BullMQ job failed, will retry');
+        if (result.movedToDLQ) console.warn(`[BullMQ] Job ${qJob.id} moved to DLQ: ${result.error}`);
+        // Also update DB queueJobs table for observability
+        try { const { invoiceQueue: iq } = await import("./src/queues/invoiceQueue"); if (result.success) await iq.removeJob(qJob.id); } catch {}
+        broadcastEvent({ type: "update", method: "WORKER", path: "/queue/bullmq" });
+        return result;
+      }, {
+        connection,
+        concurrency: Number(process.env.BULLMQ_CONCURRENCY || '5'),
+        limiter: { max: Number(process.env.BULLMQ_LIMIT_MAX || '20'), duration: 1000 },
+      });
+      worker.on('completed', (job: any) => console.log(`[BullMQ] Completed ${job.id}`));
+      worker.on('failed', (job: any, err: any) => console.warn(`[BullMQ] Failed ${job?.id}: ${err.message}`));
+      worker.on('error', (err: any) => console.error('[BullMQ] Worker error:', err));
+      console.log(`[BullMQ] Worker started — concurrency ${process.env.BULLMQ_CONCURRENCY || '5'} — queue citta-invoice-queue`);
+    } catch (e: any) {
+      console.warn('[BullMQ] Worker init skipped (DB queue remains):', e.message);
+    }
+  })();
 
   // Attach WebSocket Server and listen to specific connection upgrades
   const wss = new WebSocketServer({ noServer: true });

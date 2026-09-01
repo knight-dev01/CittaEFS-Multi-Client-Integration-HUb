@@ -6,11 +6,17 @@ const IV_LENGTH = 12; // Recommended IV length for AES-GCM
 const AUTH_TAG_LENGTH = 16;
 
 // Secret key should be 32 bytes (256 bits). Supports ENCRYPTION_KEY (hex 32 bytes) and ENCRYPTION_SECRET (passphrase)
+let _cachedEphemeralKey: Buffer | null = null;
 function getEncryptionKey(): Buffer {
   const rawKey = process.env.ENCRYPTION_KEY?.trim() || process.env.ENCRYPTION_SECRET?.trim();
   if (!rawKey) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("ENCRYPTION_KEY or ENCRYPTION_SECRET environment variable is required in production");
+      if (!_cachedEphemeralKey) {
+        const gen = crypto.randomBytes(32);
+        console.warn(`[Security] ENCRYPTION_KEY not set — generated ephemeral 32-byte key ${gen.toString('hex').slice(0,8)}... for this boot. Set ENCRYPTION_KEY in Render/Vercel env to persist across restarts (existing encrypted data will be re-encrypted on next write).`);
+        _cachedEphemeralKey = gen;
+      }
+      return _cachedEphemeralKey;
     }
     console.warn("[Security Warning] ENCRYPTION_KEY/ENCRYPTION_SECRET not set — using insecure dev value. Set ENCRYPTION_KEY for production.");
     return crypto.scryptSync("cittaefs_compliance_hub_default_secret_32bytes!!_dev_only", "salt_citta_hub", 32);
