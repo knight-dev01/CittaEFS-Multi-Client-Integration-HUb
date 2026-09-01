@@ -1,7 +1,8 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useMemo, createContext, useContext, ReactNode } from 'react';
 import { fetchWithAuth, parseJsonResponse, safeFetchJson, getApiBaseUrl } from './api';
 import { 
   Tenant, 
+  TenantErp,
   Invoice, 
   CustomerProfile, 
   ItemCodeMapping, 
@@ -43,6 +44,10 @@ interface HubContextType {
   updateTenant: (tenantId: string, tenantData: any) => Promise<Tenant>;
   deleteTenant: (tenantId: string) => Promise<any>;
   bulkTransmitInvoices: (payloads: any[], tenantIdOverride?: string) => Promise<any>;
+  tenantErps: TenantErp[];
+  addTenantErp: (tenantId: string, platformType: string, displayName?: string, config?: any) => Promise<any>;
+  updateTenantErp: (tenantId: string, erpId: string, data: any) => Promise<any>;
+  removeTenantErp: (tenantId: string, erpId: string) => Promise<any>;
   purgeDemoData: () => Promise<any>;
 }
 
@@ -142,6 +147,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [metrics, setMetrics] = useState<SystemMetrics>({ totalInvoicesProcessed: 0, nrsStampSuccessRate: 0, averageLatencyMs: 0, activeTenantsCount: 0, pendingValidationCount: 0, reconciliationCronStatus: 'IDLE' as any, cittaGatewayStatus: 'UNKNOWN' as any });
   const [isInitialized, setIsInitialized] = useState(false);
+
+  const tenantErps: TenantErp[] = useMemo(() => {
+    const t: any = activeTenant as any;
+    if (t?.tenantErps && Array.isArray(t.tenantErps)) return t.tenantErps;
+    return [];
+  }, [activeTenant]);
 
   // Auto-select first tenant if none selected and tenants exist
   const effectiveTenantId = tenants.length > 0 && !activeTenantId ? tenants[0].id : activeTenantId;
@@ -577,6 +588,51 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const addTenantErp = async (tenantId: string, platformType: string, displayName?: string, config?: any) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platformType, displayName, config }),
+      });
+      const data = await parseJsonResponse(res);
+      await refreshAll();
+      return data;
+    });
+  };
+  const updateTenantErp = async (tenantId: string, erpId: string, data: any) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps/${erpId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const parsed = await parseJsonResponse(res);
+      await refreshAll();
+      return parsed;
+    });
+  };
+  const removeTenantErp = async (tenantId: string, erpId: string) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth(`/api/tenants/${tenantId}/erps/${erpId}`, { method: 'DELETE' });
+      const data = await parseJsonResponse(res);
+      await refreshAll();
+      return data;
+    });
+  };
+  const createTenantUser = async (userData: { email: string; password: string; name: string; role?: string; organization?: string; tenantId: string }) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+      });
+      const data = await parseJsonResponse(res);
+      await refreshAll();
+      return data;
+    });
+  };
+
   const purgeDemoData = async () => {
     return withLoading(async () => {
       try {
@@ -622,6 +678,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
         updateTenant,
         deleteTenant,
         bulkTransmitInvoices,
+        tenantErps,
+        addTenantErp,
+        updateTenantErp,
+        removeTenantErp,
+        createTenantUser,
         purgeDemoData
       }}
     >

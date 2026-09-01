@@ -925,6 +925,7 @@ async function startServer() {
           customers: true,
           items: true,
           invoices: { include: { lineItems: true } },
+          tenantErps: true,
         },
       });
 
@@ -979,6 +980,20 @@ async function startServer() {
           lastSyncAt: new Date(),
         },
       });
+      // Seed first TenantErp so company has at least one ERP connector (multi-ERP)
+      try {
+        const { getErpForTenant } = await import("./src/config/erpRegistry");
+        const erp = getErpForTenant(platformType || "QuickBooks Online");
+        await prisma.tenantErp.create({
+          data: {
+            tenantId: newTenant.id,
+            platformType: platformType || "QuickBooks Online",
+            erpId: erp.id,
+            displayName: platformType || "QuickBooks Online",
+            status: "ACTIVE",
+          },
+        });
+      } catch (e) { console.warn("[Onboard] TenantErp seed failed:", (e as any)?.message); }
 
       await safeAuditLogCreate(prisma, {
         tenantId: newTenant.id,
@@ -1081,7 +1096,7 @@ async function startServer() {
     try {
       const tenant = await prisma.tenant.findUnique({
         where: { id: req.params.id },
-        include: { customers: true, items: true, invoices: { include: { lineItems: true } } },
+        include: { customers: true, items: true, invoices: { include: { lineItems: true } }, tenantErps: true },
       });
       if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
       res.json({
@@ -1092,6 +1107,57 @@ async function startServer() {
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // Multi-ERP per tenant — list/add/update/remove ERP connectors for a company
+  app.get("/api/tenants/:id/erps", async (req, res) => {
+    try {
+      const erps = await prisma.tenantErp.findMany({ where: { tenantId: req.params.id }, orderBy: { createdAt: "asc" } });
+      res.json(erps);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.post("/api/tenants/:id/erps", async (req: any, res) => {
+    try {
+      if (req.user && req.user.role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      const { platformType, displayName, config } = req.body;
+      if (!platformType) return res.status(400).json({ success: false, error: "platformType required" });
+      const { getErpForTenant } = await import("./src/config/erpRegistry");
+      const erp = getErpForTenant(platformType);
+      const existing = await prisma.tenantErp.findUnique({ where: { tenantId_platformType: { tenantId: req.params.id, platformType } } });
+      if (existing) return res.status(409).json({ success: false, error: `ERP ${platformType} already connected to this tenant` });
+      const created = await prisma.tenantErp.create({
+        data: {
+          tenantId: req.params.id,
+          platformType,
+          erpId: erp.id,
+          displayName: displayName || platformType,
+          config: config ? (typeof config === "string" ? config : JSON.stringify(config)) : null,
+          status: "ACTIVE",
+        },
+      });
+      await safeAuditLogCreate(prisma, { tenantId: req.params.id, action: "ERP_CONNECTED", entityType: "TENANT_ERP", entityRef: platformType, details: `Connected ERP ${platformType} to tenant ${req.params.id}`, sha256PayloadHash: generateSha256(platformType), performedBy: req.user?.email || "Admin" });
+      res.status(201).json(created);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.patch("/api/tenants/:id/erps/:erpId", async (req: any, res) => {
+    try {
+      if (req.user && req.user.role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      const { config, displayName, status } = req.body;
+      const data: any = {};
+      if (config !== undefined) data.config = typeof config === "string" ? config : JSON.stringify(config);
+      if (displayName !== undefined) data.displayName = displayName;
+      if (status !== undefined) { if (!["ACTIVE","INACTIVE","NEEDS_REAUTH"].includes(status)) return res.status(400).json({ success: false, error: "Invalid status" }); data.status = status; }
+      const updated = await prisma.tenantErp.update({ where: { id: req.params.erpId }, data });
+      res.json(updated);
+    } catch (e: any) { if (e.code === "P2025") return res.status(404).json({ success: false, error: "ERP connector not found" }); res.status(500).json({ error: e.message }); }
+  });
+  app.delete("/api/tenants/:id/erps/:erpId", async (req: any, res) => {
+    try {
+      if (req.user && req.user.role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      await prisma.tenantErp.delete({ where: { id: req.params.erpId } });
+      await safeAuditLogCreate(prisma, { tenantId: req.params.id, action: "ERP_DISCONNECTED", entityType: "TENANT_ERP", entityRef: req.params.erpId, details: `Disconnected ERP ${req.params.erpId}`, sha256PayloadHash: generateSha256(req.params.erpId), performedBy: req.user?.email || "Admin" });
+      res.json({ success: true });
+    } catch (e: any) { if (e.code === "P2025") return res.status(404).json({ success: false, error: "ERP connector not found" }); res.status(500).json({ error: e.message }); }
   });
 
   async function handleDeleteTenant(req: any, res: any) {
@@ -1367,6 +1433,8 @@ async function startServer() {
         customerName,
         customerTin,
         issueDate,
+        sourceErp,
+        erpId,
       } = req.body;
 
       const targetTenantId = tenantId || "tenant_qbo_smb";
@@ -1492,11 +1560,20 @@ async function startServer() {
       const effectiveCustomerTin =
         invoiceKind === "B2C" ? undefined : customerTin || undefined;
 
+      // Resolve source ERP for multi-ERP tenant (which ERP this invoice came from)
+      let resolvedSourceErp: string | null = (sourceErp as string) || (erpId as string) || null;
+      if (!resolvedSourceErp) {
+        try {
+          const firstErp = await prisma.tenantErp.findFirst({ where: { tenantId: tenant.id, status: "ACTIVE" }, select: { erpId: true } });
+          resolvedSourceErp = firstErp?.erpId || null;
+        } catch {}
+      }
       // Insert as PENDING_NRS_STAMP — the real IRN/QR only exist once the queue worker
       // gets a response back from the CittaEFS Gateway (same pipeline QBO invoices use).
       const rawNewInvoice = await prisma.invoice.create({
         data: {
           tenantId: tenant.id,
+          sourceErp: resolvedSourceErp,
           clientInvoiceId: clientInvoiceNumber || `INV-${Date.now()}`,
           documentNumber: documentNumber || null,
           invoiceType: invoiceType || "STANDARD",
@@ -1598,7 +1675,7 @@ async function startServer() {
 
       const results: any[] = [];
       for (const payload of bulkInvoices) {
-        const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn } = payload || {};
+        const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn, sourceErp, erpId } = payload || {};
         const errors: string[] = [];
         if (!clientInvoiceNumber) errors.push("clientInvoiceNumber mandatory");
         if (!issueDate) errors.push("issueDate mandatory");
@@ -1628,9 +1705,14 @@ async function startServer() {
         const totalVat = processed.reduce((a: number, b: any) => a + b.vatAmount, 0);
         const grandTotal = subtotal + totalVat;
         const effectiveTin = invoiceKind === "B2C" ? null : customerTin || null;
+        let bulkSourceErp: string | null = (sourceErp as string) || (erpId as string) || null;
+        if (!bulkSourceErp) {
+          try { const firstErp = await prisma.tenantErp.findFirst({ where: { tenantId: tenant.id, status: "ACTIVE" }, select: { erpId: true } }); bulkSourceErp = firstErp?.erpId || null; } catch {}
+        }
         const raw = await prisma.invoice.create({
           data: {
             tenantId: tenant.id,
+            sourceErp: bulkSourceErp,
             clientInvoiceId: clientInvoiceNumber,
             documentNumber: documentNumber || null,
             invoiceType: invoiceType || "STANDARD",

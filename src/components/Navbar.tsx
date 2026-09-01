@@ -131,6 +131,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     { id: 'gateway', label: 'CittaEFS Gateway', icon: Globe, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
 
     // Admin tabs
+    { id: 'companies', label: 'Companies', icon: Building2, category: 'admin', requiredRoles: ['ADMIN'] },
     { id: 'settings', label: 'Settings', icon: Settings, category: 'admin', requiredRoles: ['ADMIN'] }
   ];
 

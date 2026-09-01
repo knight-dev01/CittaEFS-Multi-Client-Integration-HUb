@@ -102,7 +102,7 @@ function HubMainContent() {
   // Enforce role-based tab routing restrictions
   const userRole = currentUser?.role || 'OPERATOR';
   const allowedTabs = userRole === 'ADMIN'
-    ? ['clients', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'settings', 'gateway', 'mapping']
+    ? ['clients', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'settings', 'gateway', 'mapping', 'companies']
     : ['clients', 'invoices', 'import', 'customers', 'items', 'validation'];
 
   if (!allowedTabs.includes(activeTab)) {

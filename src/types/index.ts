@@ -1,5 +1,18 @@
 export type TenantId = 'tenant_qbo' | 'tenant_excel' | string;
 
+export interface TenantErp {
+  id: string;
+  tenantId: TenantId;
+  platformType: string;
+  erpId: string;
+  displayName?: string | null;
+  config?: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'NEEDS_REAUTH';
+  lastSyncAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Tenant {
   id: TenantId;
   name: string;
@@ -18,6 +31,7 @@ export interface Tenant {
   monthlyUsed: number;
   defaultVatRate: number;
   lastSyncAt: string;
+  tenantErps?: TenantErp[];
 }
 
 export type InvoiceKind = 'B2B' | 'B2C' | 'B2G' | 'EXPORT';
@@ -43,6 +57,7 @@ export interface InvoiceLineItem {
 export interface Invoice {
   id: string;
   tenantId: TenantId;
+  sourceErp?: string | null; // which ERP this invoice originated from (multi-ERP per tenant)
   clientInvoiceNumber: string;
   documentNumber?: string; // spec: distinct, optional sequential document reference
   invoiceType: InvoiceType;

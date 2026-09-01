@@ -1,6 +1,6 @@
 import { useHub } from '../../lib/store';
 import { getErpForTenant, ERP_REGISTRY } from '../../config/erpRegistry';
-import { AlertCircle, Plug, Settings, Layers } from 'lucide-react';
+import { AlertCircle, Plug, Settings, Layers, Building2 } from 'lucide-react';
 import { OverviewTab } from '../OverviewTab';
 import { InvoicesTab } from '../InvoicesTab';
 import { ImportTab } from '../ImportTab';
@@ -10,6 +10,7 @@ import { ValidationErrorsTab } from '../ValidationErrorsTab';
 import { ConnectorsTab } from '../ConnectorsTab';
 import { CittaGatewayTab } from './CittaGatewayTab';
 import { ErpMappingTab } from './ErpMappingTab';
+import { AdminTenantsTab } from '../AdminTenantsTab';
 
 interface Props {
   activeTab: string;
@@ -85,6 +86,7 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
       {activeTab === 'connectors' && <ConnectorsTab />}
       {activeTab === 'mapping' && <ErpMappingTab />}
       {activeTab === 'gateway' && <CittaGatewayTab />}
+      {activeTab === 'companies' && <AdminTenantsTab />}
       {activeTab === 'settings' && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-slate-200 p-6">

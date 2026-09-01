@@ -12,7 +12,7 @@ model Tenant {
   name             String
   companyName      String   @map("company_name")
   tin              String
-  platformType     String   @map("platform_type")
+  platformType     String   @map("platform_type") // legacy primary ERP; use tenantErps for multi-ERP
   marketTier       String   @map("market_tier")
   cittaApiKey      String   @default("sk_live_lNZAJM5WajKYQVBo3atXDNXxM33ijmAt4Xsj7lUz") @map("citta_api_key")
   encryptedSecret  String?  @map("encrypted_secret")
@@ -22,7 +22,7 @@ model Tenant {
   defaultVatRate   Float    @default(7.5) @map("default_vat_rate")
   cittaGatewayUrl  String?  @map("citta_gateway_url")
   cittaWritebackTarget String @default("HUB") @map("citta_writeback_target") // HUB | CITTAEFS | BOTH
-  erpConfig        String?  @map("erp_config") // JSON string per-ERP config & matching rules
+  erpConfig        String?  @map("erp_config") // JSON string per-ERP config & matching rules (legacy single)
   lastSyncAt       DateTime @default(now()) @map("last_sync_at")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
@@ -35,8 +35,28 @@ model Tenant {
   users            User[]
   integrations     Integration[]
   queueJobs        QueueJob[]
+  tenantErps       TenantErp[]
 
   @@map("tenants")
+}
+
+model TenantErp {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  platformType String   @map("platform_type") // e.g. "QuickBooks Online", "Excel & CSV Import", "SAP S/4HANA"
+  erpId        String   @map("erp_id") // e.g. qbo, excel, sap, netsuite
+  displayName  String?  @map("display_name")
+  config       String?  @map("config") // JSON per-ERP config (realmId, sheetName, etc.)
+  status       String   @default("ACTIVE") @map("status") // ACTIVE | INACTIVE | NEEDS_REAUTH
+  lastSyncAt   DateTime? @map("last_sync_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, platformType])
+  @@index([tenantId])
+  @@map("tenant_erps")
 }
 
 model Customer {
@@ -92,6 +112,7 @@ model Item {
 model Invoice {
   id                    String    @id @default(uuid())
   tenantId              String    @map("tenant_id")
+  sourceErp             String?   @map("source_erp") // e.g. qbo, excel, sap — which ERP this invoice was pulled from (multi-ERP)
   clientInvoiceId       String    @map("client_invoice_id")
   documentNumber        String?   @map("document_number")
   invoiceType           String    @default("STANDARD") @map("invoice_type")
