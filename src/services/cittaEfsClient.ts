@@ -501,6 +501,43 @@ export class CittaEfsClient {
   }
 
   /**
+   * Update CittaEFS webhook URL (so gateway knows where to POST invoice.* events)
+   * Webhook URL in prod: https://cittastackhook.azurewebsites.net/pay2/einvoicehookweb
+   * Secret: CF35DF20-9309-4506-BCC8-5D17D1DA209A (HMAC-SHA256)
+   */
+  public async updateWebhookUrl(tenantId: string, webhookUrl: string): Promise<any> {
+    const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/webhook`;
+    const res = await httpsRequest(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${decryptedApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ webhookUrl }),
+    });
+    if (!res.ok) {
+      // Secondary path: some gateways use PUT /api/webhook or /api/einvoice/webhook-url
+      const altUrl = `${gatewayUrl.replace(/\/$/, "")}/api/webhook`;
+      const altRes = await httpsRequest(altUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${decryptedApiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookUrl }),
+      }).catch(() => null);
+      if (!altRes || !altRes.ok) throw new Error(`Failed to update webhook URL (${res.status}): ${res.text.slice(0,200)}`);
+      return altRes.json();
+    }
+    return res.json();
+  }
+
+  public getWebhookConfig(): { webhookUrl: string; secretPreview: string; gatewayUrl: string } {
+    const webhookUrl = process.env.CITTA_WEBHOOK_URL?.trim() || process.env.CITTAEFS_WEBHOOK_URL?.trim() || "https://cittastackhook.azurewebsites.net/pay2/einvoicehookweb";
+    const secret = process.env.CITTAEFS_WEBHOOK_SECRET?.trim() || process.env.CITTA_WEBHOOK_SECRET?.trim() || "CF35DF20-9309-4506-BCC8-5D17D1DA209A";
+    const gatewayUrl = process.env.CITTAEFS_GATEWAY_URL?.trim() || "https://ei-api.azurewebsites.net";
+    return { webhookUrl, secretPreview: secret.slice(0, 8) + "...", gatewayUrl };
+  }
+
+  /**
    * Executes inbound write-back call to Client ERP (QuickBooks, NetSuite, SAP, etc.)
    */
   public async executeClientLedgerWriteback(

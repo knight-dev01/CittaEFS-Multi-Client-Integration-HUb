@@ -580,6 +580,7 @@ async function startServer() {
       p.startsWith("/api/auth/register") ||
       p.startsWith("/api/health") ||
       p.startsWith("/api/webhooks") ||
+      p.startsWith("/pay2/einvoicehookweb") ||
       p.startsWith("/api/events") ||
       p.startsWith("/api/integrations/qbo/callback") ||
       p.startsWith("/api/connectors") ||
@@ -1329,6 +1330,22 @@ async function startServer() {
     }
   });
 
+  app.get("/api/system/webhook-config", async (req: any, res) => {
+    try {
+      const webhookUrl = process.env.CITTA_WEBHOOK_URL?.trim() || process.env.CITTAEFS_WEBHOOK_URL?.trim() || "https://cittastackhook.azurewebsites.net/pay2/einvoicehookweb";
+      const secret = process.env.CITTAEFS_WEBHOOK_SECRET?.trim() || process.env.CITTA_WEBHOOK_SECRET?.trim() || "CF35DF20-9309-4506-BCC8-5D17D1DA209A";
+      const gatewayUrl = process.env.CITTAEFS_GATEWAY_URL?.trim() || "https://ei-api.azurewebsites.net";
+      res.json({
+        webhookUrl,
+        secretPreview: secret.slice(0, 8) + "...",
+        gatewayUrl,
+        events: ["invoice.created", "invoice.signed", "invoice.transmitted", "invoice.payment.updated", "invoice.validation.failed"],
+        hubEndpoints: ["/api/webhooks/cittaefs", "/pay2/einvoicehookweb"],
+        note: "CittaEFS will POST to webhookUrl with X-Webhook-Signature HMAC-SHA256. Hub verifies via CITTAEFS_WEBHOOK_SECRET and updates invoice IRN/QR/status.",
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   app.post("/api/tenants/:id/citta-config/test", async (req: any, res) => {
     try {
       const { cittaGatewayUrl, cittaApiKey } = req.body;
@@ -1964,56 +1981,70 @@ async function startServer() {
   });
 
   // ==========================================
-  // 3. WEBHOOK LISTENERS
+  // 3. WEBHOOK LISTENERS — CittaEFS (webhook URL https://cittastackhook.azurewebsites.net/pay2/einvoicehookweb, secret CF35DF20-9309-4506-BCC8-5D17D1DA209A in prod)
   // ==========================================
-  app.post("/api/webhooks/cittaefs", async (req, res) => {
+  async function handleCittaEfsWebhook(req: any, res: any) {
     try {
-      const signature = req.headers["x-webhook-signature"] as string;
-      if (!signature) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Webhook signature missing" });
-      }
-
+      const signature = (req.headers["x-webhook-signature"] as string) || (req.headers["X-Webhook-Signature"] as string);
       const webhookSecret =
-        process.env.CITTAEFS_WEBHOOK_SECRET || "whsec_771923001";
-      const payloadString = JSON.stringify(req.body);
-      const computedHex = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(payloadString)
-        .digest("hex");
-      const computedBase64 = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(payloadString)
-        .digest("base64");
-
-      if (signature !== computedHex && signature !== computedBase64) {
-        console.warn(
-          `[Webhook Warning] Invalid signature. Received: ${signature}`,
-        );
-        return res
-          .status(401)
-          .json({ success: false, error: "Invalid webhook signature" });
+        process.env.CITTAEFS_WEBHOOK_SECRET || process.env.CITTA_WEBHOOK_SECRET || "CF35DF20-9309-4506-BCC8-5D17D1DA209A";
+      // Use rawBody for HMAC (exact bytes CittaEFS signed), secondary to JSON.stringify
+      const raw = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(req.body);
+      const payloadString = raw;
+      const hmacHex = crypto.createHmac("sha256", webhookSecret).update(payloadString).digest("hex");
+      const hmacB64 = crypto.createHmac("sha256", webhookSecret).update(payloadString).digest("base64");
+      const expectedHex = `sha256=${hmacHex}`;
+      const expectedB64 = `sha256=${hmacB64}`;
+      const isValid = signature === hmacHex || signature === hmacB64 || signature === expectedHex || signature === expectedB64;
+      if (!signature) {
+        return res.status(401).json({ success: false, error: "Webhook signature missing" });
       }
+      if (!isValid) {
+        logger.warn(`[Webhook] Invalid signature`, { received: signature?.slice(0,20), expectedB64: expectedB64.slice(0,20) }, { requestId: (req as any).requestId });
+        // In production, still verify strict; allow through in dev for testing
+        if (process.env.NODE_ENV === "production") {
+          return res.status(401).json({ success: false, error: "Invalid webhook signature" });
+        }
+        logger.warn(`[Webhook] Dev mode — accepting despite invalid signature`);
+      }
+      logger.info(`[Webhook] CittaEFS event received`, { event: req.body?.event || req.body?.eventType, invoiceNumber: req.body?.data?.invoiceNumber || req.body?.invoiceNumber, irn: req.body?.data?.irn || req.body?.irn }, { requestId: (req as any).requestId });
 
-      const { event, irn, clientInvoiceNumber, status } = req.body;
+      const event = req.body?.event || req.body?.eventType || req.body?.data?.eventType;
+      const data = req.body?.data || req.body;
+      const invoiceNumber = data?.invoiceNumber || req.body?.invoiceNumber || req.body?.clientInvoiceNumber;
+      const irn = data?.irn || req.body?.irn;
+      const status = data?.status || req.body?.status;
+      const qrCode = data?.qrCode || data?.qr_code;
+      const paymentStatus = data?.paymentStatus || data?.payment_status;
+      const paymentReference = data?.paymentReference || data?.payment_reference;
+      const errorMessage = data?.errorMessage || req.body?.errorMessage;
+      const transmittedAt = data?.transmittedAt || data?.signedAt;
+
       const inv = await prisma.invoice.findFirst({
         where: {
           OR: [
             irn ? { irn } : {},
-            clientInvoiceNumber ? { clientInvoiceId: clientInvoiceNumber } : {},
+            invoiceNumber ? { clientInvoiceId: invoiceNumber } : {},
           ],
         },
       });
 
       if (inv) {
-        await prisma.invoice.update({
-          where: { id: inv.id },
-          data: {
-            status: status || inv.status,
-            ledgerWritebackStatus: "SYNCED",
-          },
-        });
+        const updateData: any = {};
+        // Map CittaEFS webhook events to hub status
+        if (event === 'invoice.signed' || status === 'SIGNED') { updateData.status = 'APPROVED'; if (irn) updateData.irn = irn; if (qrCode) updateData.qrCodeUrl = `data:image/png;base64,${qrCode}`; if (transmittedAt) updateData.updatedAt = new Date(transmittedAt); }
+        else if (event === 'invoice.transmitted' || status === 'TRANSMITTED') { updateData.status = 'APPROVED'; if (irn) updateData.irn = irn; if (qrCode) updateData.qrCodeUrl = `data:image/png;base64,${qrCode}`; updateData.ledgerWritebackStatus = 'SYNCED'; }
+        else if (event === 'invoice.validation.failed' || status === 'REJECTED' || errorMessage) { updateData.status = 'REJECTED'; }
+        else if (event === 'invoice.payment.updated' || paymentStatus) { // payment update does not change invoice status, store in audit
+          logger.info(`[Webhook] Payment update`, { invoiceNumber, irn, paymentStatus, paymentReference }, { requestId: (req as any).requestId });
+        }
+        else if (status) { updateData.status = status; }
+        if (irn && !updateData.irn) updateData.irn = irn;
+        if (qrCode && !updateData.qrCodeUrl) updateData.qrCodeUrl = qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`;
+        if (Object.keys(updateData).length) {
+          if (updateData.status) updateData.ledgerWritebackStatus = 'SYNCED';
+          await prisma.invoice.update({ where: { id: inv.id }, data: updateData });
+        }
 
         await safeAuditLogCreate(prisma, {
           tenantId: inv.tenantId,
@@ -2029,9 +2060,13 @@ async function startServer() {
 
       res.json({ status: "ACCEPTED", eventProcessed: true });
     } catch (e: any) {
+      logger.error(`[Webhook] CittaEFS handler error`, { error: e.message }, { requestId: (req as any).requestId });
       res.status(500).json({ error: e.message });
     }
-  });
+  }
+  app.post("/api/webhooks/cittaefs", handleCittaEfsWebhook);
+  app.post("/pay2/einvoicehookweb", handleCittaEfsWebhook);
+  // Alias for Render's cittastackhook webhook URL host (if hub is mounted behind that domain)
 
   // QuickBooks Online HMAC-SHA256 Signed Webhook Endpoint
   app.post("/api/webhooks/qbo", async (req, res) => {
