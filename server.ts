@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 import { WebSocketServer, WebSocket } from "ws";
 
 import { getDatabaseUrl } from "./src/config/dbConfig.ts";
+import { logger, sanitizeHeaders, sanitizeBody } from "./src/lib/logger.ts";
 
 process.env.DATABASE_URL = getDatabaseUrl(false);
 const prisma = new PrismaClient();
@@ -394,6 +395,37 @@ async function startServer() {
     if (process.env.NODE_ENV === "production") {
       res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
+    next();
+  });
+
+  // Comprehensive request logging — every detail for anomaly detection
+  app.use((req: any, res, next) => {
+    const start = Date.now();
+    const reqId = crypto.randomUUID().slice(0, 8);
+    req.requestId = reqId;
+    const tenantHint = (req.query.tenantId as string) || req.headers['x-tenant-id'] as string || '';
+    // Log inbound
+    logger.info(`→ ${req.method} ${req.originalUrl}`, {
+      ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+      query: req.query,
+      body: sanitizeBody(req.body),
+      headers: sanitizeHeaders(req.headers as any),
+    }, { tenantId: tenantHint || undefined, requestId: reqId });
+    // Log on finish
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const status = res.statusCode;
+      const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'INFO';
+      const payload: any = { status, duration, tenantId: (req as any).tenantId || tenantHint || undefined };
+      if (level === 'ERROR') logger.error(`← ${req.method} ${req.originalUrl} ${status} ${duration}ms`, payload, { tenantId: payload.tenantId, requestId: reqId });
+      else if (level === 'WARN') logger.warn(`← ${req.method} ${req.originalUrl} ${status} ${duration}ms`, payload, { tenantId: payload.tenantId, requestId: reqId });
+      else logger.info(`← ${req.method} ${req.originalUrl} ${status} ${duration}ms`, payload, { tenantId: payload.tenantId, requestId: reqId });
+      if (status >= 400) {
+        logger.anomaly(`Anomaly ${req.method} ${req.originalUrl} → ${status}`, {
+          status, duration, query: req.query, body: sanitizeBody(req.body), tenantId: payload.tenantId,
+        }, { tenantId: payload.tenantId, requestId: reqId });
+      }
+    });
     next();
   });
 

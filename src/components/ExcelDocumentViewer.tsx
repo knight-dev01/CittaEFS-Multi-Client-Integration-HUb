@@ -445,6 +445,75 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     setStatusMsg({ text: `Exported normalized spreadsheet data as .${format} workbook!`, type: 'success' });
   };
 
+  // EFS Template export — matches EFS Template.xlsx (Invoices/Customer/Product sheets)
+  const handleExportEFSTemplate = () => {
+    if (rows.length === 0) {
+      setStatusMsg({ text: 'Add or upload rows before exporting EFS Template.', type: 'error' });
+      return;
+    }
+    // Group rows by invoice for linenumber
+    const groups = new Map<string, typeof rows>();
+    rows.forEach(r => {
+      const arr = groups.get(r.clientInvoiceNumber) || [];
+      arr.push(r);
+      groups.set(r.clientInvoiceNumber, arr);
+    });
+
+    // Invoices sheet — EFS Template headers
+    const invoicesHeader = ["DocumentNumber","Customercode","Invoice number","Issuedate","HeaderCharges","HeaderDiscount","InvoiceTypeCode","Linenumber","itemcode","Price","Quantity","taxableamount","taxamount","LineDiscount","User defined1","User defined2","User defined3","User defined4","User defined5","User defined6","User defined7","User defined8","User defined9","User defined10"];
+    const invoicesRows: any[][] = [invoicesHeader];
+    groups.forEach((groupRows) => {
+      groupRows.forEach((r, idx) => {
+        const taxable = r.quantity * r.unitPrice;
+        const tax = taxable * (r.vatRate / 100);
+        invoicesRows.push([
+          r.clientInvoiceNumber, // DocumentNumber
+          r.customerCode, // Customercode
+          r.clientInvoiceNumber, // Invoice number
+          r.issueDate, // Issuedate
+          0, // HeaderCharges
+          0, // HeaderDiscount
+          r.invoiceKind === 'B2C' ? '388' : '388', // InvoiceTypeCode (STANDARD)
+          idx + 1, // Linenumber
+          r.itemCode, // itemcode
+          r.unitPrice, // Price
+          r.quantity, // Quantity
+          Number(taxable.toFixed(2)), // taxableamount
+          Number(tax.toFixed(2)), // taxamount
+          0, // LineDiscount
+          "", "", "", "", "", "", "", "", "", "" // User defined1-10
+        ]);
+      });
+    });
+
+    // Customer sheet — unique customers
+    const customerHeader = ["CustomerCode","Name ","TIN ","Email ","CCEmail (optional) (seperate with ;)", "StreetName ","CityName "," Country"];
+    const customerMap = new Map<string, any>();
+    rows.forEach(r => {
+      if (!customerMap.has(r.customerCode)) {
+        customerMap.set(r.customerCode, [r.customerCode, r.customerName, r.customerTin, `billing@${r.customerCode.toLowerCase().replace(/[^a-z0-9]/g,'')}.com`, "", "Commercial Business Park", "Lagos", "NG"]);
+      }
+    });
+    const customerRows: any[][] = [customerHeader, ...Array.from(customerMap.values())];
+
+    // Product sheet — unique items
+    const productHeader = ["ItemCode","ItemName","ItemDescription","UnitCode","HsorServiceCode","price","TaxCategory"];
+    const productMap = new Map<string, any>();
+    rows.forEach(r => {
+      if (!productMap.has(r.itemCode)) {
+        productMap.set(r.itemCode, [r.itemCode, r.description, r.description, "EA", r.hsOrServiceCode, r.unitPrice, r.vatRate === 0 ? "EXEMPT" : "STANDARD_VAT"]);
+      }
+    });
+    const productRows: any[][] = [productHeader, ...Array.from(productMap.values())];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(invoicesRows), 'Invoices');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(customerRows), 'Customer');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(productRows), 'Product');
+    XLSX.writeFile(wb, `EFS_Template_${activeTenant?.name?.replace(/[^A-Za-z0-9]/g,'_') || 'Export'}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    setStatusMsg({ text: `Exported EFS Template (Invoices ${invoicesRows.length-1} lines, ${customerMap.size} customers, ${productMap.size} products) — matches EFS Template.xlsx`, type: 'success' });
+  };
+
   // Build preview before gateway send
   const handleTransmitInvoices = async () => {
     if (rows.length === 0) {
@@ -634,13 +703,22 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleAddRow}
               className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg border border-slate-200 cursor-pointer flex items-center gap-1.5 transition-all"
             >
               <Plus className="w-3.5 h-3.5 text-indigo-600" />
               <span>Add Row</span>
+            </button>
+
+            <button
+              onClick={handleExportEFSTemplate}
+              className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg border border-violet-700 cursor-pointer flex items-center gap-1.5 transition-all"
+              title="Export 3-sheet EFS Template (Invoices/Customer/Product) matching EFS Template.xlsx"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Export EFS Template</span>
             </button>
 
             <button
