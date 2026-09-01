@@ -707,7 +707,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         const res = await fetchWithAuth('/api/system/purge-demo-data', { method: 'POST' });
         const data = await parseJsonResponse(res);
         await refreshAll();
-        toastGlobal('success', 'Demo data purged', `${data?.deletedInvoices ?? ''} invoices cleared`);
+        toastGlobal('success', 'Staging purge complete', `${data?.deletedInvoices ?? ''} invoices cleared`);
         return data;
       } catch (e: any) {
         console.error('Purge test data error:', e);
