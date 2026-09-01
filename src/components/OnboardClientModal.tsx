@@ -53,7 +53,7 @@ function validateTin(value: string): string | null {
 }
 
 export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
-  const { onboardTenant, updateTenant, refreshAll } = useHub();
+  const { onboardTenant, updateTenant, refreshAll, addTenantErp } = useHub() as any;
 
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -243,6 +243,9 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
           platformType,
           marketTier
         });
+        // Company first — then attach initial ERP (so ERPs live under the company, as in Admin → Companies & ERPs)
+        try { await addTenantErp(newTenant.id, platformType, platformType); } catch (e:any) { if (!String(e.message || '').toLowerCase().includes('already')) console.warn('addTenantErp:', e.message); }
+        try { await refreshAll(); } catch {}
         setTenant(newTenant);
       }
       setIsSubmitting(false);
@@ -350,50 +353,8 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
               <div />
             </div>
 
-            <div>
-              <label className="block font-medium text-slate-700 mb-2">Ingestion Channel *</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPlatformType('QuickBooks Online')}
-                  className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
-                    platformType === 'QuickBooks Online'
-                      ? 'bg-indigo-50/60 border-indigo-600 ring-2 ring-indigo-500/20'
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-500" />
-                    QuickBooks Online
-                  </span>
-                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                    OAuth 2.0 connection. You'll authorize access and we'll pull the historical invoice, customer, and item data automatically.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPlatformType('Excel & CSV Import')}
-                  className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
-                    platformType === 'Excel & CSV Import'
-                      ? 'bg-indigo-50/60 border-indigo-600 ring-2 ring-indigo-500/20'
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    Excel & CSV Import
-                  </span>
-                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                    Upload an .xlsx/.csv spreadsheet next. You'll review and normalize it against Master Data before it's submitted.
-                  </p>
-                </button>
-              </div>
-              {tenant && (
-                <p className="text-slate-400 text-[11px] mt-2">
-                  Changing these will update the client record you already created.
-                </p>
-              )}
+            <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg text-[11px] text-violet-800">
+              Company will be created first — you’ll configure ERPs on the next step. Existing multi-ERP setup (“Companies & ERPs” admin) remains unchanged.
             </div>
 
             <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-1">
@@ -438,6 +399,31 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
                 <span className="text-slate-500 font-medium text-[11px] block">Client Entity</span>
                 <span className="font-bold text-slate-900">{tenant?.name}</span>
               </div>
+            </div>
+            {/* Company first, then ERPs — selector lives in step 2 (not step 1) */}
+            <div className="p-3 bg-white rounded-xl border border-slate-200">
+              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(['QuickBooks Online','Excel & CSV Import'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={async () => {
+                      if (opt === platformType) return;
+                      setPlatformType(opt);
+                      if (tenant?.id) {
+                        try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
+                        await refreshAll();
+                      }
+                    }}
+                    className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">You can add more ERPs later in Admin → Companies & ERPs. Each ERP keeps isolated config & pull.</p>
             </div>
 
             {qboState === 'idle' && (
@@ -520,6 +506,29 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
           </div>
         ) : (
           <div className="space-y-4">
+            <div className="p-3 bg-white rounded-xl border border-slate-200">
+              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(['QuickBooks Online','Excel & CSV Import'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={async () => {
+                      if (opt === platformType) return;
+                      setPlatformType(opt);
+                      if (tenant?.id) {
+                        try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
+                        await refreshAll();
+                      }
+                    }}
+                    className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <ExcelDocumentViewer tenantId={tenant?.id} startEmpty />
             <div className="pt-1 flex justify-between items-center">
               <button

@@ -446,10 +446,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           )}
         </div>
       </aside>
-      {/* Collapsed overlay to close when clicking outside — desktop */}
-      {isCollapsed && (
-        <button onClick={toggleCollapsed} className="hidden lg:block fixed inset-0 z-10 bg-transparent cursor-pointer" aria-label="Expand sidebar" />
-      )}
+      {/* Sidebar is now independent — no full-screen overlay; main area clicks no longer toggle sidebar */}
+
     </>
   );
 }
