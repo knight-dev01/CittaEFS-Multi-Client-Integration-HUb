@@ -1576,13 +1576,33 @@ async function startServer() {
           where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber },
           include: { lineItems: true },
         });
-        // Idempotency: if invoice already exists and not cancelled/rejected, return existing (200) instead of 409
+        // Idempotency: if invoice already exists and not cancelled/rejected, return existing (200) — re-queue if stuck in DLQ / hub-only
         if (duplicate && !["CANCELLED", "REJECTED"].includes(duplicate.status)) {
           const existingFmt = formatInvoice(duplicate);
+          // If PENDING and queue is DLQ or missing, re-queue to forward Hub → CittaEFS
+          if (duplicate.status === 'PENDING_NRS_STAMP' || (duplicate.status as any) === 'PENDING' || duplicate.status === 'QUEUED') {
+            try {
+              const qRow = await prisma.queueJob.findFirst({ where: { tenantId: tenant.id, payload: { contains: duplicate.id } }, orderBy: { createdAt: 'desc' } });
+              const isStuck = !qRow || qRow.status === 'DLQ' || (qRow.status === 'FAILED') || (Date.now() - new Date(qRow.nextAttemptAt || qRow.updatedAt).getTime() > 120000 && qRow.status !== 'QUEUED');
+              if (isStuck) {
+                try {
+                  const v = invoiceIngestionSchema.parse({
+                    tenantId: tenant.id, clientInvoiceNumber: duplicate.clientInvoiceId, documentNumber: duplicate.documentNumber || undefined,
+                    invoiceType: duplicate.invoiceType as any, invoiceKind: duplicate.invoiceKind as any,
+                    issueDate: duplicate.issueDate.toISOString().substring(0,10),
+                    customerCode: duplicate.customerCode, customerName: duplicate.customerName, customerTin: duplicate.customerTin || undefined,
+                    lineItems: duplicate.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                  });
+                  await invoiceQueue.add("signInvoice", { ...v, dbInvoiceId: duplicate.id }, { idempotencyKey: `${tenant.id}:${duplicate.clientInvoiceId}:retry` });
+                  return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `Invoice "${clientInvoiceNumber}" was stuck in Hub (status ${duplicate.status}) — re-queued to CittaEFS`, cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true, requeued: true } });
+                } catch (rqErr) { console.warn('[Idempotent requeue failed]', (rqErr as any)?.message); }
+              }
+            } catch {}
+          }
           return res.status(200).json({
             success: true,
             idempotent: true,
-            message: `Invoice "${clientInvoiceNumber}" already queued (status ${duplicate.status}) — idempotent`,
+            message: `Invoice "${clientInvoiceNumber}" already queued (status ${duplicate.status}) — idempotent. Check Staging (Hub) or CittaEFS for IRN.`,
             cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true },
           });
         }
@@ -1823,6 +1843,26 @@ async function startServer() {
         if (clientInvoiceNumber) {
           const dup = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber }, include: { lineItems: true } });
           if (dup && !["CANCELLED", "REJECTED"].includes(dup.status)) {
+            // If pending but stuck in Hub (DLQ), re-queue
+            if (dup.status === 'PENDING_NRS_STAMP' || (dup.status as any) === 'PENDING') {
+              try {
+                const qRow = await prisma.queueJob.findFirst({ where: { tenantId: tenant.id, payload: { contains: dup.id } }, orderBy: { createdAt: 'desc' } });
+                if (!qRow || qRow.status === 'DLQ' || qRow.status === 'FAILED') {
+                  try {
+                    const vBulk = invoiceIngestionSchema.parse({
+                      tenantId: tenant.id, clientInvoiceNumber: dup.clientInvoiceId, documentNumber: dup.documentNumber || undefined,
+                      invoiceType: dup.invoiceType as any, invoiceKind: dup.invoiceKind as any,
+                      issueDate: dup.issueDate.toISOString().substring(0,10),
+                      customerCode: dup.customerCode, customerName: dup.customerName, customerTin: dup.customerTin || undefined,
+                      lineItems: dup.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                    });
+                    await invoiceQueue.add("signInvoice", { ...vBulk, dbInvoiceId: dup.id }, { idempotencyKey: `${tenant.id}:${dup.clientInvoiceId}:retry` });
+                    results.push({ clientInvoiceNumber, success: true, idempotent: true, requeued: true, invoice: formatInvoice(dup), message: `Was stuck in Hub — re-queued to CittaEFS` });
+                    continue;
+                  } catch {}
+                }
+              } catch {}
+            }
             results.push({ clientInvoiceNumber, success: true, idempotent: true, invoice: formatInvoice(dup), message: `Already queued (status ${dup.status}) — idempotent` });
             continue;
           }

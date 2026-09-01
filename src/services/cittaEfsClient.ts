@@ -61,7 +61,7 @@ async function getCittaEfsConfig(tenantId: string): Promise<{ apiKey: string; ga
   // 1. Global env key wins — single key for all tenants (user requirement)
   const globalKey = getGlobalApiKey();
   const gatewayUrl = getGlobalGatewayBaseUrl(tenant?.cittaGatewayUrl);
-  const writebackTarget = tenant?.cittaWritebackTarget || "HUB";
+  const writebackTarget = tenant?.cittaWritebackTarget || "BOTH";
 
   if (globalKey) {
     return { apiKey: globalKey, gatewayUrl, writebackTarget };
@@ -547,8 +547,8 @@ export class CittaEfsClient {
     qrCodeUrl: string,
   ): Promise<{ synced: boolean; message: string }> {
     const prisma = await getPrisma();
-    // Respect per-tenant writeback target (HUB | CITTAEFS | BOTH)
-    let writebackTarget = "HUB";
+    // Respect per-tenant writeback target (HUB | CITTAEFS | BOTH) — default BOTH forwards Hub → CittaEFS
+    let writebackTarget = "BOTH";
     let cittaWritebackUrl: string | null = null;
     try {
       const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { cittaWritebackTarget: true, erpConfig: true, cittaGatewayUrl: true } });

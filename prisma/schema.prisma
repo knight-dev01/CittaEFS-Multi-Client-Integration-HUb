@@ -21,7 +21,7 @@ model Tenant {
   monthlyUsed      Int      @default(0) @map("monthly_used")
   defaultVatRate   Float    @default(7.5) @map("default_vat_rate")
   cittaGatewayUrl  String?  @map("citta_gateway_url")
-  cittaWritebackTarget String @default("HUB") @map("citta_writeback_target") // HUB | CITTAEFS | BOTH
+  cittaWritebackTarget String @default("BOTH") @map("citta_writeback_target") // HUB | CITTAEFS | BOTH — default BOTH so Hub invoices forward to CittaEFS
   erpConfig        String?  @map("erp_config") // JSON string per-ERP config & matching rules (legacy single)
   lastSyncAt       DateTime @default(now()) @map("last_sync_at")
   createdAt        DateTime @default(now()) @map("created_at")

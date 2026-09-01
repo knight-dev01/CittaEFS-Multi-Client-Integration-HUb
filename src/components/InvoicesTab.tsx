@@ -229,37 +229,56 @@ export function InvoicesTab() {
           );
         })()}
 
-        {/* Staging Area — minimal, uses invoice status as source of truth */}
+        {/* Staging Area — shows hub→CittaEFS forwarding status */}
         {(() => {
           const stagingPending = tenantInvoices.filter((inv:any) => inv.status === 'PENDING_NRS_STAMP' || inv.status === 'PENDING' || inv.status === 'QUEUED').length;
           const stagingApproved = tenantInvoices.filter((inv:any) => inv.status === 'APPROVED' || inv.status === 'SIGNED').length;
           const stagingFailed = tenantInvoices.filter((inv:any) => inv.status === 'REJECTED' || inv.status === 'FAILED').length;
           const totalStaging = tenantInvoices.length;
           const isFilteringStaging = statusFilter === 'PENDING_NRS_STAMP';
+          const gw = (activeTenant as any)?.cittaGatewayUrl || 'https://ei-api.azurewebsites.net';
+          const hasKey = !!(activeTenant as any)?.cittaApiKey || !!((activeTenant as any)?.tenantErps?.length);
+          const writeback = (activeTenant as any)?.cittaWritebackTarget || 'HUB';
+          const gatewayOk = hasKey && !!gw;
           return (
-            <div className="mx-5 mt-4 p-4 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-indigo-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-6 flex-wrap">
+            <div className="mx-5 mt-4 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-indigo-50 overflow-hidden">
+              <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${stagingPending>0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                    <span className="text-xs font-bold text-slate-800">Staging</span>
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold">{stagingPending} pending</span>
+                  </div>
+                  <div className="h-4 w-px bg-violet-200 hidden sm:block" />
+                  <div className="flex items-center gap-3 text-[11px] font-medium">
+                    <span className="text-slate-600">Total <strong className="text-slate-900">{totalStaging}</strong></span>
+                    <span className="text-emerald-700">✓ {stagingApproved} stamped</span>
+                    {stagingFailed>0 && <span className="text-rose-700">✗ {stagingFailed} failed</span>}
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span className="text-xs font-bold text-slate-800">Staging</span>
-                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold">{stagingPending} pending</span>
+                  <span className="text-[11px] text-slate-500 hidden sm:inline">{isBulkSending || sendingId ? 'Queuing…' : gatewayOk ? 'Hub → CittaEFS' : 'Hub only — no gateway'}</span>
+                  <button
+                    onClick={() => setStatusFilter(isFilteringStaging ? 'ALL' : 'PENDING_NRS_STAMP')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${isFilteringStaging ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50'}`}
+                  >
+                    {isFilteringStaging ? 'Show all' : `View staging (${stagingPending})`}
+                  </button>
                 </div>
-                <div className="h-4 w-px bg-violet-200 hidden sm:block" />
-                <div className="flex items-center gap-3 text-[11px] font-medium">
-                  <span className="text-slate-600">Total <strong className="text-slate-900">{totalStaging}</strong></span>
-                  <span className="text-emerald-700">✓ {stagingApproved} stamped</span>
-                  {stagingFailed>0 && <span className="text-rose-700">✗ {stagingFailed} failed</span>}
-                </div>
-                <span className="text-[11px] text-slate-500 hidden lg:inline">Idempotent — resending a queued invoice shows “Already queued — staging”</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-500 hidden sm:inline">{isBulkSending || sendingId ? 'Queuing…' : 'Live via WS'}</span>
-                <button
-                  onClick={() => setStatusFilter(isFilteringStaging ? 'ALL' : 'PENDING_NRS_STAMP')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${isFilteringStaging ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50'}`}
-                >
-                  {isFilteringStaging ? 'Show all' : `View staging (${stagingPending})`}
-                </button>
+              <div className="px-4 py-2 bg-white/60 border-t border-violet-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+                <div className="flex items-center gap-3 flex-wrap font-mono">
+                  <span className={gatewayOk ? 'text-emerald-700' : 'text-amber-700'}>Gateway: {gw.replace(/^https?:\/\//,'')}</span>
+                  <span className="text-slate-400">•</span>
+                  <span className={hasKey ? 'text-emerald-700' : 'text-rose-700'}>Key: {hasKey ? 'set' : 'missing'}</span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-600">Writeback: <strong className={writeback==='BOTH'?'text-violet-700': writeback==='CITTAEFS'?'text-emerald-700':'text-amber-700'}>{writeback}</strong> {writeback==='HUB' && '(stays in Hub)'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!gatewayOk && <span className="text-rose-700 font-semibold">Configure in Admin → Citta Gateway</span>}
+                  {writeback==='HUB' && <span className="text-amber-700 font-medium">BOTH forwards to CittaEFS + writes back</span>}
+                  {stagingPending>0 && !gatewayOk && <span className="text-slate-500">Pending will stay in Hub until gateway is set</span>}
+                </div>
               </div>
             </div>
           );
