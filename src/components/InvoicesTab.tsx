@@ -31,6 +31,7 @@ export function InvoicesTab() {
   const [qrModalInvoice, setQrModalInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const tenantInvoices = invoices.filter(inv => inv.tenantId === activeTenant.id);
 
@@ -333,7 +334,7 @@ export function InvoicesTab() {
                         <div className="flex items-center justify-end gap-1.5">
                           {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && (
                             <button
-                              onClick={() => setEditingInvoice(JSON.parse(JSON.stringify(inv)))}
+                              onClick={() => { setEditError(null); setEditingInvoice(JSON.parse(JSON.stringify(inv))); }}
                               className="p-1.5 bg-white hover:bg-violet-50 text-slate-500 hover:text-violet-600 border border-slate-200 hover:border-violet-200 rounded-lg cursor-pointer"
                               title="Edit invoice"
                             >
@@ -442,33 +443,40 @@ export function InvoicesTab() {
 
       {/* Edit Invoice Overlay */}
       {editingInvoice && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditingInvoice(null)}>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setEditError(null); setEditingInvoice(null); }}>
           <div className="bg-white w-full max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-violet-50">
               <h4 className="text-sm font-bold text-violet-900 flex items-center gap-2"><Pencil className="w-4 h-4 text-violet-600" /> Edit Invoice {editingInvoice.clientInvoiceNumber}</h4>
-              <button onClick={() => setEditingInvoice(null)} className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-slate-700 border border-transparent hover:border-slate-200 cursor-pointer"><XCircle className="w-4 h-4" /></button>
+              <button onClick={() => { setEditError(null); setEditingInvoice(null); }} className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-slate-700 border border-transparent hover:border-slate-200 cursor-pointer"><XCircle className="w-4 h-4" /></button>
             </div>
             <div className="overflow-y-auto p-6 space-y-4">
+              {editError && (
+                <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="flex-1">{editError}</span>
+                  <button onClick={()=>setEditError(null)} className="text-rose-600 hover:text-rose-800 font-semibold cursor-pointer">Dismiss</button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Invoice # *</label>
-                  <input value={editingInvoice.clientInvoiceNumber} onChange={e=>setEditingInvoice({...editingInvoice, clientInvoiceNumber: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <input value={editingInvoice.clientInvoiceNumber} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, clientInvoiceNumber: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Issue Date *</label>
-                  <input type="date" value={editingInvoice.issueDate ? new Date(editingInvoice.issueDate).toISOString().slice(0,10) : ''} onChange={e=>setEditingInvoice({...editingInvoice, issueDate: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <input type="date" value={editingInvoice.issueDate ? new Date(editingInvoice.issueDate).toISOString().slice(0,10) : ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, issueDate: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Name *</label>
-                  <input value={editingInvoice.customerName} onChange={e=>setEditingInvoice({...editingInvoice, customerName: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <input value={editingInvoice.customerName} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerName: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer TIN {editingInvoice.invoiceKind==='B2B' || editingInvoice.invoiceKind==='B2G' ? '*' : '(B2C optional)'}</label>
-                  <input value={editingInvoice.customerTin || ''} onChange={e=>setEditingInvoice({...editingInvoice, customerTin: e.target.value})} placeholder="P051123456Z" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <input value={editingInvoice.customerTin || ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerTin: e.target.value}); }} placeholder="P051123456Z" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Code</label>
-                  <input value={editingInvoice.customerCode} onChange={e=>setEditingInvoice({...editingInvoice, customerCode: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <input value={editingInvoice.customerCode} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerCode: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
                 </div>
               </div>
               <div>
@@ -477,32 +485,34 @@ export function InvoicesTab() {
                   {(editingInvoice.lineItems || []).map((li:any, idx:number)=>(
                     <div key={idx} className="grid grid-cols-12 gap-2 bg-white p-2 rounded-lg border border-slate-200">
                       <div className="col-span-3">
-                        <input value={li.itemCode} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].itemCode=e.target.value; setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="SKU" className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono" />
+                        <input value={li.itemCode} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, itemCode:e.target.value} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="SKU" className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono" />
                       </div>
                       <div className="col-span-4">
-                        <input value={li.description} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].description=e.target.value; setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Description" className="w-full px-2 py-1 border border-slate-200 rounded text-xs" />
+                        <input value={li.description} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, description:e.target.value} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Description" className="w-full px-2 py-1 border border-slate-200 rounded text-xs" />
                       </div>
                       <div className="col-span-2">
-                        <input type="number" value={li.quantity} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].quantity=Number(e.target.value); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Qty" className="w-full px-2 py-1 border border-slate-200 rounded text-xs text-right" />
+                        <input type="number" value={li.quantity} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, quantity: e.target.value==='' ? 0 : Number(e.target.value)} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Qty" className="w-full px-2 py-1 border border-slate-200 rounded text-xs text-right" />
                       </div>
                       <div className="col-span-2">
-                        <input type="number" value={li.unitPrice} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].unitPrice=Number(e.target.value); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Price" className="w-full px-2 py-1 border border-slate-200 rounded text-xs text-right" />
+                        <input type="number" value={li.unitPrice} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, unitPrice: e.target.value==='' ? 0 : Number(e.target.value)} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Price" className="w-full px-2 py-1 border border-slate-200 rounded text-xs text-right" />
                       </div>
                       <div className="col-span-1">
-                        <input value={li.hsOrServiceCode} onChange={e=>{ const n=[...editingInvoice.lineItems]; n[idx].hsOrServiceCode=e.target.value; setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="HS" className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono" />
+                        <input value={li.hsOrServiceCode} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, hsOrServiceCode:e.target.value} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="HS" className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono" />
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <button onClick={()=>setEditingInvoice(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Cancel</button>
+                <button onClick={()=>{ setEditError(null); setEditingInvoice(null); }} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Cancel</button>
                 <button
                   onClick={async ()=>{
                     const errs = getInvoiceErrors(editingInvoice);
-                    if (errs.length>0) { setBulkMsg({type:'error', text: `Fix highlighted: ${errs.join('; ')}`}); return; }
+                    if (errs.length>0) { setEditError(`Fix: ${errs.join('; ')}`); return; }
+                    setEditError(null);
                     setEditSaving(true);
                     try {
+                      console.log('[Edit] Saving invoice', editingInvoice.id, editingInvoice.clientInvoiceNumber);
                       await updateInvoice(editingInvoice.id, {
                         clientInvoiceNumber: editingInvoice.clientInvoiceNumber,
                         issueDate: editingInvoice.issueDate,
@@ -513,7 +523,11 @@ export function InvoicesTab() {
                       });
                       setBulkMsg({type:'success', text:`Invoice ${editingInvoice.clientInvoiceNumber} updated.`});
                       setEditingInvoice(null);
-                    } catch(e:any){ setBulkMsg({type:'error', text: e.message}); }
+                      setEditError(null);
+                    } catch(e:any){
+                      console.error('[Edit] Save failed:', e);
+                      setEditError(e.message || 'Save failed — check console');
+                    }
                     finally { setEditSaving(false); }
                   }}
                   disabled={editSaving}

@@ -1486,25 +1486,31 @@ async function startServer() {
         const dup = await prisma.invoice.findFirst({ where: { tenantId: existing.tenantId, clientInvoiceId: clientInvoiceNumber } });
         if (dup) return res.status(409).json({ success: false, error: `Duplicate invoice number ${clientInvoiceNumber}` });
       }
-      // If lineItems provided, recompute totals
+      // Build scalar updates
       let data: any = {};
-      if (clientInvoiceNumber) data.clientInvoiceId = clientInvoiceNumber;
-      if (issueDate) data.issueDate = new Date(issueDate);
-      if (customerCode) data.customerCode = customerCode;
-      if (customerName) data.customerName = customerName;
-      if (customerTin !== undefined) data.customerTin = customerTin || null;
+      if (clientInvoiceNumber) data.clientInvoiceId = String(clientInvoiceNumber).trim();
+      if (issueDate) {
+        const parsed = new Date(issueDate);
+        if (isNaN(parsed.getTime())) return res.status(400).json({ success: false, error: "Invalid issueDate" });
+        data.issueDate = parsed;
+      }
+      if (customerCode) data.customerCode = String(customerCode).trim();
+      if (customerName) data.customerName = String(customerName).trim();
+      if (customerTin !== undefined) data.customerTin = customerTin ? String(customerTin).trim() : null;
       if (invoiceKind) data.invoiceKind = invoiceKind;
       if (invoiceType) data.invoiceType = invoiceType;
+
+      let updated: any;
       if (lineItems && Array.isArray(lineItems) && lineItems.length>0) {
         // Recompute totals from new line items
         const tenant = await prisma.tenant.findUnique({ where: { id: existing.tenantId } });
         const tenantItems = await prisma.item.findMany({ where: { tenantId: existing.tenantId } });
         const processed = lineItems.map((li:any) => {
           const mapping = tenantItems.find(m=>m.clientSku===li.itemCode);
-          const hs = li.hsOrServiceCode || mapping?.hsOrServiceCode || "UNMAPPED";
-          const qty = Number(li.quantity||1);
+          const hs = (li.hsOrServiceCode && String(li.hsOrServiceCode).trim()) || mapping?.hsOrServiceCode || "UNMAPPED";
+          const qty = Number(li.quantity||0) || 1;
           const price = Number(li.unitPrice||0);
-          const vatRate = li.vatRate!==undefined ? Number(li.vatRate) : Number(mapping?.defaultVatRate ?? tenant?.defaultVatRate ?? 7.5);
+          const vatRate = li.vatRate!==undefined && li.vatRate!=='' ? Number(li.vatRate) : Number(mapping?.defaultVatRate ?? tenant?.defaultVatRate ?? 7.5);
           const taxable = qty*price;
           const vatAmount = taxable*vatRate/100;
           return { itemCode: li.itemCode || "SKU-GENERIC", description: li.description||"Item", quantity: qty, unitPrice: price, taxableAmount: taxable, vatRate, vatAmount, totalAmount: taxable+vatAmount, hsOrServiceCode: hs };
@@ -1515,14 +1521,22 @@ async function startServer() {
         data.subtotal = subtotal;
         data.taxAmount = taxAmount;
         data.totalAmount = totalAmount;
-        // Replace line items
-        await prisma.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
-        data.lineItems = { create: processed };
+        // Atomic replace: delete + update in transaction so we never lose line items on failure
+        updated = await prisma.$transaction(async (tx) => {
+          await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
+          return tx.invoice.update({ where: { id }, data: { ...data, lineItems: { create: processed } }, include: { lineItems: true } });
+        });
+      } else {
+        if (Object.keys(data).length===0) return res.status(400).json({ success: false, error: "No fields to update" });
+        updated = await prisma.invoice.update({ where: { id }, data, include: { lineItems: true } });
       }
-      const updated = await prisma.invoice.update({ where: { id }, data, include: { lineItems: true } });
+      console.log(`[PUT /api/invoices/${id}] updated ${updated.clientInvoiceId} for tenant ${existing.tenantId}`);
       await safeAuditLogCreate(prisma, { tenantId: existing.tenantId, action: "INVOICE_EDITED", entityType: "INVOICE", entityRef: updated.clientInvoiceId, details: `Invoice ${updated.clientInvoiceId} edited via overlay`, sha256PayloadHash: generateSha256(JSON.stringify(updated)), performedBy: req.user?.email || "Editor", rawJson: updated });
       res.json(formatInvoice(updated));
-    } catch (e:any) { res.status(500).json({ error: e.message }); }
+    } catch (e:any) {
+      console.error(`[PUT /api/invoices/${req.params.id}] failed:`, e);
+      res.status(500).json({ success: false, error: e.message || "Internal server error" });
+    }
   });
 
   app.post("/api/integration/gen/invoices", async (req, res) => {
