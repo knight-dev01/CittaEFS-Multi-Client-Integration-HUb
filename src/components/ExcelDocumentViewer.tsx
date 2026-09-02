@@ -567,16 +567,26 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     setShowPreview(false);
     setStatusMsg({ text: 'Grouping multi-item invoices & transmitting to CittaEFS Gateway for IRN stamping...', type: 'info' });
     try {
-      await ingestCsvInvoices(previewGroups, targetTenantId);
+      const res:any = await ingestCsvInvoices(previewGroups, targetTenantId);
       setIsProcessing(false);
-      setStatusMsg({
-        text: `🎉 Batch Transmission Complete! Transmitted ${previewGroups.length} fiscal invoices (${rows.length} total line items) to CittaEFS Gateway with IRN stamps & QR codes generated.`,
-        type: 'success'
-      });
+      const failed = res?.failedCount ?? 0;
+      const success = res?.successCount ?? previewGroups.length;
+      if (failed > 0) {
+        const details = (res?.results||[]).filter((r:any)=> !r.success).slice(0,3).map((r:any)=> `${r.clientInvoiceNumber}: ${(r.errors||[r.error||r.message]).join('; ')}`).join(' | ');
+        setStatusMsg({
+          text: `Batch finished: ${success} queued, ${failed} rejected — ${details} — check Invoices (REJECTED) + Validation Errors for full reason.`,
+          type: 'error'
+        });
+      } else {
+        setStatusMsg({
+          text: `🎉 Batch Transmission Complete! Transmitted ${success} fiscal invoice(s) (${rows.length} line items) queued for IRN stamping. Duplicate numbers were treated as idempotent.`,
+          type: 'success'
+        });
+      }
       await refreshAll();
     } catch (e: any) {
       setIsProcessing(false);
-      setStatusMsg({ text: `Gateway Transmission Failure: ${e.message}`, type: 'error' });
+      setStatusMsg({ text: `Gateway Transmission Failure: ${e.message} — if this is a duplicate, it is already queued (idempotent). For REJECTED see Validation Errors tab.`, type: 'error' });
     }
   };
 

@@ -1629,7 +1629,8 @@ async function startServer() {
         erpId,
       } = req.body;
 
-      const targetTenantId = tenantId || "tenant_qbo_smb";
+      const targetTenantId = tenantId || (req as any).user?.tenantId || "tenant_qbo_smb";
+      if ((req as any).user && (req as any).user.role !== "ADMIN" && targetTenantId !== (req as any).user.tenantId) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation — cannot send to another tenant" });
       const tenant = await prisma.tenant.findUnique({
         where: { id: targetTenantId },
       });
@@ -1909,24 +1910,29 @@ async function startServer() {
     } catch (e: any) {
       if (e.code === "P2002" && (String(e.meta?.target || "").includes("client_invoice_id") || String(e.meta?.target || "").includes("clientInvoiceId") || String(e.meta?.target || "").includes("Tenant_clientInvoiceId"))) {
         try {
-          const existing = await prisma.invoice.findFirst({ where: { tenantId: (await prisma.tenant.findFirst({ where: { id: tenantId || "tenant_qbo_smb" } }))?.id || tenant.id, clientInvoiceId: req.body.clientInvoiceNumber }, include: { lineItems: true } });
-          if (existing) {
+          // Use the already-resolved tenant.id — avoids tenant-mismatch that caused false 409s in logs
+          const existing = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: req.body.clientInvoiceNumber }, include: { lineItems: true } });
+          // Also check qboInvoiceId legacy column in case DocNumber migration still pending
+          const existingQbo = !existing ? await prisma.invoice.findFirst({ where: { tenantId: tenant.id, qboInvoiceId: req.body.clientInvoiceNumber }, include: { lineItems: true } }) : null;
+          const found = existing || existingQbo;
+          if (found) {
             // If REJECTED allow re-queue by updating status instead of 409
-            if (existing.status === "REJECTED") {
-              await prisma.invoice.update({ where: { id: existing.id }, data: { status: "PENDING_NRS_STAMP" } });
+            if (found.status === "REJECTED") {
+              await prisma.invoice.update({ where: { id: found.id }, data: { status: "PENDING_NRS_STAMP" } });
               try {
                 const vRetry = invoiceIngestionSchema.parse({
-                  tenantId: tenant.id, clientInvoiceNumber: existing.clientInvoiceId, documentNumber: existing.documentNumber || undefined,
-                  invoiceType: existing.invoiceType as any, invoiceKind: existing.invoiceKind as any,
-                  issueDate: existing.issueDate.toISOString().substring(0,10),
-                  customerCode: existing.customerCode, customerName: existing.customerName, customerTin: existing.customerTin || undefined,
-                  lineItems: existing.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                  tenantId: tenant.id, clientInvoiceNumber: found.clientInvoiceId, documentNumber: found.documentNumber || undefined,
+                  invoiceType: found.invoiceType as any, invoiceKind: found.invoiceKind as any,
+                  issueDate: found.issueDate.toISOString().substring(0,10),
+                  customerCode: found.customerCode, customerName: found.customerName, customerTin: found.customerTin || undefined,
+                  lineItems: found.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
                 });
-                await invoiceQueue.add("signInvoice", { ...vRetry, dbInvoiceId: existing.id }, { idempotencyKey: `${tenant.id}:${existing.clientInvoiceId}:retry` });
+                await invoiceQueue.add("signInvoice", { ...vRetry, dbInvoiceId: found.id }, { idempotencyKey: `${tenant.id}:${found.clientInvoiceId}:retry` });
               } catch {}
-              return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `REJECTED invoice re-queued`, cittaResponse: { status: "PENDING_NRS_STAMP", invoice: formatInvoice(existing), idempotent: true, requeued: true } });
+              return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `REJECTED invoice "${found.clientInvoiceId}" re-queued to CittaEFS (was REJECTED)`, cittaResponse: { status: "PENDING_NRS_STAMP", invoice: formatInvoice(found), idempotent: true, requeued: true } });
             }
-            return res.status(200).json({ success: true, idempotent: true, message: `Already queued — idempotent`, cittaResponse: { status: existing.status, invoice: formatInvoice(existing), idempotent: true } });
+            // For PENDING/APPROVED/SIGNED surface idempotent 200 with status so UI doesn't show error toast
+            return res.status(200).json({ success: true, idempotent: true, message: `Invoice "${found.clientInvoiceId}" already exists (status ${found.status}) — idempotent`, cittaResponse: { status: found.status, invoice: formatInvoice(found), idempotent: true } });
           }
         } catch {}
         return res.status(409).json({
@@ -1938,10 +1944,11 @@ async function startServer() {
   });
 
   // Bulk send — queues multiple invoices at once (ingest/test were looping single POSTs; this is the proper bulk path)
-  app.post("/api/integration/gen/invoices/bulk", async (req, res) => {
+  app.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
     try {
       const { tenantId, invoices: bulkInvoices } = req.body;
-      const targetTenantId = tenantId || "tenant_qbo_smb";
+      const targetTenantId = tenantId || (req.user?.tenantId) || "tenant_qbo_smb";
+      if (req.user && req.user.role !== "ADMIN" && targetTenantId !== req.user.tenantId) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
       const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
       if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
       if (!Array.isArray(bulkInvoices) || bulkInvoices.length === 0) return res.status(400).json({ success: false, error: "invoices array required" });
@@ -2010,25 +2017,57 @@ async function startServer() {
         if (!bulkSourceErp) {
           try { const firstErp = await prisma.tenantErp.findFirst({ where: { tenantId: tenant.id, status: "ACTIVE" }, select: { erpId: true } }); bulkSourceErp = firstErp?.erpId || null; } catch {}
         }
-        const raw = await prisma.invoice.create({
-          data: {
-            tenantId: tenant.id,
-            sourceErp: bulkSourceErp,
-            clientInvoiceId: clientInvoiceNumber,
-            documentNumber: documentNumber || null,
-            invoiceType: invoiceType || "STANDARD",
-            invoiceKind: invoiceKind || "B2B",
-            issueDate: new Date(issueDate),
-            customerCode: customerCode || "CUST-CITTA-GENERIC",
-            customerName: customerName || "Valued Client",
-            customerTin: effectiveTin,
-            currency: "NGN",
-            subtotal, taxAmount: totalVat, totalAmount: grandTotal,
-            status: "PENDING_NRS_STAMP", ledgerWritebackStatus: "PENDING",
-            lineItems: { create: processed },
-          },
-          include: { lineItems: true },
-        });
+        let raw: any;
+        try {
+          raw = await prisma.invoice.create({
+            data: {
+              tenantId: tenant.id,
+              sourceErp: bulkSourceErp,
+              clientInvoiceId: clientInvoiceNumber,
+              documentNumber: documentNumber || null,
+              invoiceType: invoiceType || "STANDARD",
+              invoiceKind: invoiceKind || "B2B",
+              issueDate: new Date(issueDate),
+              customerCode: customerCode || "CUST-CITTA-GENERIC",
+              customerName: customerName || "Valued Client",
+              customerTin: effectiveTin,
+              currency: "NGN",
+              subtotal, taxAmount: totalVat, totalAmount: grandTotal,
+              status: "PENDING_NRS_STAMP", ledgerWritebackStatus: "PENDING",
+              lineItems: { create: processed },
+            },
+            include: { lineItems: true },
+          });
+        } catch (bulkCreateErr: any) {
+          if (bulkCreateErr.code === "P2002" && (String(bulkCreateErr.meta?.target || "").includes("clientInvoiceId") || String(bulkCreateErr.meta?.target || "").includes("Tenant_clientInvoiceId") || String(bulkCreateErr.meta?.target || "").includes("client_invoice_id"))) {
+            const existing = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber }, include: { lineItems: true } });
+            if (existing) {
+              if (existing.status === "REJECTED") {
+                await prisma.invoice.update({ where: { id: existing.id }, data: { status: "PENDING_NRS_STAMP" } }).catch(()=>{});
+                try {
+                  const vRetryBulk = invoiceIngestionSchema.parse({
+                    tenantId: tenant.id, clientInvoiceNumber: existing.clientInvoiceId, documentNumber: existing.documentNumber || undefined,
+                    invoiceType: existing.invoiceType as any, invoiceKind: existing.invoiceKind as any,
+                    issueDate: existing.issueDate.toISOString().substring(0,10),
+                    customerCode: existing.customerCode, customerName: existing.customerName, customerTin: existing.customerTin || undefined,
+                    lineItems: existing.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                  });
+                  await invoiceQueue.add("signInvoice", { ...vRetryBulk, dbInvoiceId: existing.id }, { idempotencyKey: `${tenant.id}:${existing.clientInvoiceId}:retry` });
+                  results.push({ clientInvoiceNumber, success: true, idempotent: true, requeued: true, invoice: formatInvoice(existing), message: `REJECTED — re-queued` });
+                } catch { results.push({ clientInvoiceNumber, success: true, idempotent: true, invoice: formatInvoice(existing), message: `Already exists (REJECTED) — re-queued` }); }
+              } else {
+                results.push({ clientInvoiceNumber, success: true, idempotent: true, invoice: formatInvoice(existing), message: `Already exists (status ${existing.status}) — idempotent` });
+              }
+              continue;
+            }
+          }
+          results.push({ clientInvoiceNumber, success: false, errors: [`Duplicate invoice "${clientInvoiceNumber}" — already exists`] });
+          continue;
+        } else {
+          results.push({ clientInvoiceNumber, success: false, errors: [bulkCreateErr.message || String(bulkCreateErr)] });
+          continue;
+        }
+        }
         const newInv = formatInvoice(raw);
         const validated = invoiceIngestionSchema.parse({
           tenantId: tenant.id, clientInvoiceNumber, documentNumber: documentNumber || undefined,

@@ -513,7 +513,14 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
-        toastGlobal('success', `Bulk queued ${data?.successCount ?? payloads.length} invoice(s)`, data?.message || 'Sent to CittaEFS gateway');
+        const failed = data?.failedCount || 0;
+        const success = data?.successCount ?? payloads.length;
+        if (failed > 0) {
+          const sampleErrors = (data?.results || []).filter((r:any)=> !r.success).slice(0,2).map((r:any)=> `${r.clientInvoiceNumber}: ${(r.errors||[r.error||r.message]).join('; ')}`).join(' | ');
+          toastGlobal('info', `Bulk completed: ${success} queued, ${failed} failed`, sampleErrors || 'Check Validation Errors / Rejected invoices for details');
+        } else {
+          toastGlobal('success', `Bulk queued ${success} invoice(s)`, data?.message || 'Sent to CittaEFS gateway');
+        }
         return data;
       } catch (e: any) {
         console.error('Bulk transmit error:', e);

@@ -79,6 +79,19 @@ export async function processInvoiceJob(
     if (errorMsg.includes('No CittaEFS Gateway API key') || errorMsg.includes('GATEWAY_NOT_CONFIGURED')) {
       await invoiceQueue.moveToDLQ(job, errorMsg);
       await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(()=>{});
+      try {
+        await prisma.validationError.create({
+          data: {
+            tenantId: job.tenantId,
+            clientInvoiceNumber: job.data.clientInvoiceNumber,
+            errorCategory: 'GATEWAY_NOT_CONFIGURED',
+            fieldAffected: 'cittaApiKey',
+            errorMessage: `Gateway key not configured: ${errorMsg.slice(0,800)} — set CITTAEFS_API_KEY env var`,
+            rawPayloadSample: JSON.stringify(job.data).slice(0,2000),
+            status: 'OPEN',
+          }
+        });
+      } catch {}
       return { jobId: job.id, success: false, error: errorMsg, movedToDLQ: true };
     }
 
@@ -89,6 +102,20 @@ export async function processInvoiceJob(
         where: { id: job.data.dbInvoiceId },
         data: { status: 'REJECTED' }
       }).catch(() => {});
+      // Surface reason in hub — create ValidationError so Validation Errors tab + Invoices REJECTED filter shows why
+      try {
+        await prisma.validationError.create({
+          data: {
+            tenantId: job.tenantId,
+            clientInvoiceNumber: job.data.clientInvoiceNumber,
+            errorCategory: errorMsg.includes('Gateway') || errorMsg.includes('CittaEFS') ? 'GATEWAY_REJECTED' : 'TRANSMIT_FAILED',
+            fieldAffected: 'gateway',
+            errorMessage: `CittaEFS gateway rejected after ${job.maxRetries} retries: ${errorMsg.slice(0, 800)}`,
+            rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
+            status: 'OPEN',
+          }
+        });
+      } catch {}
       return {
         jobId: job.id,
         success: false,
