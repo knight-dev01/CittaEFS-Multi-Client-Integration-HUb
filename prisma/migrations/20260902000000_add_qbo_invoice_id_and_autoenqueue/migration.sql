@@ -1,7 +1,7 @@
--- AlterTable: add qbo_invoice_id to invoices, auto_enqueue_qbo to tenant_erps
-ALTER TABLE "invoices" ADD COLUMN "qbo_invoice_id" TEXT;
+-- AlterTable: add qbo_invoice_id to invoices, auto_enqueue_qbo to tenant_erps (idempotent for re-deploy)
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "qbo_invoice_id" TEXT;
 CREATE INDEX IF NOT EXISTS "invoices_qbo_invoice_id_idx" ON "invoices"("qbo_invoice_id");
-ALTER TABLE "tenant_erps" ADD COLUMN "auto_enqueue_qbo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "tenant_erps" ADD COLUMN IF NOT EXISTS "auto_enqueue_qbo" BOOLEAN NOT NULL DEFAULT false;
 
 -- Backfill: for existing QBO-sourced rows where client_invoice_id is numeric Id but document_number holds DocNumber,
 -- promote DocNumber to client_invoice_id and preserve Id in qbo_invoice_id.

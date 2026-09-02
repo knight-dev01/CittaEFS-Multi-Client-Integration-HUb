@@ -1226,7 +1226,8 @@ async function startServer() {
   });
   app.post("/api/tenants/:id/erps", async (req: any, res) => {
     try {
-      if (req.user && req.user.role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+      if (req.user && !canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
+      if (req.user && !["ADMIN","INTEGRATION_MANAGER","OPERATOR"].includes(req.user.role)) return res.status(403).json({ success: false, error: "Admin/Manager/Operator required" });
       const { platformType, displayName, config } = req.body;
       if (!platformType) return res.status(400).json({ success: false, error: "platformType required" });
       const { getErpForTenant } = await import("./src/config/erpRegistry");
@@ -1955,11 +1956,23 @@ async function startServer() {
       if (bulkInvoices.length > 100) return res.status(400).json({ success: false, error: "Bulk limit is 100 invoices per request" });
 
       const results: any[] = [];
+      const seenInBatch = new Set<string>();
       for (const payload of bulkInvoices) {
         const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn, sourceErp, erpId } = payload || {};
         const errors: string[] = [];
         if (!clientInvoiceNumber) errors.push("clientInvoiceNumber mandatory");
         if (!issueDate) errors.push("issueDate mandatory");
+        // Deduplicate within same bulk batch — prevents P2002 on duplicate rows in same upload
+        if (clientInvoiceNumber && seenInBatch.has(String(clientInvoiceNumber))) {
+          const existingBatchDup = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: String(clientInvoiceNumber) }, include: { lineItems: true } });
+          if (existingBatchDup) {
+            results.push({ clientInvoiceNumber, success: true, idempotent: true, invoice: formatInvoice(existingBatchDup), message: `Duplicate within batch (status ${existingBatchDup.status}) — idempotent` });
+          } else {
+            results.push({ clientInvoiceNumber, success: false, errors: [`Duplicate invoice "${clientInvoiceNumber}" within same batch`] });
+          }
+          continue;
+        }
+        if (clientInvoiceNumber) seenInBatch.add(String(clientInvoiceNumber));
         if (clientInvoiceNumber) {
           const dup = await prisma.invoice.findFirst({ where: { tenantId: tenant.id, clientInvoiceId: clientInvoiceNumber }, include: { lineItems: true } });
           if (dup && !["CANCELLED", "REJECTED"].includes(dup.status)) {
@@ -2683,24 +2696,25 @@ async function startServer() {
   app.post("/api/integrations/qbo/sync", async (req: any, res) => {
     try {
       const userRole = req.user?.role;
+      const requestedTenantId = req.body?.tenantId || (req.query.tenantId as string) || req.user?.tenantId || "tenant_qbo_smb";
+      if (req.user && req.user.role !== "ADMIN" && requestedTenantId !== req.user.tenantId) {
+        return res.status(403).json({ success: false, error: "Forbidden: tenant isolation — can only sync own tenant" });
+      }
       if (
         req.user &&
         userRole !== "ADMIN" &&
-        userRole !== "INTEGRATION_MANAGER"
+        userRole !== "INTEGRATION_MANAGER" &&
+        userRole !== "OPERATOR"
       ) {
         return res
           .status(403)
           .json({
             success: false,
-            error: "Forbidden: Admin or Integration Manager role required",
+            error: "Forbidden: Admin, Integration Manager or Operator role required",
           });
       }
 
-      const tenantId =
-        req.body?.tenantId ||
-        (req.query.tenantId as string) ||
-        req.user?.tenantId ||
-        "tenant_qbo_smb";
+      const tenantId = requestedTenantId;
 
       let rawInvoices: any[] = [];
       try {
