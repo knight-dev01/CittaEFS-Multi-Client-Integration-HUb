@@ -7,6 +7,7 @@ import { ImportTab } from '../ImportTab';
 import { CustomerSyncTab } from '../CustomerSyncTab';
 import { ItemDictionaryTab } from '../ItemDictionaryTab';
 import { ValidationErrorsTab } from '../ValidationErrorsTab';
+import { StagingTab } from '../StagingTab';
 import { ConnectorsTab } from '../ConnectorsTab';
 import { CittaGatewayTab } from './CittaGatewayTab';
 import { ErpMappingTab } from './ErpMappingTab';
@@ -82,6 +83,7 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
       {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
       {activeTab === 'customers' && <CustomerSyncTab />}
       {activeTab === 'items' && <ItemDictionaryTab />}
+      {activeTab === 'staging' && <StagingTab />}
       {activeTab === 'validation' && <ValidationErrorsTab />}
       {activeTab === 'connectors' && <ConnectorsTab />}
       {activeTab === 'mapping' && <ErpMappingTab />}

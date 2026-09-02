@@ -2232,6 +2232,42 @@ async function startServer() {
   });
 
   // ==========================================
+  // Staging summary — pre-transmission holding area (pending queue + DLQ) distinct from Validation (post-failure)
+  app.get("/api/staging/summary", async (req:any,res)=>{
+    try {
+      const queryTenantId = req.query.tenantId as string | undefined;
+      const scoped = getScopedTenantWhere(req, queryTenantId);
+      const tenantId = scoped.tenantId || req.user?.tenantId;
+      if (req.user && req.user.role !== "ADMIN" && tenantId !== req.user.tenantId) return res.status(403).json({ success:false, error:"Forbidden: tenant isolation" });
+      const where: any = tenantId ? { tenantId } : {};
+      const [pending, approved, rejected, queued, dlqCount] = await Promise.all([
+        prisma.invoice.count({ where: { ...where, status: "PENDING_NRS_STAMP" } }),
+        prisma.invoice.count({ where: { ...where, status: { in: ["APPROVED","SIGNED"] } } }),
+        prisma.invoice.count({ where: { ...where, status: { in: ["REJECTED","FAILED"] } } }),
+        prisma.queueJob.count({ where: { ...where, status: "QUEUED" } }).catch(()=>0),
+        prisma.queueJob.count({ where: { ...where, status: "DLQ" } }).catch(()=>0),
+      ]);
+      const qStats = invoiceQueue.getQueueStats();
+      const pendingInvoices = await prisma.invoice.findMany({ where: { ...where, status: "PENDING_NRS_STAMP" }, include:{ lineItems:true }, orderBy:{ createdAt:"desc"}, take: 50 });
+      // Lightweight DLQ preview
+      const dlqJobs = await prisma.queueJob.findMany({ where: { ...where, status:"DLQ"}, orderBy:{ updatedAt:"desc"}, take: 10 });
+      res.json({
+        tenantId: tenantId || null,
+        counts: { pending, approved, rejected, total: pending+approved+rejected, queued, dlqCount },
+        queue: { engine: qStats.engine, queued: qStats.queued, processing: qStats.processing, failedInDLQ: qStats.failedInDLQ, bullMqReady: qStats.bullMqReady },
+        pendingPreview: pendingInvoices.map(formatInvoice),
+        dlqPreview: dlqJobs.map((j:any)=>({ id: j.id, jobName: j.jobName, status: j.status, attempts: j.attempts, lastError: j.lastError?.slice(0,400), nextAttemptAt: j.nextAttemptAt, createdAt: j.createdAt })),
+      });
+    } catch(e:any){ res.status(500).json({ success:false, error:e.message }); }
+  });
+
+  app.get("/api/queue/stats", async (req:any,res)=>{
+    try {
+      const stats = invoiceQueue.getQueueStats();
+      res.json(stats);
+    } catch(e:any){ res.status(500).json({ error:e.message});}
+  });
+
   // 2b. HUB EXTERNAL API FOR EXISTING CITTAEFS SYSTEMS
   // ==========================================
   // Allows an already-running CittaEFS instance to push invoices without a browser session.
