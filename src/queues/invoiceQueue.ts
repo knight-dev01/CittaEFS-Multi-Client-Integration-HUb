@@ -279,6 +279,49 @@ class InvoiceQueueManager {
     } catch {}
   }
 
+  public async retryJob(jobId: string): Promise<QueueJob<QueueablePayload> | null> {
+    await this.hydrateIfNeeded();
+    // Find in DLQ or queue
+    let job = this.queue.find(j => j.id === jobId) || this.dlq.find(j => j.id === jobId) || null;
+    let dbRow: any = null;
+    try {
+      const prisma = getPrisma();
+      dbRow = await prisma.queueJob.findUnique({ where: { id: jobId } });
+      if (dbRow) job = this.mapDbRow(dbRow);
+      await prisma.$disconnect().catch(()=>{});
+    } catch {}
+    if (!job && !dbRow) return null;
+    // Reset for retry
+    job!.attempts = 0;
+    job!.status = 'QUEUED';
+    job!.lastError = undefined;
+    job!.nextAttemptAt = new Date().toISOString();
+    job!.updatedAt = new Date().toISOString();
+    // Remove from DLQ, add to queue
+    this.dlq = this.dlq.filter(j => j.id !== jobId);
+    if (!this.queue.find(j => j.id === jobId)) this.queue.push(job!);
+    try {
+      const prisma = getPrisma();
+      await prisma.queueJob.update({
+        where: { id: jobId },
+        data: { status: 'QUEUED', attempts: 0, lastError: null, nextAttemptAt: new Date(job!.nextAttemptAt) }
+      }).catch(()=>{});
+      await prisma.$disconnect().catch(()=>{});
+    } catch {}
+    return job!;
+  }
+
+  public async requeueInvoice(invoiceId: string, tenantId: string): Promise<QueueJob<QueueablePayload> | null> {
+    // Find existing queue job by payload containing invoiceId
+    await this.hydrateIfNeeded();
+    let job = this.queue.find(j => (j.data as any).dbInvoiceId === invoiceId) || this.dlq.find(j => (j.data as any).dbInvoiceId === invoiceId) || null;
+    if (job) {
+      return this.retryJob(job.id);
+    }
+    // No existing job — caller should create new via add()
+    return null;
+  }
+
   public getQueueStats() {
     return {
       queued: this.queue.filter(j => j.status === 'QUEUED').length,

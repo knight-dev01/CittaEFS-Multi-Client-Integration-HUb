@@ -52,6 +52,9 @@ interface HubContextType {
   createTenantUser: (userData: { email: string; password: string; name: string; role?: string; organization?: string; tenantId: string }) => Promise<any>;
   updateInvoice: (invoiceId: string, data: any) => Promise<any>;
   purgeDemoData: () => Promise<any>;
+  retryInvoice: (invoiceId: string) => Promise<any>;
+  retryBulkInvoices: (tenantId?: string, invoiceIds?: string[]) => Promise<any>;
+  getRetryStatus: (invoiceId: string) => Promise<any>;
 }
 
 const HubContext = createContext<HubContextType | undefined>(undefined);
@@ -724,6 +727,44 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const retryInvoice = async (invoiceId: string) => {
+    return withLoading(async () => {
+      try {
+        const res = await fetchWithAuth(`/api/invoices/${invoiceId}/retry`, { method: 'POST' });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', 'Retry queued', `Invoice re-queued for CittaEFS stamping (job ${data.jobId || ''})`);
+        return data;
+      } catch (e:any) {
+        toastGlobal('error', 'Retry failed', e.message || String(e));
+        throw e;
+      }
+    });
+  };
+  const retryBulkInvoices = async (tenantId?: string, invoiceIds?: string[]) => {
+    return withLoading(async () => {
+      try {
+        const targetTenantId = tenantId || activeTenantId;
+        const res = await fetchWithAuth('/api/invoices/retry-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenantId: targetTenantId, invoiceIds })
+        });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', `Retried ${data.retried || 0}/${data.total || 0} invoices`, data.message || '');
+        return data;
+      } catch (e:any) {
+        toastGlobal('error', 'Bulk retry failed', e.message || String(e));
+        throw e;
+      }
+    });
+  };
+  const getRetryStatus = async (invoiceId: string) => {
+    const res = await fetchWithAuth(`/api/invoices/retry-status/${invoiceId}`);
+    return parseJsonResponse(res);
+  };
+
   return (
     <HubContext.Provider
       value={{
@@ -761,7 +802,10 @@ export function HubProvider({ children }: { children: ReactNode }) {
         removeTenantErp,
         createTenantUser,
         updateInvoice,
-        purgeDemoData
+        purgeDemoData,
+        retryInvoice,
+        retryBulkInvoices,
+        getRetryStatus
       }}
     >
       {children}
