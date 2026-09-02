@@ -633,22 +633,32 @@ async function upsertQboMasterData(
 export async function ingestQboInvoice(
   tenantId: string,
   rawInvoice: any,
+  opts?: { autoEnqueue?: boolean },
 ): Promise<any> {
-  const clientInvoiceId = rawInvoice.Id; // Use internal QBO ID as the unique clientInvoiceId
-  const docNumber = rawInvoice.DocNumber || `INV-${clientInvoiceId}`;
+  const qboId = String(rawInvoice.Id);
+  const docNumber = String(rawInvoice.DocNumber || `QBO-${qboId}`).trim();
+  const clientInvoiceId = docNumber; // DocNumber is business key — qboId preserved in qboInvoiceId column
 
-  // Check if invoice already exists
-  const existing = await prisma.invoice.findFirst({
-    where: {
-      tenantId,
-      clientInvoiceId,
-    },
+  // Check if invoice already exists by DocNumber (primary) or by legacy qboId
+  let existing = await prisma.invoice.findFirst({
+    where: { tenantId, clientInvoiceId },
   });
+  if (!existing) {
+    existing = await prisma.invoice.findFirst({
+      where: { tenantId, qboInvoiceId: qboId },
+    });
+    if (existing) {
+      // Legacy row still keyed by numeric Id — will be backfilled by migration; update in place
+      console.log(`Legacy QBO invoice ${qboId} found with DocNumber ${existing.clientInvoiceId} — will update qboInvoiceId`);
+    }
+  }
 
   if (existing) {
-    console.log(
-      `Invoice ${clientInvoiceId} (${docNumber}) already exists for tenant ${tenantId}. Skipping.`,
-    );
+    // If legacy row has no qboInvoiceId, patch it
+    if (!existing.qboInvoiceId) {
+      try { await prisma.invoice.update({ where: { id: existing.id }, data: { qboInvoiceId: qboId, documentNumber: docNumber } }); } catch {}
+    }
+    console.log(`Invoice ${clientInvoiceId} (qboId ${qboId}) already exists for tenant ${tenantId}. Skipping.`);
     return existing;
   }
 
@@ -676,14 +686,14 @@ export async function ingestQboInvoice(
   // Transform raw invoice to canonical structure
   const transformed = qboAdapter.transform(rawInvoice);
 
-  // Validate unmapped HS/Service codes with standard compliant defaults
+  // Validate unmapped HS/Service codes with shared defaults (HS-8471.30 / SRV-7212.10)
   const tenantItems = await prisma.item.findMany({ where: { tenantId } });
   const processedLineItems = transformed.lineItems.map(
     (li: any, idx: number) => {
       let mapping = tenantItems.find((m) => m.clientSku === li.clientSku);
       const defaultHs = (li.clientSku || "").toUpperCase().startsWith("SRV")
         ? "SRV-7212.10"
-        : "HS-3926.90";
+        : "HS-8471.30";
       const rawHs = li.hsOrServiceCode;
       const hsOrServiceCode =
         mapping?.hsOrServiceCode ||
@@ -736,13 +746,28 @@ export async function ingestQboInvoice(
     processedLineItems,
   );
 
+  // Determine auto-enqueue vs preview inbox (tenantErp.autoEnqueueQbo, default false = preview required for security)
+  let shouldAutoEnqueue = opts?.autoEnqueue;
+  if (shouldAutoEnqueue === undefined) {
+    try {
+      const qboErp = await prisma.tenantErp.findFirst({ where: { tenantId, platformType: "QuickBooks Online" }, select: { autoEnqueueQbo: true } });
+      shouldAutoEnqueue = qboErp?.autoEnqueueQbo ?? false;
+    } catch { shouldAutoEnqueue = false; }
+  }
+  // Resolve invoiceType/Kind from QBO payload when present, not hard-coded
+  const resolvedInvoiceType = (rawInvoice.invoiceType as any) || (rawInvoice.TxnType === "CreditMemo" ? "CREDIT_NOTE" : "STANDARD");
+  const resolvedInvoiceKind = (rawInvoice.invoiceKind as any) || (transformed.customerTin ? "B2B" : "B2C");
+
   // Insert into local invoices DB in PENDING_NRS_STAMP state
   const dbInvoice = await prisma.invoice.create({
     data: {
       tenantId,
+      sourceErp: "qbo",
+      qboInvoiceId: qboId,
       clientInvoiceId,
-      invoiceType: rawInvoice.invoiceType || "STANDARD",
-      invoiceKind: rawInvoice.invoiceKind || "B2B",
+      documentNumber: docNumber,
+      invoiceType: resolvedInvoiceType,
+      invoiceKind: resolvedInvoiceKind,
       issueDate: new Date(transformed.issueDate),
       customerCode,
       customerName: transformed.customerName,
@@ -760,36 +785,34 @@ export async function ingestQboInvoice(
     include: { lineItems: true },
   });
 
-  // Enqueue job for background stamp & writeback
-  const validatedPayload = invoiceIngestionSchema.parse({
-    tenantId,
-    clientInvoiceNumber: docNumber,
-    invoiceType: "STANDARD",
-    invoiceKind: "B2B",
-    issueDate: transformed.issueDate,
-    customerCode,
-    customerName: transformed.customerName,
-    customerTin: transformed.customerTin || undefined,
-    lineItems: processedLineItems.map((li) => ({
-      itemCode: li.itemCode,
-      description: li.description,
-      quantity: li.quantity,
-      unitPrice: li.unitPrice,
-      discountAmount: 0,
-      hsOrServiceCode: li.hsOrServiceCode,
-      codeType: "SERVICE_CODE",
-      vatRate: li.vatRate,
-    })),
-  });
-
-  await invoiceQueue.add("signInvoice", {
-    ...validatedPayload,
-    dbInvoiceId: dbInvoice.id,
-  });
-
-  console.log(
-    `Successfully ingested and enqueued QBO Invoice ${clientInvoiceId} (${docNumber}) for tenant ${tenantId}`,
-  );
+  // Enqueue only if auto-enqueue enabled; otherwise stays in preview inbox for operator to approve
+  if (shouldAutoEnqueue) {
+    const validatedPayload = invoiceIngestionSchema.parse({
+      tenantId,
+      clientInvoiceNumber: docNumber,
+      documentNumber: docNumber,
+      invoiceType: resolvedInvoiceType as any,
+      invoiceKind: resolvedInvoiceKind as any,
+      issueDate: transformed.issueDate,
+      customerCode,
+      customerName: transformed.customerName,
+      customerTin: transformed.customerTin || undefined,
+      lineItems: processedLineItems.map((li) => ({
+        itemCode: li.itemCode,
+        description: li.description,
+        quantity: li.quantity,
+        unitPrice: li.unitPrice,
+        discountAmount: 0,
+        hsOrServiceCode: li.hsOrServiceCode,
+        codeType: (li.hsOrServiceCode?.startsWith("HS") ? "HS_CODE" : "SERVICE_CODE") as any,
+        vatRate: li.vatRate,
+      })),
+    });
+    await invoiceQueue.add("signInvoice", { ...validatedPayload, dbInvoiceId: dbInvoice.id }, { idempotencyKey: `${tenantId}:${docNumber}` });
+    console.log(`Successfully ingested and enqueued QBO Invoice ${clientInvoiceId} (qboId ${qboId}) for tenant ${tenantId} — auto-enqueue ON`);
+  } else {
+    console.log(`QBO Invoice ${clientInvoiceId} (qboId ${qboId}) ingested to preview inbox for tenant ${tenantId} — awaiting operator approval (autoEnqueue OFF)`);
+  }
   return dbInvoice;
 }
 

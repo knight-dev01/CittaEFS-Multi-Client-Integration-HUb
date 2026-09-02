@@ -47,6 +47,7 @@ model TenantErp {
   erpId        String   @map("erp_id") // e.g. qbo, excel, sap, netsuite
   displayName  String?  @map("display_name")
   config       String?  @map("config") // JSON per-ERP config (realmId, sheetName, etc.)
+  autoEnqueueQbo Boolean @default(false) @map("auto_enqueue_qbo") // when true QBO sync auto-enqueues to CittaEFS; false = preview inbox required
   status       String   @default("ACTIVE") @map("status") // ACTIVE | INACTIVE | NEEDS_REAUTH
   lastSyncAt   DateTime? @map("last_sync_at")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -113,6 +114,7 @@ model Invoice {
   id                    String    @id @default(uuid())
   tenantId              String    @map("tenant_id")
   sourceErp             String?   @map("source_erp") // e.g. qbo, excel, sap — which ERP this invoice was pulled from (multi-ERP)
+  qboInvoiceId          String?   @map("qbo_invoice_id") // immutable QBO Id when sourceErp=qbo; business key remains clientInvoiceId=DocNumber
   clientInvoiceId       String    @map("client_invoice_id")
   documentNumber        String?   @map("document_number")
   invoiceType           String    @default("STANDARD") @map("invoice_type")

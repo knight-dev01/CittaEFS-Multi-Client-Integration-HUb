@@ -88,19 +88,24 @@ export class QuickBooksAdapter implements ConnectorAdapter {
   }
 
   transform(rawPayload: any): IngestedPayload {
+    const docNumber = rawPayload.DocNumber || rawPayload.clientInvoiceNumber || `QBO-${rawPayload.Id || Date.now()}`;
     return {
-      clientInvoiceNumber: rawPayload.DocNumber || rawPayload.clientInvoiceNumber || `QBO-${Date.now()}`,
+      clientInvoiceNumber: docNumber,
+      qboInvoiceId: String(rawPayload.Id || ''),
       issueDate: rawPayload.TxnDate || new Date().toISOString().substring(0, 10),
       customerName: rawPayload.CustomerRef?.name || rawPayload.customerName || 'QuickBooks Client',
       customerTin: rawPayload.CustomerTaxId || rawPayload.customerTin || '',
-      lineItems: (rawPayload.Line || rawPayload.lineItems || []).map((l: any) => ({
+      invoiceKind: rawPayload.invoiceKind || (rawPayload.CustomerTaxId ? 'B2B' : undefined),
+      invoiceType: rawPayload.TxnType === 'CreditMemo' ? 'CREDIT_NOTE' : rawPayload.invoiceType,
+      lineItems: (rawPayload.Line || rawPayload.lineItems || []).filter((l:any)=> l.DetailType==='SalesItemLineDetail' || l.clientSku || l.SalesItemLineDetail).map((l: any) => ({
         clientSku: l.SalesItemLineDetail?.ItemRef?.name || l.clientSku || 'SERV-QBO',
         description: l.Description || l.description || 'QuickBooks Service Item',
-        quantity: l.SalesItemLineDetail?.Qty || l.quantity || 1,
-        unitPrice: l.SalesItemLineDetail?.UnitPrice || l.unitPrice || 100,
-        hsOrServiceCode: l.hsOrServiceCode || 'SERV-DEFAULT'
+        quantity: l.SalesItemLineDetail?.Qty ?? l.quantity ?? 1,
+        unitPrice: l.SalesItemLineDetail?.UnitPrice ?? l.unitPrice ?? 100,
+        hsOrServiceCode: l.hsOrServiceCode || 'SERV-DEFAULT',
+        vatRate: l.vatRate,
       }))
-    };
+    } as any;
   }
 
   async submitToGateway(payload: IngestedPayload) {

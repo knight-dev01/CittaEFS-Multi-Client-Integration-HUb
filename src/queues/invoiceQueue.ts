@@ -200,6 +200,17 @@ class InvoiceQueueManager {
 
   public getPendingJobs(): QueueJob<QueueablePayload>[] {
     const now = Date.now();
+    // If memory empty but DB has QUEUED rows (restart/multi-instance), hydrate synchronously via queue length check
+    // Caller should have awaited recoverOrphans; we still handle empty memory gracefully
+    if (this.queue.length === 0 && this.hydrated) {
+      // memory empty after hydrate means no pending jobs — return empty correctly
+    }
+    return this.queue.filter(j => j.status === 'QUEUED' && new Date(j.nextAttemptAt).getTime() <= now);
+  }
+
+  public async getPendingJobsAsync(): Promise<QueueJob<QueueablePayload>[]> {
+    await this.hydrateIfNeeded();
+    const now = Date.now();
     return this.queue.filter(j => j.status === 'QUEUED' && new Date(j.nextAttemptAt).getTime() <= now);
   }
 
@@ -297,8 +308,8 @@ class InvoiceQueueManager {
       for (const inv of orphans) {
         const alreadyQueued = this.queue.some(j => (j.data as any).dbInvoiceId === inv.id);
         if (alreadyQueued) continue;
-        // Skip very recent invoices (<30s) to avoid double-enqueue on normal flow
-        if (Date.now() - new Date(inv.createdAt).getTime() < 30000) continue;
+        // Skip very recent invoices (<5s) to avoid double-enqueue on normal flow (reduced from 30s)
+        if (Date.now() - new Date(inv.createdAt).getTime() < 5000) continue;
         const payload: any = {
           tenantId: inv.tenantId,
           clientInvoiceNumber: inv.clientInvoiceId,
@@ -322,7 +333,7 @@ class InvoiceQueueManager {
           })),
           dbInvoiceId: inv.id,
         };
-        await this.add('signInvoice', payload);
+        await this.add('signInvoice', payload, { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}` });
         recovered++;
       }
       await prisma.$disconnect().catch(()=>{});

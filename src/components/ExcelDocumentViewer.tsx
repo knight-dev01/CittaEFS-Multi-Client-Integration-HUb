@@ -1,6 +1,7 @@
 import { useState, ChangeEvent } from 'react';
 import * as XLSX from 'xlsx';
 import { useHub } from '../lib/store';
+import { getRowErrors as sharedGetRowErrors } from '../lib/invoiceValidation';
 import { InvoicePreview } from './InvoicePreview';
 import {
   FileSpreadsheet,
@@ -163,21 +164,8 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     return itemMappings.some(m => m.clientSku === sku);
   };
 
-  // Strict validation — highlight missing editable fields before send
-  const getRowErrors = (row: SpreadsheetRow): string[] => {
-    const errs: string[] = [];
-    if (!row.clientInvoiceNumber || String(row.clientInvoiceNumber).trim().length < 3) errs.push('Invoice # missing/short');
-    if (!row.issueDate || isNaN(Date.parse(row.issueDate))) errs.push('Issue Date invalid');
-    if (!row.customerCode || String(row.customerCode).trim().length < 2) errs.push('Customer Code missing');
-    if (!row.customerName || String(row.customerName).trim().length < 2) errs.push('Customer Name missing');
-    if ((row.invoiceKind==='B2B' || row.invoiceKind==='B2G') && (!row.customerTin || !/^[A-Za-z0-9]{10,14}$/.test(String(row.customerTin).trim()))) errs.push('B2B TIN 10-14 alphanum required');
-    if (!row.itemCode || String(row.itemCode).trim().length < 2) errs.push('SKU missing');
-    if (!row.hsOrServiceCode || row.hsOrServiceCode==='UNMAPPED' || row.hsOrServiceCode==='SERV-DEFAULT') errs.push('HS code missing');
-    if (!row.quantity || Number(row.quantity) <=0) errs.push('Qty >0 required');
-    if (row.unitPrice===undefined || Number(row.unitPrice) <0) errs.push('Price required');
-    if (row.vatRate===undefined || Number(row.vatRate) <0 || Number(row.vatRate) >100) errs.push('VAT 0-100 required');
-    return errs;
-  };
+  // Strict validation — highlight missing editable fields before send (shared lib)
+  const getRowErrors = (row: SpreadsheetRow): string[] => sharedGetRowErrors(row as any);
 
   // Quick inline assignment from Master Dictionary
   const assignCustomerFromMaster = (rowId: string, custCode: string) => {

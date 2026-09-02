@@ -193,6 +193,9 @@ function httpsRequest(
         });
       });
 
+      req.setTimeout(15000, () => {
+        req.destroy(new Error("Gateway timeout 15s — https://ei-api.azurewebsites.net not reachable or TLS issue"));
+      });
       req.on("error", (err) => {
         reject(err);
       });

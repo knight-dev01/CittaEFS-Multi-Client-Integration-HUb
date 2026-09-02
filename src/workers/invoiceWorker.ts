@@ -75,6 +75,12 @@ export async function processInvoiceJob(
   } catch (err: any) {
     const errorMsg = err.message || 'Unknown network gateway error';
     job.lastError = errorMsg;
+    // Missing gateway key — don't retry 5x, go straight to DLQ so UI can show 503 actionable error
+    if (errorMsg.includes('No CittaEFS Gateway API key') || errorMsg.includes('GATEWAY_NOT_CONFIGURED')) {
+      await invoiceQueue.moveToDLQ(job, errorMsg);
+      await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(()=>{});
+      return { jobId: job.id, success: false, error: errorMsg, movedToDLQ: true };
+    }
 
     // Check if max retries exceeded
     if (job.attempts >= job.maxRetries) {

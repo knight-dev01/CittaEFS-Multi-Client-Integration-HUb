@@ -955,9 +955,32 @@ async function startServer() {
   // ==========================================
   // 1. TENANTS & CONFIGURATION API (DB Backed)
   // ==========================================
-  app.get("/api/tenants", async (req, res) => {
+  // Helper: resolve tenant isolation — non-ADMIN sees only own tenant
+  function getScopedTenantWhere(req: any, queryTenantId?: string): any {
+    const role = req.user?.role;
+    const userTenantId = req.user?.tenantId || (req as any).tenantId;
+    if (role && role !== "ADMIN") {
+      // Non-admin: force own tenant, ignore query unless it matches own
+      return userTenantId ? { tenantId: userTenantId } : {};
+    }
+    // ADMIN or unauthenticated: respect query filter if provided, else no filter
+    return queryTenantId ? { tenantId: queryTenantId } : {};
+  }
+  function canAccessTenant(req: any, targetTenantId: string): boolean {
+    const role = req.user?.role;
+    if (!req.user || role === "ADMIN") return true;
+    return req.user.tenantId === targetTenantId;
+  }
+
+  app.get("/api/tenants", async (req: any, res) => {
     try {
+      const role = req.user?.role;
+      let where: any = {};
+      if (req.user && role !== "ADMIN") {
+        where = { id: req.user.tenantId };
+      }
       const rawTenants = await prisma.tenant.findMany({
+        where: Object.keys(where).length ? where : undefined,
         include: {
           customers: true,
           items: true,
@@ -1129,8 +1152,9 @@ async function startServer() {
     }
   });
 
-  app.get("/api/tenants/:id", async (req, res) => {
+  app.get("/api/tenants/:id", async (req: any, res) => {
     try {
+      if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
       const tenant = await prisma.tenant.findUnique({
         where: { id: req.params.id },
         include: { customers: true, items: true, invoices: { include: { lineItems: true } }, tenantErps: true },
@@ -1147,10 +1171,57 @@ async function startServer() {
   });
 
   // Multi-ERP per tenant — list/add/update/remove ERP connectors for a company
-  app.get("/api/tenants/:id/erps", async (req, res) => {
+  app.get("/api/tenants/:id/erps", async (req: any, res) => {
     try {
+      if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
       const erps = await prisma.tenantErp.findMany({ where: { tenantId: req.params.id }, orderBy: { createdAt: "asc" } });
       res.json(erps);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // QBO Staging Inbox — preview before CittaEFS enqueue (autoEnqueueQbo=false)
+  app.get("/api/tenants/:id/qbo-staging", async (req: any, res) => {
+    try {
+      if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden" });
+      const { status } = req.query;
+      const where: any = { tenantId: req.params.id, sourceErp: "qbo" };
+      if (status) where.status = status;
+      else where.status = "PENDING_NRS_STAMP";
+      const invoices = await prisma.invoice.findMany({ where, include: { lineItems: true }, orderBy: { createdAt: "desc" }, take: 100 });
+      res.json(invoices.map(formatInvoice));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.post("/api/tenants/:id/qbo-staging/approve", async (req: any, res) => {
+    try {
+      if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden" });
+      if (req.user && !["ADMIN","OPERATOR","INTEGRATION_MANAGER"].includes(req.user.role)) return res.status(403).json({ success: false, error: "Forbidden" });
+      const { invoiceIds } = req.body as { invoiceIds?: string[] };
+      const where: any = { tenantId: req.params.id, sourceErp: "qbo", status: "PENDING_NRS_STAMP" };
+      if (invoiceIds && invoiceIds.length) where.id = { in: invoiceIds };
+      const pending = await prisma.invoice.findMany({ where, include: { lineItems: true } });
+      let queued = 0;
+      for (const inv of pending) {
+        try {
+          const v = invoiceIngestionSchema.parse({
+            tenantId: inv.tenantId, clientInvoiceNumber: inv.clientInvoiceId, documentNumber: inv.documentNumber || undefined,
+            invoiceType: inv.invoiceType as any, invoiceKind: inv.invoiceKind as any,
+            issueDate: inv.issueDate.toISOString().substring(0,10),
+            customerCode: inv.customerCode, customerName: inv.customerName, customerTin: inv.customerTin || undefined,
+            lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+          });
+          await invoiceQueue.add("signInvoice", { ...v, dbInvoiceId: inv.id }, { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}` });
+          queued++;
+        } catch (e) { console.warn("[QBO approve] skip", inv.clientInvoiceId, (e as any)?.message); }
+      }
+      res.json({ success: true, queued, total: pending.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.patch("/api/tenants/:id/erps/:erpId/auto-enqueue", async (req: any, res) => {
+    try {
+      if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden" });
+      const { autoEnqueueQbo } = req.body;
+      const updated = await prisma.tenantErp.update({ where: { id: req.params.erpId }, data: { autoEnqueueQbo: !!autoEnqueueQbo } });
+      res.json(updated);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
   app.post("/api/tenants/:id/erps", async (req: any, res) => {
@@ -1423,14 +1494,15 @@ async function startServer() {
     return { page, limit, skip: (page - 1) * limit, take: limit };
   }
 
-  app.get("/api/invoices", async (req, res) => {
+  app.get("/api/invoices", async (req: any, res) => {
     try {
-      const tenantId = req.query.tenantId as string;
+      const queryTenantId = req.query.tenantId as string | undefined;
       const status = req.query.status as string | undefined;
       const { skip, take, page, limit } = parsePagination(req);
-      const where: any = {};
-      if (tenantId) where.tenantId = tenantId;
+      const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
       if (status && status !== "ALL") where.status = status;
+      // Non-admin without tenant still needs isolation via user tenant
+      if (req.user && req.user.role !== "ADMIN" && !where.tenantId && req.user.tenantId) where.tenantId = req.user.tenantId;
       const [total, rawInvoices] = await Promise.all([
         prisma.invoice.count({ where }),
         prisma.invoice.findMany({
@@ -1583,8 +1655,19 @@ async function startServer() {
           if (duplicate.status === 'PENDING_NRS_STAMP' || (duplicate.status as any) === 'PENDING' || duplicate.status === 'QUEUED') {
             try {
               const qRow = await prisma.queueJob.findFirst({ where: { tenantId: tenant.id, payload: { contains: duplicate.id } }, orderBy: { createdAt: 'desc' } });
-              const isStuck = !qRow || qRow.status === 'DLQ' || (qRow.status === 'FAILED') || (Date.now() - new Date(qRow.nextAttemptAt || qRow.updatedAt).getTime() > 120000 && qRow.status !== 'QUEUED');
+              const isStuck = !qRow || qRow.status === 'DLQ' || (qRow.status === 'FAILED') || (Date.now() - new Date((qRow as any).nextAttemptAt || (qRow as any).updatedAt).getTime() > 120000 && (qRow as any).status !== 'QUEUED');
+              // Surface gateway misconfiguration instead of masking as idempotent
               if (isStuck) {
+                // Check single shared key health — if no key, return 503 so UI doesn't think "already queued" is success
+                const hasEnvKey = !!(process.env.CITTAEFS_API_KEY?.trim() || process.env.CITTA_EFS_API_KEY?.trim());
+                const hasDbKey = !!(tenant.cittaApiKey && tenant.cittaApiKey.length >= 10 && !tenant.cittaApiKey.includes(["place","holder"].join("")));
+                if (!hasEnvKey && !hasDbKey) {
+                  const fresh = await prisma.tenant.findFirst({ where: { cittaApiKey: { not: "" } }, select: { cittaApiKey: true } });
+                  const hasAnyDbKey = !!(fresh?.cittaApiKey && fresh.cittaApiKey.length >= 10);
+                  if (!hasAnyDbKey) {
+                    return res.status(503).json({ success: false, code: "GATEWAY_NOT_CONFIGURED", error: "CittaEFS gateway API key not configured — set CITTAEFS_API_KEY env var (single shared key) or configure one tenant's cittaApiKey. Invoice is queued in Hub but cannot forward to CittaEFS until key is set.", cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true } });
+                  }
+                }
                 try {
                   const v = invoiceIngestionSchema.parse({
                     tenantId: tenant.id, clientInvoiceNumber: duplicate.clientInvoiceId, documentNumber: duplicate.documentNumber || undefined,
@@ -1596,6 +1679,19 @@ async function startServer() {
                   await invoiceQueue.add("signInvoice", { ...v, dbInvoiceId: duplicate.id }, { idempotencyKey: `${tenant.id}:${duplicate.clientInvoiceId}:retry` });
                   return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `Invoice "${clientInvoiceNumber}" was stuck in Hub (status ${duplicate.status}) — re-queued to CittaEFS`, cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true, requeued: true } });
                 } catch (rqErr) { console.warn('[Idempotent requeue failed]', (rqErr as any)?.message); }
+              }
+              // If queue row exists and is QUEUED with recent nextAttemptAt, include diagnostic so UI shows "forwarding pending" not bare success
+              if (qRow && (qRow as any).status === 'QUEUED') {
+                const retryMs = Math.max(0, new Date((qRow as any).nextAttemptAt).getTime() - Date.now());
+                return res.status(200).json({
+                  success: true,
+                  idempotent: true,
+                  diagnostic: `Forwarding to CittaEFS pending — worker will retry in ${Math.round(retryMs/1000)}s`,
+                  lastError: (qRow as any).lastError || null,
+                  nextAttemptAt: (qRow as any).nextAttemptAt,
+                  message: `Invoice "${clientInvoiceNumber}" already queued (status ${duplicate.status}) — forwarding pending.`,
+                  cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true, queueStatus: "QUEUED" },
+                });
               }
             } catch {}
           }
@@ -1811,10 +1907,27 @@ async function startServer() {
         },
       });
     } catch (e: any) {
-      if (e.code === "P2002" && e.meta?.target?.includes("client_invoice_id")) {
+      if (e.code === "P2002" && (String(e.meta?.target || "").includes("client_invoice_id") || String(e.meta?.target || "").includes("clientInvoiceId") || String(e.meta?.target || "").includes("Tenant_clientInvoiceId"))) {
         try {
           const existing = await prisma.invoice.findFirst({ where: { tenantId: (await prisma.tenant.findFirst({ where: { id: tenantId || "tenant_qbo_smb" } }))?.id || tenant.id, clientInvoiceId: req.body.clientInvoiceNumber }, include: { lineItems: true } });
-          if (existing) return res.status(200).json({ success: true, idempotent: true, message: `Already queued — idempotent`, cittaResponse: { status: existing.status, invoice: formatInvoice(existing), idempotent: true } });
+          if (existing) {
+            // If REJECTED allow re-queue by updating status instead of 409
+            if (existing.status === "REJECTED") {
+              await prisma.invoice.update({ where: { id: existing.id }, data: { status: "PENDING_NRS_STAMP" } });
+              try {
+                const vRetry = invoiceIngestionSchema.parse({
+                  tenantId: tenant.id, clientInvoiceNumber: existing.clientInvoiceId, documentNumber: existing.documentNumber || undefined,
+                  invoiceType: existing.invoiceType as any, invoiceKind: existing.invoiceKind as any,
+                  issueDate: existing.issueDate.toISOString().substring(0,10),
+                  customerCode: existing.customerCode, customerName: existing.customerName, customerTin: existing.customerTin || undefined,
+                  lineItems: existing.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                });
+                await invoiceQueue.add("signInvoice", { ...vRetry, dbInvoiceId: existing.id }, { idempotencyKey: `${tenant.id}:${existing.clientInvoiceId}:retry` });
+              } catch {}
+              return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `REJECTED invoice re-queued`, cittaResponse: { status: "PENDING_NRS_STAMP", invoice: formatInvoice(existing), idempotent: true, requeued: true } });
+            }
+            return res.status(200).json({ success: true, idempotent: true, message: `Already queued — idempotent`, cittaResponse: { status: existing.status, invoice: formatInvoice(existing), idempotent: true } });
+          }
         } catch {}
         return res.status(409).json({
           error: `Duplicate invoice: clientInvoiceNumber "${req.body.clientInvoiceNumber}" already exists for this tenant`,
@@ -2643,11 +2756,11 @@ async function startServer() {
   // ==========================================
   // 4. ITEM CODE MAPPINGS API (DB Backed)
   // ==========================================
-  app.get("/api/items/mappings", async (req, res) => {
+  app.get("/api/items/mappings", async (req: any, res) => {
     try {
-      const tenantId = req.query.tenantId as string;
+      const queryTenantId = req.query.tenantId as string | undefined;
       const { skip, take, page, limit } = parsePagination(req);
-      const where: any = tenantId ? { tenantId } : {};
+      const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
       const [total, items] = await Promise.all([
         prisma.item.count({ where }),
         prisma.item.findMany({ where, skip, take, orderBy: { createdAt: "desc" } }),
@@ -2788,11 +2901,11 @@ async function startServer() {
   // ==========================================
   // 5. CUSTOMERS API (DB Backed)
   // ==========================================
-  app.get("/api/customers", async (req, res) => {
+  app.get("/api/customers", async (req: any, res) => {
     try {
-      const tenantId = req.query.tenantId as string;
+      const queryTenantId = req.query.tenantId as string | undefined;
       const { skip, take, page, limit } = parsePagination(req);
-      const where: any = tenantId ? { tenantId } : {};
+      const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
       const [total, rawCustomers] = await Promise.all([
         prisma.customer.count({ where }),
         prisma.customer.findMany({ where, skip, take, orderBy: { createdAt: "desc" } }),
@@ -2925,11 +3038,11 @@ async function startServer() {
   // ==========================================
   // 6. VALIDATION ERRORS QUEUE API (DB Backed)
   // ==========================================
-  app.get("/api/validation-errors", async (req, res) => {
+  app.get("/api/validation-errors", async (req: any, res) => {
     try {
-      const tenantId = req.query.tenantId as string;
+      const queryTenantId = req.query.tenantId as string | undefined;
       const { skip, take, page, limit } = parsePagination(req);
-      const where: any = tenantId ? { tenantId } : {};
+      const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
       const [total, errors] = await Promise.all([
         prisma.validationError.count({ where }),
         prisma.validationError.findMany({
@@ -3135,11 +3248,11 @@ async function startServer() {
   // ==========================================
   // 8. AUDIT LOGS & METRICS API (DB Backed)
   // ==========================================
-  app.get("/api/audit-logs", async (req, res) => {
+  app.get("/api/audit-logs", async (req: any, res) => {
     try {
-      const tenantId = req.query.tenantId as string;
+      const queryTenantId = req.query.tenantId as string | undefined;
       const { skip, take, page, limit } = parsePagination(req);
-      const where: any = tenantId ? { tenantId } : {};
+      const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
       const [total, logs] = await Promise.all([
         prisma.auditLog.count({ where }),
         prisma.auditLog.findMany({
@@ -3161,15 +3274,17 @@ async function startServer() {
     }
   });
 
-  app.get("/api/metrics", async (req, res) => {
+  app.get("/api/metrics", async (req: any, res) => {
     try {
-      const totalInvoices = await prisma.invoice.count();
+      const scoped = getScopedTenantWhere(req, req.query.tenantId as string | undefined);
+      const invWhere: any = scoped.tenantId ? { tenantId: scoped.tenantId } : {};
+      const totalInvoices = await prisma.invoice.count({ where: Object.keys(invWhere).length ? invWhere : undefined });
       const approvedInvoices = await prisma.invoice.count({
-        where: { status: "APPROVED" },
+        where: { ...invWhere, status: "APPROVED" },
       });
-      const tenantsCount = await prisma.tenant.count();
+      const tenantsCount = await prisma.tenant.count({ where: req.user && req.user.role !== "ADMIN" ? { id: req.user.tenantId } : undefined });
       const openErrors = await prisma.validationError.count({
-        where: { status: "OPEN" },
+        where: { ...(scoped.tenantId ? { tenantId: scoped.tenantId } : {}), status: "OPEN" },
       });
 
       const successRate =

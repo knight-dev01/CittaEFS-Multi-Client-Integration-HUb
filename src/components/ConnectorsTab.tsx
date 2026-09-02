@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Connector } from '../types';
 import { NewConnectorModal } from './NewConnectorModal';
+import { QboStagingInbox } from './QboStagingInbox';
 
 interface ConnectorStatus {
   qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null };
@@ -345,6 +346,11 @@ export function ConnectorsTab() {
 
         </div>
       )}
+
+      {/* QBO Staging Inbox — preview before CittaEFS (DocNumber truth + autoEnqueue toggle) */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
+        <QboStagingInbox tenantId={activeTenant.id} />
+      </div>
 
       {/* Adapter Architecture Summary */}
       <div className="bg-emerald-50/60 rounded-xl border border-emerald-200/80 p-5 space-y-2">
