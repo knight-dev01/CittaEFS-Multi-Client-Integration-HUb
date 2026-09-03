@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useHub } from '../lib/store';
 import { 
   Activity,
@@ -13,8 +14,16 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
-  const { metrics, tenants, invoices, activeTenant, purgeDemoData, currentUser, deleteTenant, setActiveTenantId } = useHub() as any;
+  const { metrics, tenants, invoices, activeTenant, purgeDemoData, currentUser, deleteTenant, setActiveTenantId, refreshAll, isBgRefreshing } = useHub() as any;
   const cittaEndpoint = (activeTenant?.cittaGatewayUrl?.trim() || 'https://ei-api.azurewebsites.net');
+  const hasPending = invoices.some((i:any) => ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(i.status));
+  const pendingCount = invoices.filter((i:any) => ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(i.status)).length;
+
+  useEffect(() => {
+    if (!hasPending) return;
+    const id = setInterval(() => { if (document.hidden) return; refreshAll(); }, 5000);
+    return () => clearInterval(id);
+  }, [hasPending, refreshAll]);
 
   const userRole = currentUser?.role || 'OPERATOR';
   const canOnboard = userRole === 'ADMIN';
@@ -164,11 +173,11 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
         </div>
       </div>
 
-      {/* Recent invoices — overview only (no Send) */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      {/* Recent invoices — overview only (no Send) — live tracks propagation via WS + 5s poll when pending */}
+      <div className={`bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm ${hasPending ? 'ring-1 ring-violet-200' : ''}`}>
         <div className="px-5 py-4 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
-          <span className="font-bold text-slate-900 text-xs flex items-center gap-2"><FileText className="w-4 h-4 text-violet-600" /> Recent Invoices — Overview</span>
-          <span className="text-[11px] text-slate-500">Active: {activeTenant.name} • Send from Invoices tab</span>
+          <span className="font-bold text-slate-900 text-xs flex items-center gap-2"><FileText className="w-4 h-4 text-violet-600" /> Recent Invoices — Overview {hasPending && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-[10px] font-bold flex items-center gap-1"><Clock className={`w-3 h-3 ${isBgRefreshing ? 'animate-spin' : 'animate-pulse'}`} /> Live tracking {pendingCount} pending</span>} {isBgRefreshing && !hasPending && <span className="w-2 h-2 bg-violet-600 rounded-full animate-pulse" />}</span>
+          <span className="text-[11px] text-slate-500">Active: {activeTenant.name} • {hasPending ? '5s poll + WS • Send from Invoices tab' : 'Send from Invoices tab'}</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
