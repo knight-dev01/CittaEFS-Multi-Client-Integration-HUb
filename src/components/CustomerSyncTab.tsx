@@ -13,7 +13,8 @@ import {
   Phone, 
   MapPin,
   ShieldCheck,
-  Trash2
+  Trash2,
+  ChevronDown
 } from 'lucide-react';
 
 export function CustomerSyncTab() {
@@ -33,6 +34,7 @@ export function CustomerSyncTab() {
   const [country, setCountry] = useState('NG');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const tenantCustomers = customers.filter(c => c.tenantId === activeTenant.id);
 
@@ -108,28 +110,17 @@ export function CustomerSyncTab() {
 
       </div>
 
-      {/* Rules Information Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200/80 p-5 text-xs space-y-1.5 shadow-sm">
-          <div className="flex items-center space-x-2 font-semibold text-slate-900">
-            <Building2 className="w-4 h-4 text-amber-500" />
-            <span>B2B Customer Protocol:</span>
-          </div>
-          <p className="text-slate-600 leading-relaxed">
-            Requires validated Tax Identification Number (TIN), official billing address, and unique <code className="bg-slate-100 text-indigo-700 rounded px-1.5 py-0.5 font-mono text-[11px]">customerCode</code>.
-          </p>
+      {/* Rules — collapsed behind dropdown to reduce overload */}
+      <details className="bg-white rounded-xl border border-slate-200/80 shadow-sm group">
+        <summary className="list-none px-5 py-3 flex items-center justify-between cursor-pointer text-xs font-semibold text-slate-700">
+          <span className="flex items-center gap-2"><Building2 className="w-4 h-4 text-amber-500" /> B2B / B2C Protocol — click for details</span>
+          <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition" />
+        </summary>
+        <div className="px-5 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="bg-slate-50 rounded-lg p-3 border border-slate-100"><span className="font-semibold flex items-center gap-1"><Building2 className="w-3.5 h-3.5 text-amber-500" /> B2B</span><p className="text-slate-600 mt-1">Requires validated TIN, billing address, unique <code className="bg-white px-1 py-0.5 rounded border font-mono text-[11px]">customerCode</code>.</p></div>
+          <div className="bg-slate-50 rounded-lg p-3 border border-slate-100"><span className="font-semibold flex items-center gap-1"><UserCheck className="w-3.5 h-3.5 text-emerald-600" /> B2C</span><p className="text-slate-600 mt-1">Auto <code className="bg-white px-1 py-0.5 rounded border font-mono text-[11px]">invoiceKind="B2C"</code> + dynamic name strings.</p></div>
         </div>
-
-        <div className="bg-white rounded-xl border border-slate-200/80 p-5 text-xs space-y-1.5 shadow-sm">
-          <div className="flex items-center space-x-2 font-semibold text-slate-900">
-            <UserCheck className="w-4 h-4 text-emerald-600" />
-            <span>B2C Over-The-Counter Protocol:</span>
-          </div>
-          <p className="text-slate-600 leading-relaxed">
-            Automatically toggles <code className="bg-slate-100 text-emerald-700 rounded px-1.5 py-0.5 font-mono text-[11px]">invoiceKind = "B2C"</code> and extracts dynamic <code className="bg-slate-100 text-emerald-700 rounded px-1.5 py-0.5 font-mono text-[11px]">customerName</code> strings.
-          </p>
-        </div>
-      </div>
+      </details>
 
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm">
@@ -160,75 +151,59 @@ export function CustomerSyncTab() {
 
       </div>
 
-      {/* Customer Directory Table */}
+      {/* Customer Directory — simplified: key cols visible, verbose behind row dropdown */}
       <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
+        <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+          <span className="text-[11px] text-slate-500">Simplified view — core fields visible, verbose details hidden in dropdown per row</span>
+          <span className="text-[11px] font-semibold text-slate-600">{filteredCustomers.length} customer(s)</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs text-slate-700">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
+                <th className="py-3 px-3"></th>
                 <th className="py-3 px-4">Client Code</th>
-                <th className="py-3 px-4">CittaEFS Code</th>
                 <th className="py-3 px-4">Customer Name</th>
-                <th className="py-3 px-4">Tax ID (TIN)</th>
                 <th className="py-3 px-4">Kind</th>
-                <th className="py-3 px-4">Street</th>
-                <th className="py-3 px-4">Country</th>
                 <th className="py-3 px-4">TIN Validation</th>
-                <th className="py-3 px-4 text-right">Last Synced</th>
-                <th className="py-3 px-4 text-center">Delete</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
+                  <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
                     No customers match your search query.
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-semibold text-slate-900">{c.clientCustomerCode}</td>
-                    <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">
-                      {c.cittaCustomerCode ? c.cittaCustomerCode : (
-                        <span className="italic text-slate-400">Not yet registered</span>
+                filteredCustomers.map((c) => {
+                  const isOpen = expandedId===c.id;
+                  return (
+                    <>
+                      <tr key={c.id} className={`hover:bg-slate-50/80 transition-colors ${isOpen?'bg-indigo-50/30':''}`}>
+                        <td className="py-3 px-3"><button onClick={()=>setExpandedId(isOpen?null:c.id)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer"><ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button></td>
+                        <td className="py-3 px-4 font-mono font-semibold text-slate-900">{c.clientCustomerCode}</td>
+                        <td className="py-3 px-4 font-medium text-slate-900">{c.name}</td>
+                        <td className="py-3 px-4"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.isB2B ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{c.isB2B ? 'B2B' : 'B2C'}</span></td>
+                        <td className="py-3 px-4"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.tinValidationStatus === 'VALIDATED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>{c.tinValidationStatus === 'VALIDATED' ? <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" /> : <AlertTriangle className="w-3 h-3 mr-1 text-rose-600" />}{c.tinValidationStatus}</span></td>
+                        <td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-1"><button onClick={()=>setExpandedId(isOpen?null:c.id)} className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-violet-600 border border-slate-200 rounded-lg bg-white cursor-pointer">Details</button><button onClick={async()=>{ if(!confirm(`Delete customer ${c.name}?`)) return; try{ await deleteCustomer(c.id); }catch(e:any){ alert(e.message); } }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={`${c.id}-details`} className="bg-slate-50/60">
+                          <td colSpan={6} className="px-6 py-3">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
+                              <div><span className="font-semibold text-slate-500">CittaEFS Code</span><div className="font-mono text-slate-700">{c.cittaCustomerCode || <span className="italic text-slate-400">Not yet registered</span>}</div></div>
+                              <div><span className="font-semibold text-slate-500">Tax ID (TIN)</span><div className="font-mono text-slate-700">{c.tin || '—'}</div></div>
+                              <div><span className="font-semibold text-slate-500">Street</span><div className="text-slate-600 truncate" title={c.street}>{c.street || '—'}</div></div>
+                              <div><span className="font-semibold text-slate-500">Country / Synced</span><div className="font-mono uppercase text-slate-600">{c.country || 'Unknown'} • {c.lastSyncedAt}</div></div>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-slate-900">{c.name}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{c.tin}</td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                        c.isB2B ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      }`}>
-                        {c.isB2B ? 'B2B Corporate' : 'B2C Retail'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 max-w-xs truncate text-slate-500" title={c.street}>
-                      {c.street}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600 uppercase">
-                      {c.country || <span className="italic text-slate-400 normal-case">Unknown</span>}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                        c.tinValidationStatus === 'VALIDATED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}>
-                        {c.tinValidationStatus === 'VALIDATED' ? (
-                          <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" />
-                        ) : (
-                          <AlertTriangle className="w-3 h-3 mr-1 text-rose-600" />
-                        )}
-                        {c.tinValidationStatus}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono text-[11px] text-slate-400">
-                      {c.lastSyncedAt}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <button onClick={async()=>{ if(!confirm(`Delete customer ${c.name}?`)) return; try{ await deleteCustomer(c.id); }catch(e:any){ alert(e.message); } }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </td>
-                  </tr>
-                ))
+                    </>
+                  );
+                })
               )}
             </tbody>
           </table>

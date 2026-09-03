@@ -10,6 +10,7 @@ import {
   ArrowRight, 
   Building2,
   ListFilter,
+  ChevronDown,
   X
 } from 'lucide-react';
 
@@ -21,6 +22,8 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
   const [correctedTin, setCorrectedTin] = useState<string>('P019283746Z');
   const [isResolving, setIsResolving] = useState(false);
   const [isBulkFixing, setIsBulkFixing] = useState(false);
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   const tenantErrors = validationErrors.filter(e => e.tenantId === activeTenant.id);
   const openErrors = tenantErrors.filter(e => e.status === 'OPEN');
@@ -83,96 +86,74 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
         </div>
       </div>
 
-      {/* Main Table */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-        <div className="px-5 py-4 bg-slate-900 text-white border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <ListFilter className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wider">
-              {activeTenant.name} Exception List
-            </h3>
-          </div>
+      {/* Simplified — grouped dropdowns to reduce cognitive overload */}
+      {tenantErrors.length === 0 ? (
+        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-10 text-center text-slate-800">
+          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+          <p className="text-base font-bold text-slate-900">Zero Validation Errors</p>
+          <p className="text-xs text-slate-500 mt-1">All transactions comply with CittaEFS & NRS — verbose errors hidden.</p>
         </div>
-
-        {tenantErrors.length === 0 ? (
-          <div className="p-10 text-center text-slate-800">
-            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-            <p className="text-base font-bold text-slate-900">Zero Validation Errors Detected!</p>
-            <p className="text-xs text-slate-500 mt-1">All ingested transactions comply 100% with CittaEFS & NRS specifications.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs text-slate-900">
-              <thead>
-                <tr className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-semibold tracking-wider border-b border-slate-100">
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Client Invoice #</th>
-                  <th className="py-3 px-4">Error Category</th>
-                  <th className="py-3 px-4">Field Affected</th>
-                  <th className="py-3 px-4">Error Description</th>
-                  <th className="py-3 px-4">Detected At</th>
-                  <th className="py-3 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {tenantErrors.map((err) => (
-                  <tr key={err.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full border ${
-                        err.status === 'OPEN' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      }`}>
-                        {err.status}
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                      {err.clientInvoiceNumber}
-                    </td>
-
-                    <td className="py-3.5 px-4">
-                      <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 font-medium rounded-full text-[10px]">
-                        {err.errorCategory}
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-slate-700 font-medium">
-                      {err.fieldAffected}
-                    </td>
-
-                    <td className="py-3.5 px-4 max-w-xs truncate text-slate-600 font-medium" title={err.errorMessage}>
-                      {err.errorMessage}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-xs text-slate-500 font-mono">
-                      {err.createdAt}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right">
-                      {err.status === 'OPEN' ? (
-                        <button
-                          onClick={() => {
-                            setSelectedError(err);
-                            if (err.errorCategory === 'MISSING_HS_CODE') setSelectedHsCode('HS-3926.90');
-                          }}
-                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer inline-flex items-center space-x-1.5 shadow-sm"
-                        >
-                          <Wrench className="w-3.5 h-3.5" />
-                          <span>1-Click Fix</span>
-                        </button>
-                      ) : (
-                        <span className="text-emerald-700 font-semibold text-xs inline-flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          Resolved
-                        </span>
+      ) : (
+        <div className="space-y-3">
+          {(() => {
+            const grouped = openErrors.reduce((acc:any, e:any)=>{ (acc[e.errorCategory]=acc[e.errorCategory]||[]).push(e); return acc; }, {} as Record<string, any[]>);
+            const cats = Object.keys(grouped);
+            if (cats.length===0) return (
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-500">No open errors — {resolvedErrors.length} resolved hidden. <button onClick={()=>setShowResolved(v=>!v)} className="text-violet-600 underline ml-1">{showResolved?'Hide':'Show'} resolved</button></div>
+            );
+            return (
+              <>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] text-slate-500">Grouped by category — click dropdown to expand verbose details</span>
+                  <button onClick={()=>setShowResolved(v=>!v)} className="text-[11px] font-semibold text-slate-600 hover:text-violet-600 flex items-center gap-1">{showResolved?'Hide':'Show'} resolved ({resolvedErrors.length}) <ChevronDown className={`w-3 h-3 transition ${showResolved?'rotate-180':''}`} /></button>
+                </div>
+                {cats.map(cat=>{
+                  const list = grouped[cat];
+                  const isOpen = openCategory===cat;
+                  return (
+                    <div key={cat} className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+                      <button onClick={()=>setOpenCategory(isOpen?null:cat)} className={`w-full flex items-center justify-between px-5 py-4 text-left cursor-pointer ${isOpen?'bg-amber-50/50':''} hover:bg-slate-50`}>
+                        <div className="flex items-center gap-3">
+                          <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">{cat}</span>
+                          <span className="text-xs font-bold text-slate-900">{list.length} error(s)</span>
+                          <span className="hidden sm:inline text-[11px] text-slate-500">— {list[0]?.fieldAffected} • {list[0]?.errorMessage.slice(0,60)}…</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition ${isOpen?'rotate-180':''}`} />
+                      </button>
+                      {isOpen && (
+                        <div className="overflow-x-auto border-t border-slate-100">
+                          <table className="w-full text-left border-collapse text-xs text-slate-900">
+                            <thead><tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-semibold tracking-wider border-b border-slate-100"><th className="py-2 px-4">Status</th><th className="py-2 px-4">Invoice #</th><th className="py-2 px-4">Field</th><th className="py-2 px-4">Verbose Description ↓</th><th className="py-2 px-4 text-right">Action</th></tr></thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {list.map((err:any)=>(
+                                <tr key={err.id} className="hover:bg-slate-50/60">
+                                  <td className="py-2.5 px-4"><span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-amber-50 text-amber-700 border-amber-200">{err.status}</span></td>
+                                  <td className="py-2.5 px-4 font-mono font-bold">{err.clientInvoiceNumber}</td>
+                                  <td className="py-2.5 px-4 font-mono text-[11px]">{err.fieldAffected}</td>
+                                  <td className="py-2.5 px-4 max-w-md text-slate-600 text-[11px] leading-relaxed whitespace-normal break-words" title={err.errorMessage}>{err.errorMessage}</td>
+                                  <td className="py-2.5 px-4 text-right"><button onClick={()=>{setSelectedError(err); if(err.errorCategory==='MISSING_HS_CODE') setSelectedHsCode('HS-3926.90');}} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1"><Wrench className="w-3 h-3" /> Fix</button></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                    </div>
+                  );
+                })}
+                {showResolved && resolvedErrors.length>0 && (
+                  <div className="bg-white border border-emerald-200 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-3 bg-emerald-50 border-b border-emerald-100 text-xs font-bold text-emerald-800 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Resolved ({resolvedErrors.length}) — hidden by default</div>
+                    <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                      {resolvedErrors.slice(0,20).map((e:any)=>(<div key={e.id} className="px-4 py-2 flex items-center justify-between text-xs"><span className="font-mono font-semibold">{e.clientInvoiceNumber}</span><span className="text-slate-500">{e.errorCategory}</span><span className="text-emerald-600 font-semibold">RESOLVED</span></div>))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
 
       {/* 1-CLICK RESOLUTION MODAL */}
       {selectedError && (
