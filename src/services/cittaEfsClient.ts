@@ -280,7 +280,7 @@ export class CittaEfsClient {
         Authorization: `Bearer ${decryptedApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ invoices: dtoArray }),
+      body: JSON.stringify(dtoArray),
     });
 
     if (!res.ok) {
