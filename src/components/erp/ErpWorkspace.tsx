@@ -9,6 +9,7 @@ import { ItemDictionaryTab } from '../ItemDictionaryTab';
 import { ValidationErrorsTab } from '../ValidationErrorsTab';
 import { StagingTab } from '../StagingTab';
 import { ConnectorsTab } from '../ConnectorsTab';
+import { SuccessfulTab } from '../SuccessfulTab';
 import { CittaGatewayTab } from './CittaGatewayTab';
 import { ErpMappingTab } from './ErpMappingTab';
 import { AdminTenantsTab } from '../AdminTenantsTab';
@@ -85,6 +86,7 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
       {activeTab === 'items' && <ItemDictionaryTab />}
       {activeTab === 'staging' && <StagingTab onNavigate={setActiveTab} />}
       {activeTab === 'validation' && <ValidationErrorsTab onNavigate={setActiveTab} />}
+      {activeTab === 'successful' && <SuccessfulTab />}
       {activeTab === 'connectors' && <ConnectorsTab />}
       {activeTab === 'mapping' && <ErpMappingTab />}
       {activeTab === 'gateway' && <CittaGatewayTab />}

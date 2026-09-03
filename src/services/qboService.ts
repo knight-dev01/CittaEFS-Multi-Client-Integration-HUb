@@ -700,11 +700,15 @@ export async function ingestQboInvoice(
       let mapping = tenantItems.find((m) => m.clientSku === li.clientSku);
       const inferredDefault = inferServiceCode(li.clientSku || "", li.description || "");
       const rawHs = li.hsOrServiceCode;
+      // Inference takes precedence over generic/mis-mapped tenantItems; only use mapping if it's a valid SRV/HS code not the default generic
+      const mappingCode = mapping?.hsOrServiceCode;
+      const mappingIsGeneric = mappingCode === "HS-8471.30" || mappingCode === "SERV-DEFAULT" || !mappingCode;
       const hsOrServiceCode =
-        mapping?.hsOrServiceCode ||
         (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT" && rawHs !== "HS-8471.30"
           ? rawHs
-          : inferredDefault);
+          : mappingIsGeneric
+            ? inferredDefault
+            : mappingCode) || inferredDefault;
       const qty = Number(li.quantity || 1);
       const price = Number(li.unitPrice || 0);
       const discount = Number(li.discountAmount || 0);

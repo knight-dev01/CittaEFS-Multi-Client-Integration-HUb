@@ -28,6 +28,7 @@ import {
   Cloud,
   Trash2,
   PanelLeftClose,
+  CheckCircle2,
   PanelLeftOpen,
   ChevronsLeft
 } from 'lucide-react';
@@ -63,6 +64,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const openErrorCount = tenants.length > 0 && activeTenant ? validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
   const pendingStagingCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(i.status)).length : 0;
   const failedInvoiceCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['REJECTED','FAILED'].includes(i.status)).length : 0;
+  const successfulInvoiceCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['APPROVED','SIGNED'].includes(i.status)).length : 0;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -171,6 +173,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     { id: 'customers', label: 'Customers', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'items', label: 'Items', icon: Tag, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'successful', label: 'Successful', icon: CheckCircle2, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: successfulInvoiceCount }, // APPROVED/SIGNED invoices
 
     // ERP-dedicated
     { id: 'connectors', label: erp.id === 'qbo' ? 'QBO Connect' : 'Connectors', icon: Plug, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
@@ -207,7 +210,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                 CittaEFS
               </h1>
               <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
-                v2.27
+                v2.28
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-normal mt-1">
