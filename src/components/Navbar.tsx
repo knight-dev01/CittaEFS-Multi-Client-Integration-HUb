@@ -74,6 +74,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     try { return localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
   });
   const hoverExpandedRef = useRef(false);
+  const sidebarRef = useRef<HTMLElement>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef<number>(0);
   useEffect(() => {
@@ -116,6 +117,21 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       }, 300);
     }
   };
+
+  // close hover-expanded sidebar when clicking anywhere outside it
+  useEffect(() => {
+    if (!hoverExpandedRef.current || isCollapsed) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (sidebarRef.current && !sidebarRef.current.contains(target)) {
+        hoverExpandedRef.current = false;
+        toggleCollapsed({ fromHover: true });
+      }
+    };
+    // slight delay so the same hover-enter click doesn't immediately close
+    const id = setTimeout(() => document.addEventListener('mousedown', onDocClick), 100);
+    return () => { clearTimeout(id); document.removeEventListener('mousedown', onDocClick); };
+  }, [isCollapsed]);
 
   const handleDeleteActiveTenant = async () => {
     if (!activeTenant) return;
@@ -191,7 +207,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                 CittaEFS
               </h1>
               <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
-                v2.20
+                v2.21
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-normal mt-1">
@@ -432,8 +448,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       )}
 
-      {/* Desktop Persistent Sidebar — single toggle + hover to expand, collapses on leave / after click */}
-      <aside onMouseEnter={handleHoverEnter} onMouseLeave={handleHoverLeave} className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
+      {/* Desktop Persistent Sidebar — hover to expand, closes on mouseLeave or clicking anywhere outside */}
+      <aside ref={sidebarRef} onMouseEnter={handleHoverEnter} onMouseLeave={handleHoverLeave} className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
         <div className="flex flex-col w-full h-full relative">
           {/* Single collapse toggle — top-right */}
           <button
@@ -473,7 +489,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           )}
         </div>
       </aside>
-      {/* Sidebar is now independent — no full-screen overlay; main area clicks no longer toggle sidebar */}
+      {/* Clicking anywhere outside hover-expanded sidebar now collapses it (mousedown outside handler) */}
 
     </>
   );
