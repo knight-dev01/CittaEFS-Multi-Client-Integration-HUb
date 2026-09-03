@@ -768,6 +768,7 @@ router.post("/api/invoices/retry-bulk", async (req: any, res) => {
           });
           job = await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: inv.id }, { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}:retry:${Date.now()}` });
         }
+        try { await prisma.validationError.updateMany({ where: { tenantId: inv.tenantId, clientInvoiceNumber: inv.clientInvoiceId, status: "OPEN" }, data: { status: "RETRIED" } }); } catch {}
         results.push({ clientInvoiceNumber: inv.clientInvoiceId, success:true, jobId: job?.id });
       } catch (e:any) { results.push({ clientInvoiceNumber: inv.clientInvoiceId, success:false, error: e.message }); }
     }
