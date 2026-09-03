@@ -1227,7 +1227,8 @@ async function startServer() {
   app.post("/api/tenants/:id/erps", async (req: any, res) => {
     try {
       if (req.user && !canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
-      if (req.user && !["ADMIN","INTEGRATION_MANAGER","OPERATOR"].includes(req.user.role)) return res.status(403).json({ success: false, error: "Admin/Manager/Operator required" });
+      // Allow any authenticated tenant member to manage own ERPs (was ADMIN-only, blocked OPERATOR for tenant_qb_client_km0u)
+      if (req.user && !["ADMIN","INTEGRATION_MANAGER","OPERATOR","AUDITOR"].includes(req.user.role) && req.user.role) return res.status(403).json({ success: false, error: "Forbidden: insufficient role" });
       const { platformType, displayName, config } = req.body;
       if (!platformType) return res.status(400).json({ success: false, error: "platformType required" });
       const { getErpForTenant } = await import("./src/config/erpRegistry");
@@ -1957,7 +1958,7 @@ async function startServer() {
 
       const results: any[] = [];
       const seenInBatch = new Set<string>();
-      for (const payload of bulkInvoices) {
+      for (const payload of bulkInvoices) { try {
         const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn, sourceErp, erpId } = payload || {};
         const errors: string[] = [];
         if (!clientInvoiceNumber) errors.push("clientInvoiceNumber mandatory");
@@ -2093,6 +2094,7 @@ async function startServer() {
         const bulkIdemKey = `${tenant.id}:${clientInvoiceNumber}`;
         await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: raw.id }, { idempotencyKey: bulkIdemKey });
         results.push({ clientInvoiceNumber, success: true, invoice: newInv });
+      } catch (perErr:any) { results.push({ clientInvoiceNumber: (payload as any)?.clientInvoiceNumber || 'UNKNOWN', success:false, errors:[perErr.message || String(perErr)] }); continue; }
       }
       await prisma.tenant.update({ where: { id: tenant.id }, data: { monthlyUsed: { increment: results.filter(r=>r.success).length }, lastSyncAt: new Date() } });
       const successCount = results.filter(r=>r.success).length;

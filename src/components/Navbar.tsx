@@ -121,7 +121,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     { id: 'clients', label: 'Overview', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'import', label: 'Import', icon: Download, category: 'erp', requiredRoles: ['ADMIN', 'OPERATOR'], erpOnly: true },
-    { id: 'staging', label: 'Staging', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'staging', label: 'Staging', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] }, // pre-transmission holding area
     { id: 'customers', label: 'Customers', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'items', label: 'Items', icon: Tag, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
@@ -161,7 +161,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                 CittaEFS
               </h1>
               <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
-                v2.4
+                v2.5
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-normal mt-1">
