@@ -1733,13 +1733,12 @@ async function startServer() {
               }
               continue;
             }
+            results.push({ clientInvoiceNumber, success: false, errors: [`Duplicate invoice "${clientInvoiceNumber}" — already exists`] });
+            continue;
+          } else {
+            results.push({ clientInvoiceNumber, success: false, errors: [bulkCreateErr.message || String(bulkCreateErr)] });
+            continue;
           }
-          results.push({ clientInvoiceNumber, success: false, errors: [`Duplicate invoice "${clientInvoiceNumber}" — already exists`] });
-          continue;
-        } else {
-          results.push({ clientInvoiceNumber, success: false, errors: [bulkCreateErr.message || String(bulkCreateErr)] });
-          continue;
-        }
         }
         const newInv = formatInvoice(raw);
         const validated = invoiceIngestionSchema.parse({
