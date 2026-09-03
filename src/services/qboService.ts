@@ -686,20 +686,24 @@ export async function ingestQboInvoice(
   // Transform raw invoice to canonical structure
   const transformed = qboAdapter.transform(rawInvoice);
 
-  // Validate unmapped HS/Service codes with shared defaults (HS-8471.30 / SRV-7212.10)
+  // Validate unmapped HS/Service codes — Option B auto-map + service detection, Option A strict will be checked before enqueue
   const tenantItems = await prisma.item.findMany({ where: { tenantId } });
+  const inferServiceCode = (sku: string, desc: string) => {
+    const text = `${sku} ${desc}`.toLowerCase();
+    if (/gardening|sod|rocks|fountain|pump|sprinkler|design|service|labor|labour|installation|maintenance|repair/.test(text)) return "SRV-7212.10";
+    if (/laptop|computer|router|switch|server/.test(text)) return "HS-8471.30";
+    return (sku || "").toUpperCase().startsWith("SRV") ? "SRV-7212.10" : "HS-8471.30";
+  };
   const processedLineItems = transformed.lineItems.map(
     (li: any, idx: number) => {
       let mapping = tenantItems.find((m) => m.clientSku === li.clientSku);
-      const defaultHs = (li.clientSku || "").toUpperCase().startsWith("SRV")
-        ? "SRV-7212.10"
-        : "HS-8471.30";
+      const inferredDefault = inferServiceCode(li.clientSku || "", li.description || "");
       const rawHs = li.hsOrServiceCode;
       const hsOrServiceCode =
         mapping?.hsOrServiceCode ||
-        (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT"
+        (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT" && rawHs !== "HS-8471.30"
           ? rawHs
-          : defaultHs);
+          : inferredDefault);
       const qty = Number(li.quantity || 1);
       const price = Number(li.unitPrice || 0);
       const discount = Number(li.discountAmount || 0);
@@ -724,6 +728,40 @@ export async function ingestQboInvoice(
       };
     },
   );
+
+  // Strict pre-queue: empty lines → Validation (handles 1013 No invoice data provided)
+  if (!processedLineItems.length) {
+    await prisma.validationError.create({
+      data: {
+        tenantId,
+        clientInvoiceNumber: docNumber,
+        errorCategory: 'MISSING_HS_CODE',
+        fieldAffected: 'lineItems',
+        errorMessage: `No invoice data provided — QBO invoice ${docNumber} has no SalesItemLineDetail lines`,
+        rawPayloadSample: JSON.stringify(rawInvoice).slice(0,2000),
+        status: 'OPEN',
+      }
+    });
+    throw new Error(`No invoice data provided for QBO Invoice ${docNumber}`);
+  }
+  // Strict HS validation — if still invalid, block queue and create ValidationError (Option A)
+  const validSet = new Set(["HS-8471.30","HS-8517.62","HS-7304.11","HS-3926.90","HS-4819.10","HS-1006.30","HS-3004.90","SRV-7212.10","SRV-7414.00","SRV-8703.20","SRV-6202.90","SRV-8010.15","HS-8471.50"]);
+  for (const li of processedLineItems) {
+    if (!validSet.has(li.hsOrServiceCode)) {
+      await prisma.validationError.create({
+        data: {
+          tenantId,
+          clientInvoiceNumber: docNumber,
+          errorCategory: 'MISSING_HS_CODE',
+          fieldAffected: 'hsOrServiceCode',
+          errorMessage: `Invalid Product Code - must be valid HS Code or Service Code (found ${li.hsOrServiceCode} for ${li.itemCode}) — map in Item Dictionary`,
+          rawPayloadSample: JSON.stringify(rawInvoice).slice(0,2000),
+          status: 'OPEN',
+        }
+      });
+      throw new Error(`Invalid Product Code - must be valid HS Code or Service Code (found ${li.hsOrServiceCode})`);
+    }
+  }
 
   const subtotal = processedLineItems.reduce(
     (acc, item) => acc + item.taxableAmount,

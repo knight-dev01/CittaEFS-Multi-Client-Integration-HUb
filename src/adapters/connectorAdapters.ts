@@ -106,7 +106,11 @@ export class QuickBooksAdapter implements ConnectorAdapter {
 
   transform(rawPayload: any): IngestedPayload {
     const docNumber = rawPayload.DocNumber || rawPayload.clientInvoiceNumber || `QBO-${rawPayload.Id || Date.now()}`;
-    // Gold: QBO has no header fields, use defaults that keep gateway compatible
+    const inferServiceCode = (sku: string, desc: string) => {
+      const text = `${sku} ${desc}`.toLowerCase();
+      if (/gardening|sod|rocks|fountain|pump|sprinkler|design|service|labor|labour|installation|maintenance|repair/.test(text)) return "SRV-7212.10";
+      return (sku || "").toUpperCase().startsWith("SRV") ? "SRV-7212.10" : "HS-8471.30";
+    };
     return {
       clientInvoiceNumber: docNumber,
       documentNumber: rawPayload.DocumentNumber || (rawPayload as any).documentNumber || docNumber,
@@ -115,7 +119,7 @@ export class QuickBooksAdapter implements ConnectorAdapter {
       customerName: rawPayload.CustomerRef?.name || rawPayload.customerName || 'QuickBooks Client',
       customerCode: rawPayload.CustomerRef?.value || (rawPayload as any).customerCode || 'CUST-QBO',
       customerTin: rawPayload.CustomerTaxId || rawPayload.customerTin || '',
-      invoiceKind: rawPayload.invoiceKind || (rawPayload.CustomerTaxId ? 'B2B' : undefined),
+      invoiceKind: rawPayload.invoiceKind || (rawPayload.CustomerTaxId ? 'B2B' : 'B2C'),
       invoiceType: rawPayload.TxnType === 'CreditMemo' ? 'CREDIT_NOTE' : rawPayload.invoiceType,
       invoiceTypeCode: (rawPayload as any).InvoiceTypeCode || (rawPayload as any).invoiceTypeCode,
       currency: (rawPayload as any).currency || 'NGN',
@@ -124,18 +128,22 @@ export class QuickBooksAdapter implements ConnectorAdapter {
       billingReferenceIrns: (rawPayload as any).billingReferenceIrns || ((rawPayload as any).originalIrn ? [String((rawPayload as any).originalIrn)] : undefined),
       customFields: (rawPayload as any).customFields,
       metadata: (rawPayload as any).metadata,
-      lineItems: (rawPayload.Line || rawPayload.lineItems || []).filter((l:any)=> l.DetailType==='SalesItemLineDetail' || l.clientSku || l.SalesItemLineDetail).map((l: any) => ({
-        clientSku: l.SalesItemLineDetail?.ItemRef?.name || l.clientSku || 'SERV-QBO',
-        description: l.Description || l.description || 'QuickBooks Service Item',
-        quantity: l.SalesItemLineDetail?.Qty ?? l.quantity ?? 1,
-        unitPrice: l.SalesItemLineDetail?.UnitPrice ?? l.unitPrice ?? 100,
-        hsOrServiceCode: l.hsOrServiceCode || 'SERV-DEFAULT',
-        vatRate: l.vatRate,
-        lineNum: (l as any).lineNum,
-        unitCode: (l as any).unitCode || 'EA',
-        taxCategoryId: (l as any).taxCategoryId || 'STANDARD_VAT',
-        discountAmount: Number((l as any).LineDiscount ?? (l as any).discountAmount ?? 0),
-      }))
+      lineItems: (rawPayload.Line || rawPayload.lineItems || []).filter((l:any)=> l.DetailType==='SalesItemLineDetail' || l.clientSku || l.SalesItemLineDetail).map((l: any) => {
+        const sku = l.SalesItemLineDetail?.ItemRef?.name || l.clientSku || 'SERV-QBO';
+        const desc = l.Description || l.description || 'QuickBooks Service Item';
+        return {
+          clientSku: sku,
+          description: desc,
+          quantity: l.SalesItemLineDetail?.Qty ?? l.quantity ?? 1,
+          unitPrice: l.SalesItemLineDetail?.UnitPrice ?? l.unitPrice ?? 100,
+          hsOrServiceCode: l.hsOrServiceCode && l.hsOrServiceCode !== 'SERV-DEFAULT' && l.hsOrServiceCode !== 'HS-8471.30' ? l.hsOrServiceCode : inferServiceCode(sku, desc),
+          vatRate: l.vatRate,
+          lineNum: (l as any).lineNum,
+          unitCode: (l as any).unitCode || 'EA',
+          taxCategoryId: (l as any).taxCategoryId || 'STANDARD_VAT',
+          discountAmount: Number((l as any).LineDiscount ?? (l as any).discountAmount ?? 0),
+        };
+      })
     } as any;
   }
 

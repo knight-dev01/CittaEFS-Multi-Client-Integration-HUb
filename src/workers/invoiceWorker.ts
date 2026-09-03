@@ -27,8 +27,34 @@ export async function processInvoiceJob(
   await invoiceQueue.updateJob(job);
 
   try {
-    // 1. Dispatch payload to CittaEFS Gateway C# REST API — forward all gold fields (header, currency, IRNs, customFields)
+    // 0. Re-normalize HS/Service code at send time against Item dictionary (Option B auto-map)
     const _d:any = job.data as any;
+    try {
+      const items = await prisma.item.findMany({ where: { tenantId: job.data.tenantId } });
+      const inferServiceCode = (sku: string, desc: string) => {
+        const text = `${sku} ${desc}`.toLowerCase();
+        if (/gardening|sod|rocks|fountain|pump|sprinkler|design|service|labor|labour|installation|maintenance|repair/.test(text)) return "SRV-7212.10";
+        return (sku || "").toUpperCase().startsWith("SRV") ? "SRV-7212.10" : "HS-8471.30";
+      };
+      const validSet = new Set(["HS-8471.30","HS-8517.62","HS-7304.11","HS-3926.90","HS-4819.10","HS-1006.30","HS-3004.90","SRV-7212.10","SRV-7414.00","SRV-8703.20","SRV-6202.90","SRV-8010.15"]);
+      for (const li of (job.data.lineItems as any[])) {
+        const mapping = items.find(m => m.clientSku === li.itemCode);
+        if (mapping && validSet.has(mapping.hsOrServiceCode)) {
+          li.hsOrServiceCode = mapping.hsOrServiceCode;
+        } else if (!validSet.has(li.hsOrServiceCode) || li.hsOrServiceCode === "HS-8471.30") {
+          const inferred = inferServiceCode(li.itemCode || "", li.description || "");
+          if (validSet.has(inferred)) li.hsOrServiceCode = inferred;
+        }
+      }
+      // Strict check — if still invalid, don't retry 5x, go straight to DLQ as validation (Option A)
+      const stillInvalid = (job.data.lineItems as any[]).find(li => !validSet.has(li.hsOrServiceCode) || li.hsOrServiceCode === "HS-8471.30" && /gardening|design|fountain|pump|sod|rocks|sprinkler/i.test(`${li.itemCode} ${li.description}`));
+      if (stillInvalid) {
+        throw new Error(`Invalid Product Code - must be valid HS Code or Service Code (found ${stillInvalid.hsOrServiceCode} for ${stillInvalid.itemCode})`);
+      }
+    } catch (e:any) {
+      if (e.message && e.message.includes("Invalid Product Code")) throw e;
+    }
+    // 1. Dispatch payload to CittaEFS Gateway C# REST API — forward all gold fields (header, currency, IRNs, customFields)
     const response: CittaEfsResponse = await cittaEfsClient.signAndStampInvoice({
       tenantId: job.data.tenantId,
       clientInvoiceNumber: job.data.clientInvoiceNumber,
@@ -85,6 +111,25 @@ export async function processInvoiceJob(
   } catch (err: any) {
     const errorMsg = err.message || 'Unknown network gateway error';
     job.lastError = errorMsg;
+    // Validation errors (HS code etc) — don't retry 5x, go straight to DLQ as Validation
+    if (errorMsg.includes('Invalid Product Code')) {
+      await invoiceQueue.moveToDLQ(job, errorMsg);
+      await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(()=>{});
+      try {
+        await prisma.validationError.create({
+          data: {
+            tenantId: job.tenantId,
+            clientInvoiceNumber: job.data.clientInvoiceNumber,
+            errorCategory: 'MISSING_HS_CODE',
+            fieldAffected: 'hsOrServiceCode',
+            errorMessage: errorMsg.slice(0,800),
+            rawPayloadSample: JSON.stringify(job.data).slice(0,2000),
+            status: 'OPEN',
+          }
+        });
+      } catch {}
+      return { jobId: job.id, success: false, error: errorMsg, movedToDLQ: true };
+    }
     // Missing gateway key — don't retry 5x, go straight to DLQ so UI can show 503 actionable error
     if (errorMsg.includes('No CittaEFS Gateway API key') || errorMsg.includes('GATEWAY_NOT_CONFIGURED')) {
       await invoiceQueue.moveToDLQ(job, errorMsg);
