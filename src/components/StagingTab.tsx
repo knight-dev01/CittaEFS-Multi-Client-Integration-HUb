@@ -10,6 +10,18 @@ export function StagingTab() {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const isAnyPropagating = retrying || isBgRefreshing;
+  const [propagatingSince, setPropagatingSince] = useState<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  useEffect(() => {
+    if (isAnyPropagating && propagatingSince === null) setPropagatingSince(Date.now());
+    if (!isAnyPropagating) { setPropagatingSince(null); setElapsedSec(0); }
+  }, [isAnyPropagating, propagatingSince]);
+  useEffect(() => {
+    if (!isAnyPropagating || propagatingSince === null) return;
+    const id = setInterval(() => setElapsedSec(Math.floor((Date.now() - propagatingSince) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [isAnyPropagating, propagatingSince]);
 
   const load = async () => {
     if (!activeTenant?.id) return;
@@ -68,7 +80,19 @@ export function StagingTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {isAnyPropagating && (
+        <div className="p-3 rounded-xl border border-violet-300 bg-violet-600 text-white flex items-center justify-between gap-3 font-sans shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <Clock className="w-4 h-4 animate-spin text-violet-200" />
+            <span className="text-xs font-bold tracking-tight">Propagating to CittaEFS…</span>
+            <span className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] font-mono font-bold">{elapsedSec}s elapsed</span>
+            <span className="hidden sm:inline text-[11px] text-violet-100">Buttons dulled until feedback</span>
+          </div>
+          <span className="text-[11px] font-mono bg-white/15 px-2 py-1 rounded">Hub → ei-api.azurewebsites.net</span>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="text-[10px] font-bold tracking-wider uppercase text-slate-500">Pending Staging</div>
           <div className="text-2xl font-black text-amber-600 mt-1">{counts.pending}</div>

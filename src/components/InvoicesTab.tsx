@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useHub } from '../lib/store';
 import { Invoice, InvoiceType, InvoiceKind, InvoiceStatus } from '../types';
 import {
@@ -75,6 +75,17 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
   const isRetryable = (status:string) => ['REJECTED','FAILED','PENDING_NRS_STAMP','PENDING','QUEUED'].includes(status);
   // Unified propagation guard — any CittaEFS send/retry in flight dulls ALL propagation buttons
   const isAnyPropagating = !!sendingId || isBulkSending || !!retryingId || expandedSending || isBulkRetrying || isBgRefreshing;
+  const [propagatingSince, setPropagatingSince] = useState<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  useEffect(() => {
+    if (isAnyPropagating && propagatingSince === null) setPropagatingSince(Date.now());
+    if (!isAnyPropagating) { setPropagatingSince(null); setElapsedSec(0); }
+  }, [isAnyPropagating, propagatingSince]);
+  useEffect(() => {
+    if (!isAnyPropagating || propagatingSince === null) return;
+    const id = setInterval(() => setElapsedSec(Math.floor((Date.now() - propagatingSince) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [isAnyPropagating, propagatingSince]);
 
   const handleRetry = async (inv: Invoice) => {
     if (retryingId) return;
@@ -270,6 +281,18 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
           );
         })()}
 
+        {isAnyPropagating && (
+          <div className="mx-5 mt-3 p-3 rounded-xl border border-violet-300 bg-violet-600 text-white flex items-center justify-between gap-3 font-sans shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <Clock className="w-4 h-4 animate-spin text-violet-200" />
+              <span className="text-xs font-bold tracking-tight">Propagating to CittaEFS…</span>
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] font-mono font-bold">{elapsedSec}s elapsed</span>
+              <span className="hidden sm:inline text-[11px] text-violet-100">Send / Retry dulled until feedback — do not close</span>
+            </div>
+            <span className="text-[11px] font-mono bg-white/15 px-2 py-1 rounded">Hub → ei-api.azurewebsites.net</span>
+          </div>
+        )}
+
         {/* Staging Area — shows hub→CittaEFS forwarding status */}
         {(() => {
           const stagingPending = tenantInvoices.filter((inv:any) => inv.status === 'PENDING_NRS_STAMP' || inv.status === 'PENDING' || inv.status === 'QUEUED').length;
@@ -335,7 +358,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
             <p className="text-xs text-slate-500 mt-1">Try clearing filters or transmitting a test transaction.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto transition-all ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
