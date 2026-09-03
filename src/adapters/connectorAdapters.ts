@@ -117,7 +117,7 @@ export class QuickBooksAdapter implements ConnectorAdapter {
       qboInvoiceId: String(rawPayload.Id || ''),
       issueDate: rawPayload.TxnDate || new Date().toISOString().substring(0, 10),
       customerName: rawPayload.CustomerRef?.name || rawPayload.customerName || 'QuickBooks Client',
-      customerCode: rawPayload.CustomerRef?.value || (rawPayload as any).customerCode || 'CUST-QBO',
+      customerCode: (()=>{ const v=String(rawPayload.CustomerRef?.value || (rawPayload as any).customerCode || '').trim(); if(!v) return 'CUST-QBO'; return /^CUST/i.test(v) ? v.toUpperCase() : `CUST${v}`; })(),
       customerTin: rawPayload.CustomerTaxId || rawPayload.customerTin || '',
       invoiceKind: rawPayload.invoiceKind || (rawPayload.CustomerTaxId ? 'B2B' : 'B2C'),
       invoiceType: rawPayload.TxnType === 'CreditMemo' ? 'CREDIT_NOTE' : rawPayload.invoiceType,

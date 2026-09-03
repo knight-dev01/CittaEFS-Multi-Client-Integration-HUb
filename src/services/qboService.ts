@@ -773,7 +773,8 @@ export async function ingestQboInvoice(
   );
   const grandTotal = subtotal + totalVat;
 
-  const customerCode = rawInvoice.CustomerRef?.value || "CUST-QBO";
+  const rawCust = String(rawInvoice.CustomerRef?.value || "").trim();
+  const customerCode = rawCust ? (/^CUST/i.test(rawCust) ? rawCust.toUpperCase() : `CUST${rawCust}`) : "CUST-QBO";
 
   // Keep the Customers/Items master directories in sync with real QBO data
   await upsertQboMasterData(
