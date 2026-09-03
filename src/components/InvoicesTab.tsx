@@ -69,10 +69,11 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
 
   const [isBulkSending, setIsBulkSending] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<{type:'success'|'error', text:string} | null>(null);
-  // Bulk should be highlighted whenever there is anything to send (not yet APPROVED/SIGNED); include REJECTED/CANCELLED for resend, hence broad filter
-  const pendingBulk = filteredInvoices.filter(inv => !['APPROVED','SIGNED'].includes(inv.status));
-  const retryableBulk = filteredInvoices.filter(inv => ['REJECTED','FAILED','PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status));
+  // Sequential: Send (fresh pending) → then Retry (failed) — mutually exclusive at bulk level
+  const pendingBulk = filteredInvoices.filter(inv => ['PENDING_NRS_STAMP','PENDING','QUEUED','CANCELLED'].includes(inv.status));
+  const retryableBulk = filteredInvoices.filter(inv => ['REJECTED','FAILED'].includes(inv.status));
   const isRetryable = (status:string) => ['REJECTED','FAILED','PENDING_NRS_STAMP','PENDING','QUEUED'].includes(status);
+  const hasRetryable = retryableBulk.length > 0;
   // Unified propagation guard — any CittaEFS send/retry in flight dulls ALL propagation buttons
   const isAnyPropagating = !!sendingId || isBulkSending || !!retryingId || expandedSending || isBulkRetrying || isBgRefreshing;
   const [propagatingSince, setPropagatingSince] = useState<number | null>(null);
@@ -246,13 +247,13 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
             <span className="text-xs text-slate-300 hidden sm:inline">
               Format: <strong className="text-violet-300">{activeTenant.platformType}</strong>
             </span>
-            {retryableBulk.length>0 && (
-              <button onClick={handleBulkRetry} disabled={isAnyPropagating} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${retryableBulk.length>0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-slate-700 text-slate-400 opacity-60'}`}>
+            {hasRetryable && (
+              <button onClick={handleBulkRetry} disabled={isAnyPropagating} title={hasRetryable ? 'Retry pending — Bulk Send dulled until failures cleared (Send → Retry sequential)' : ''} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale bg-amber-600 hover:bg-amber-700 text-white`}>
                 <RotateCcw className={`w-3.5 h-3.5 ${isBulkRetrying?'animate-spin':''}`} />
                 <span>{isBulkRetrying ? 'Retrying…' : `Retry Failed (${retryableBulk.length})`}</span>
               </button>
             )}
-            <button onClick={handleBulkSend} disabled={isAnyPropagating || pendingBulk.length===0} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${pendingBulk.length>0 ? 'bg-violet-600 hover:bg-violet-700 text-white ring-2 ring-violet-300/50 shadow-violet-600/20' : 'bg-slate-700 text-slate-400 opacity-60'}`}>
+            <button onClick={handleBulkSend} disabled={isAnyPropagating || pendingBulk.length===0 || hasRetryable} title={hasRetryable ? 'Bulk Send paused — fix Retry Failed first (Send → then Retry)' : ''} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${pendingBulk.length>0 && !hasRetryable ? 'bg-violet-600 hover:bg-violet-700 text-white ring-2 ring-violet-300/50 shadow-violet-600/20' : 'bg-slate-600 text-slate-400 opacity-40 grayscale cursor-not-allowed'}`}>
               <Send className="w-3.5 h-3.5" />
               <span>{isBulkSending ? 'Sending…' : `Bulk Send to CittaEFS (${pendingBulk.length})`}</span>
             </button>

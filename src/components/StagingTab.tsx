@@ -62,6 +62,7 @@ export function StagingTab() {
   const dlq = summary?.dlqPreview || [];
   const counts = summary?.counts || { pending:0, approved:0, rejected:0, queued:0, dlqCount:0 };
   const queue = summary?.queue || { engine:'db-memory', queued:0, failedInDLQ:0 };
+  const hasDLQ = (dlq.length > 0 || counts.dlqCount > 0 || counts.rejected > 0);
 
   return (
     <div className="space-y-6 font-sans text-xs">
@@ -75,8 +76,8 @@ export function StagingTab() {
         </div>
         <div className="flex items-center gap-2 font-sans">
           <button onClick={load} disabled={loading || retrying || isBgRefreshing} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer font-sans text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /> Refresh</button>
-          <button onClick={handleBulkRetry} disabled={retrying || loading || isBgRefreshing} className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale"><RotateCcw className={`w-3.5 h-3.5 ${retrying?'animate-spin':''}`} /> Retry DLQ</button>
-          <button onClick={handleRetryAllPending} disabled={retrying || loading || isBgRefreshing || counts.pending===0} className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale shadow-sm"><Send className="w-3.5 h-3.5" /> Re-queue Pending ({counts.pending})</button>
+          <button onClick={handleBulkRetry} disabled={retrying || loading || isBgRefreshing} title={hasDLQ ? 'Retry DLQ first — Re-queue dulled until DLQ cleared' : ''} className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale"><RotateCcw className={`w-3.5 h-3.5 ${retrying?'animate-spin':''}`} /> Retry DLQ</button>
+          <button onClick={handleRetryAllPending} disabled={retrying || loading || isBgRefreshing || counts.pending===0 || hasDLQ} title={hasDLQ ? 'Re-queue paused — clear Retry DLQ first (Send → then Retry)' : ''} className={`px-3.5 py-1.5 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale shadow-sm ${hasDLQ ? 'bg-slate-600 opacity-40 grayscale cursor-not-allowed' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className="w-3.5 h-3.5" /> Re-queue Pending ({counts.pending})</button>
         </div>
       </div>
 
