@@ -370,7 +370,38 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
             <p className="text-xs text-slate-500 mt-1">Try clearing filters or transmitting a test transaction.</p>
           </div>
         ) : (
-          <div ref={tableScrollRef} className={`overflow-x-auto transition-all scroll-smooth ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
+          <>
+            {/* Mobile-first: stacked cards on <lg, table on >=lg */}
+            <div className={`lg:hidden space-y-3 p-3 ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
+              {filteredInvoices.map((inv:any) => {
+                const errs = getInvoiceErrors(inv);
+                const hasErr = errs.length>0;
+                return (
+                  <div key={`m-${inv.id}`} className={`rounded-xl border p-4 space-y-3 bg-white shadow-sm ${hasErr ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-mono font-bold text-slate-900 text-sm">{inv.clientInvoiceNumber}</div>
+                        <div className="text-[11px] text-slate-500">{inv.issueDate} • {inv.invoiceType} • {inv.invoiceKind}</div>
+                        <div className="text-xs font-medium text-slate-800 mt-1 truncate max-w-[200px]">{inv.customerName}</div>
+                        <div className="text-[11px] font-mono text-slate-500">TIN: {inv.customerTin || 'N/A'}</div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-full border ${inv.status === 'SIGNED' || inv.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : inv.status === 'PENDING_NRS_STAMP' ? 'bg-amber-50 text-amber-700 border-amber-200' : inv.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-700'}`}>{inv.status}</span>
+                        <span className="text-xs font-bold text-slate-900">NGN {inv.grandTotal.toLocaleString()}</span>
+                        <span className="text-[11px] text-slate-500">VAT NGN {inv.totalVat.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600"><span className="truncate">{inv.irn ? inv.irn.slice(0,22)+'…' : 'Pending Stamp'}</span>{inv.irn && <button onClick={()=>setQrModalInvoice(inv)} className="p-1 text-slate-400 hover:text-indigo-600"><QrCode className="w-4 h-4" /></button>}<button onClick={()=>setExpandedInvoiceId(inv.id)} className="ml-auto px-2 py-1 bg-slate-900 text-white rounded-lg text-[11px]">Details</button></div>
+                    {hasErr && <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 leading-relaxed">{errs[0]} {errs.length>1 && <button onClick={()=>setShowVerboseErrors(true)} className="underline font-semibold">+{errs.length-1} more</button>}</div>}
+                    <div className="flex items-center gap-2 pt-1">
+                      {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && <button onClick={()=>{ setEditError(null); const copy=JSON.parse(JSON.stringify(inv)); const master=tenantCustomers.find((c:any)=> c.clientCustomerCode===copy.customerCode); if((!copy.customerTin||copy.customerTin==='N/A')&&master?.tin) copy.customerTin=master.tin; setEditingInvoice(copy); }} className="flex-1 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 min-h-[44px]"><Pencil className="w-4 h-4" /> Edit</button>}
+                      {inv.status === 'APPROVED' || inv.status === 'SIGNED' ? <span className="flex-1 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs font-semibold text-violet-700 flex items-center justify-center gap-1 min-h-[44px]"><CheckCircle2 className="w-4 h-4" /> Done</span> : ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status) ? <span className="flex-1 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-700 flex items-center justify-center gap-1 min-h-[44px]"><Clock className="w-4 h-4 animate-pulse" /> Pending</span> : isRetryable(inv.status) ? <button disabled={isAnyPropagating} onClick={()=>handleRetry(inv)} className="flex-1 py-2.5 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><RotateCcw className="w-4 h-4" /> Retry</button> : <button disabled={isAnyPropagating} onClick={async()=>{ if(sendingId) return; const e=getInvoiceErrors(inv); if(e.length){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${e.join('; ')}`}); return;} setSendingId(inv.id); try{ const tin=resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))}); } finally{ setSendingId(null); } }} className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><Send className="w-4 h-4" /> Send</button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div ref={tableScrollRef} className={`hidden lg:block overflow-x-auto transition-all scroll-smooth ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
@@ -564,6 +595,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

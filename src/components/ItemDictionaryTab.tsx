@@ -160,7 +160,20 @@ export function ItemDictionaryTab() {
           <span className="text-[11px] text-slate-500">Simplified — core fields visible, details in dropdown per SKU</span>
           <span className="text-[11px] font-semibold text-slate-600">{filteredMappings.length} items</span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="lg:hidden space-y-3 p-3">
+          {filteredMappings.length===0 ? <div className="p-6 text-center text-slate-400 text-xs">No items</div> : filteredMappings.map((m:any)=>{
+            const isOpen = expandedId===m.id;
+            return (
+              <div key={`mi-${m.id}`} className="rounded-xl border border-slate-200 bg-white p-4 space-y-2 shadow-sm">
+                <div className="flex items-start justify-between gap-2"><div><div className="font-mono font-bold text-slate-900 text-sm">{m.clientSku}</div><div className="text-sm font-semibold text-slate-800 truncate max-w-[180px]">{m.name}</div></div><span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${m.status==='MAPPED'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-amber-50 text-amber-700 border-amber-200'}`}>{m.status}</span></div>
+                <div className="font-mono text-xs"><span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${m.status==='UNMAPPED'?'bg-rose-50 text-rose-700 border-rose-200':'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>{m.hsOrServiceCode}</span></div>
+                <div className="flex gap-2 pt-1"><button onClick={()=>setExpandedId(isOpen?null:m.id)} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold min-h-[44px] flex items-center justify-center gap-1">Details <ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button><button onClick={async()=>{ if(!confirm(`Delete ${m.clientSku}?`)) return; try{ await deleteItem(m.id);}catch(e:any){alert(e.message);}}} className="py-2.5 px-3 bg-white border border-slate-200 rounded-xl text-rose-600 min-h-[44px]"><Trash2 className="w-4 h-4" /></button></div>
+                {isOpen && <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px]"><div className="flex justify-between"><span className="text-slate-500">Desc</span><span className="truncate max-w-[150px]">{m.description}</span></div><div className="flex justify-between"><span className="text-slate-500">Unit/Cat</span><span>{m.unitCode} • {m.category}</span></div><div className="flex justify-between"><span className="text-slate-500">VAT/Updated</span><span>{m.defaultVatRate}% • {m.updatedAt}</span></div></div>}
+              </div>
+            );
+          })}
+        </div>
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs text-slate-700">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">

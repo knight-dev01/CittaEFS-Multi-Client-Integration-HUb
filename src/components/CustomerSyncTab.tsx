@@ -157,7 +157,21 @@ export function CustomerSyncTab() {
           <span className="text-[11px] text-slate-500">Simplified view — core fields visible, verbose details hidden in dropdown per row</span>
           <span className="text-[11px] font-semibold text-slate-600">{filteredCustomers.length} customer(s)</span>
         </div>
-        <div className="overflow-x-auto">
+        {/* Mobile cards — hidden on lg */}
+        <div className="lg:hidden space-y-3 p-3">
+          {filteredCustomers.length===0 ? <div className="p-6 text-center text-slate-400 text-xs">No customers</div> : filteredCustomers.map((c:any)=>{
+            const isOpen = expandedId===c.id;
+            return (
+              <div key={`mc-${c.id}`} className="rounded-xl border border-slate-200 bg-white p-4 space-y-2 shadow-sm">
+                <div className="flex items-start justify-between gap-2"><div><div className="font-mono font-bold text-slate-900 text-sm">{c.clientCustomerCode}</div><div className="text-sm font-semibold text-slate-800">{c.name}</div></div><span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${c.isB2B?'bg-indigo-50 text-indigo-700 border-indigo-200':'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>{c.isB2B?'B2B':'B2C'}</span></div>
+                <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600"><span>TIN: {c.tin || '—'}</span><span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-semibold border ${c.tinValidationStatus==='VALIDATED'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-rose-50 text-rose-700 border-rose-200'}`}>{c.tinValidationStatus}</span></div>
+                <div className="flex gap-2 pt-1"><button onClick={()=>setExpandedId(isOpen?null:c.id)} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold min-h-[44px] flex items-center justify-center gap-1">Details <ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button><button onClick={async()=>{ if(!confirm(`Delete ${c.name}?`)) return; try{ await deleteCustomer(c.id);}catch(e:any){alert(e.message);}}} className="py-2.5 px-3 bg-white border border-slate-200 rounded-xl text-rose-600 min-h-[44px]"><Trash2 className="w-4 h-4" /></button></div>
+                {isOpen && <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px]"><div className="flex justify-between"><span className="text-slate-500">CittaEFS</span><span className="font-mono">{c.cittaCustomerCode || '—'}</span></div><div className="flex justify-between"><span className="text-slate-500">Street</span><span className="truncate max-w-[150px]">{c.street}</span></div><div className="flex justify-between"><span className="text-slate-500">Country</span><span>{c.country} • {c.lastSyncedAt}</span></div></div>}
+              </div>
+            );
+          })}
+        </div>
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs text-slate-700">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
