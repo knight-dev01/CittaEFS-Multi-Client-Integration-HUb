@@ -522,6 +522,4 @@ router.patch("/api/tenants/:id/erp-config", async (req: any, res) => {
   }
 });
 
-});
-
 export default router;
