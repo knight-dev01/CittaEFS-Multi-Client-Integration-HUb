@@ -6,7 +6,7 @@ import { Layers, Clock, CheckCircle2, AlertTriangle, RotateCcw, Send, Pencil, Da
 import { getRowErrors } from '../lib/invoiceValidation';
 
 export function StagingTab() {
-  const { activeTenant, refreshAll, retryBulkInvoices } = useHub() as any;
+  const { activeTenant, refreshAll, retryBulkInvoices, isBgRefreshing } = useHub() as any;
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -61,10 +61,10 @@ export function StagingTab() {
             <p className="text-slate-400 text-xs mt-1">Holding area before CittaEFS gateway — review, normalize, then send. Distinct from <strong className="text-amber-300">Validation</strong> (post-failure).</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={load} disabled={loading} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /> Refresh</button>
-          <button onClick={handleBulkRetry} disabled={retrying} className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><RotateCcw className={`w-3.5 h-3.5 ${retrying?'animate-spin':''}`} /> Retry DLQ</button>
-          <button onClick={handleRetryAllPending} disabled={retrying || counts.pending===0} className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"><Send className="w-3.5 h-3.5" /> Re-queue Pending ({counts.pending})</button>
+        <div className="flex items-center gap-2 font-sans">
+          <button onClick={load} disabled={loading || retrying || isBgRefreshing} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer font-sans text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /> Refresh</button>
+          <button onClick={handleBulkRetry} disabled={retrying || loading || isBgRefreshing} className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-50 disabled:cursor-not-allowed"><RotateCcw className={`w-3.5 h-3.5 ${retrying?'animate-spin':''}`} /> Retry DLQ</button>
+          <button onClick={handleRetryAllPending} disabled={retrying || loading || isBgRefreshing || counts.pending===0} className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"><Send className="w-3.5 h-3.5" /> Re-queue Pending ({counts.pending})</button>
         </div>
       </div>
 

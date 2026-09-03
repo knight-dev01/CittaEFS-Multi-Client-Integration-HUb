@@ -20,8 +20,15 @@ import {
 import { OverlaySelect } from './ui/OverlaySelect';
 import { toastGlobal } from './ui/Toast';
 
-export function InvoicesTab() {
-  const { invoices, activeTenant, customers, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices, updateInvoice, refreshAll, retryInvoice, retryBulkInvoices } = useHub() as any;
+export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void } = {}) {
+  const { invoices, activeTenant, customers, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices, updateInvoice, refreshAll, retryInvoice, retryBulkInvoices, isBgRefreshing } = useHub() as any;
+  const navigateToStaging = () => {
+    if (onNavigate) onNavigate('staging');
+    else {
+      try { localStorage.setItem('citta_active_tab', 'staging'); window.dispatchEvent(new CustomEvent('citta_navigate_staging')); window.location.hash = '#staging'; } catch {}
+      window.location.search = '?tab=staging';
+    }
+  };
 
   // Both Admin and Operator have access here.
 
@@ -227,12 +234,12 @@ export function InvoicesTab() {
               Format: <strong className="text-violet-300">{activeTenant.platformType}</strong>
             </span>
             {retryableBulk.length>0 && (
-              <button onClick={handleBulkRetry} disabled={isBulkRetrying} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all ${retryableBulk.length>0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-slate-700 text-slate-400 opacity-60'}`}>
+              <button onClick={handleBulkRetry} disabled={isBulkRetrying || isBulkSending || !!sendingId || isBgRefreshing} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-50 disabled:cursor-not-allowed ${retryableBulk.length>0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-slate-700 text-slate-400 opacity-60'}`}>
                 <RotateCcw className={`w-3.5 h-3.5 ${isBulkRetrying?'animate-spin':''}`} />
                 <span>{isBulkRetrying ? 'Retrying…' : `Retry Failed (${retryableBulk.length})`}</span>
               </button>
             )}
-            <button onClick={handleBulkSend} disabled={isBulkSending || pendingBulk.length===0} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all ${pendingBulk.length>0 ? 'bg-violet-600 hover:bg-violet-700 text-white ring-2 ring-violet-300/50 shadow-violet-600/20' : 'bg-slate-700 text-slate-400 opacity-60'}`}>
+            <button onClick={handleBulkSend} disabled={isBulkSending || !!sendingId || isBulkRetrying || isBgRefreshing || pendingBulk.length===0} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-50 disabled:cursor-not-allowed ${pendingBulk.length>0 ? 'bg-violet-600 hover:bg-violet-700 text-white ring-2 ring-violet-300/50 shadow-violet-600/20' : 'bg-slate-700 text-slate-400 opacity-60'}`}>
               <Send className="w-3.5 h-3.5" />
               <span>{isBulkSending ? 'Sending…' : `Bulk Send to CittaEFS (${pendingBulk.length})`}</span>
             </button>
@@ -291,10 +298,11 @@ export function InvoicesTab() {
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-slate-500 hidden sm:inline">{isBulkSending || sendingId ? 'Queuing…' : gatewayOk ? 'Hub → CittaEFS' : 'Hub only — no gateway'}</span>
                   <button
-                    onClick={() => setStatusFilter(isFilteringStaging ? 'ALL' : 'PENDING_NRS_STAMP')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${isFilteringStaging ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50'}`}
+                    onClick={navigateToStaging}
+                    title="Open Staging module (pre-transmission holding area)"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer bg-white text-violet-700 border-violet-200 hover:bg-violet-50 font-sans"
                   >
-                    {isFilteringStaging ? 'Show all' : `View staging (${stagingPending})`}
+                    View staging ({stagingPending}) →
                   </button>
                 </div>
               </div>
@@ -448,16 +456,16 @@ export function InvoicesTab() {
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
                           ) : isRetryable(inv.status) && (inv.status === 'REJECTED' || inv.status === 'FAILED') ? (
                             <button
-                              disabled={retryingId === inv.id}
+                              disabled={!!retryingId || !!sendingId || isBulkSending || isBgRefreshing || retryingId === inv.id}
                               onClick={() => handleRetry(inv as any)}
-                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border ${retryingId===inv.id ? 'bg-amber-400 text-white border-amber-300 cursor-wait' : 'bg-amber-600 hover:bg-amber-700 text-white border-transparent cursor-pointer'}`}
+                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border font-sans disabled:opacity-50 disabled:cursor-not-allowed ${retryingId===inv.id ? 'bg-amber-400 text-white border-amber-300 cursor-wait' : 'bg-amber-600 hover:bg-amber-700 text-white border-transparent cursor-pointer'}`}
                               title={`Retry — will re-queue with 5 attempts (5s/30s/2m/10m/30m). Last status: ${inv.status}`}
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id ? 'animate-spin' : ''}`} /> {retryingId===inv.id ? 'Retrying…' : 'Retry'}
                             </button>
                           ) : (
                             <button
-                              disabled={sendingId === inv.id}
+                              disabled={!!sendingId || !!retryingId || isBulkSending || isBgRefreshing || sendingId === inv.id}
                               onClick={async () => {
                                 if (sendingId) return;
                                 const errs = getInvoiceErrors(inv);
@@ -485,16 +493,16 @@ export function InvoicesTab() {
                                   else setBulkMsg({type:'error', text: msg});
                                 } finally { setSendingId(null); }
                               }}
-                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border ${sendingId===inv.id ? 'bg-violet-400 text-white border-violet-300 cursor-wait opacity-80 backdrop-blur-sm' : 'bg-violet-600 hover:bg-violet-700 text-white border-transparent cursor-pointer'} disabled:opacity-60`}
+                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border font-sans disabled:opacity-50 disabled:cursor-not-allowed ${sendingId===inv.id ? 'bg-violet-400 text-white border-violet-300 cursor-wait opacity-80 backdrop-blur-sm' : 'bg-violet-600 hover:bg-violet-700 text-white border-transparent cursor-pointer'} disabled:opacity-60`}
                             >
                               <Send className={`w-3.5 h-3.5 ${sendingId===inv.id ? 'animate-pulse' : ''}`} /> {sendingId===inv.id ? 'Queuing…' : 'Send'}
                             </button>
                           )}
                           {isRetryable(inv.status) && inv.status === 'PENDING_NRS_STAMP' && (
                             <button
-                              disabled={retryingId === inv.id}
+                              disabled={!!retryingId || !!sendingId || isBulkSending || isBgRefreshing || retryingId === inv.id}
                               onClick={() => handleRetry(inv as any)}
-                              className="p-1.5 bg-white hover:bg-amber-50 text-slate-500 hover:text-amber-600 border border-slate-200 hover:border-amber-200 rounded-lg cursor-pointer"
+                              className="p-1.5 bg-white hover:bg-amber-50 text-slate-500 hover:text-amber-600 border border-slate-200 hover:border-amber-200 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed font-sans"
                               title="Retry — if send didn't go through, this forces re-queue (resets backoff)"
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id ? 'animate-spin' : ''}`} />
@@ -559,8 +567,8 @@ export function InvoicesTab() {
                 {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-xl"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setExpandedInvoiceId(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Close</button>
-                  {(inv.status === 'REJECTED' || inv.status === 'FAILED') && <button disabled={retryingId===inv.id} onClick={async()=>{ setExpandedSending(true); try{ await retryInvoice(inv.id); setBulkMsg({type:'success', text:`Retry queued for ${inv.clientInvoiceNumber}`}); setExpandedInvoiceId(null);} catch(e:any){ setBulkMsg({type:'error', text:e.message});} finally{ setExpandedSending(false);}}} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 ${retryingId===inv.id ? 'bg-amber-400 cursor-wait' : 'bg-amber-600 hover:bg-amber-700'}`}><RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id?'animate-spin':''}`} /> {retryingId===inv.id?'Retrying…':'Retry — re-queue to CittaEFS'}</button>}
-                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='CANCELLED') && <button disabled={expandedSending} onClick={async () => { if(expandedSending) return; const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); toastGlobal('error','Fix before sending', errs[0]); return; } setExpandedSending(true); toastGlobal('info',`Queuing ${inv.clientInvoiceNumber}…`,'Idempotent'); try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } finally{ setExpandedSending(false);} }} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 ${expandedSending ? 'bg-violet-400 cursor-wait opacity-80' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className={`w-3.5 h-3.5 ${expandedSending ? 'animate-pulse' : ''}`} /> {expandedSending ? 'Queuing…' : 'Send to CittaEFS'}</button>}
+                  {(inv.status === 'REJECTED' || inv.status === 'FAILED') && <button disabled={!!retryingId || !!sendingId || expandedSending || isBgRefreshing || retryingId===inv.id} onClick={async()=>{ setExpandedSending(true); try{ await retryInvoice(inv.id); setBulkMsg({type:'success', text:`Retry queued for ${inv.clientInvoiceNumber}`}); setExpandedInvoiceId(null);} catch(e:any){ setBulkMsg({type:'error', text:e.message});} finally{ setExpandedSending(false);}}} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-50 disabled:cursor-not-allowed ${retryingId===inv.id ? 'bg-amber-400 cursor-wait' : 'bg-amber-600 hover:bg-amber-700'}`}><RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id?'animate-spin':''}`} /> {retryingId===inv.id?'Retrying…':'Retry — re-queue to CittaEFS'}</button>}
+                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='CANCELLED') && <button disabled={!!expandedSending || !!sendingId || !!retryingId || isBgRefreshing} onClick={async () => { if(expandedSending) return; const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); toastGlobal('error','Fix before sending', errs[0]); return; } setExpandedSending(true); toastGlobal('info',`Queuing ${inv.clientInvoiceNumber}…`,'Idempotent'); try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } finally{ setExpandedSending(false);} }} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-50 disabled:cursor-not-allowed ${expandedSending ? 'bg-violet-400 cursor-wait opacity-80' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className={`w-3.5 h-3.5 ${expandedSending ? 'animate-pulse' : ''}`} /> {expandedSending ? 'Queuing…' : 'Send to CittaEFS'}</button>}
                   {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING') && <button disabled={retryingId===inv.id} onClick={async()=>{ try{ await retryInvoice(inv.id); setBulkMsg({type:'success', text:`Forced retry for ${inv.clientInvoiceNumber}`}); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } }} className="px-3 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1"><RotateCcw className="w-3.5 h-3.5" /> Force Retry</button>}
                   {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
                 </div>
@@ -666,8 +674,8 @@ export function InvoicesTab() {
                     }
                     finally { setEditSaving(false); }
                   }}
-                  disabled={editSaving}
-                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                  disabled={editSaving || isBgRefreshing}
+                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans"
                 >
                   <Save className="w-3.5 h-3.5" /> {editSaving ? 'Saving...' : 'Save Changes'}
                 </button>

@@ -79,7 +79,7 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
 
       {/* Tab router — only render the active ERP's tabs */}
       {activeTab === 'clients' && <OverviewTab onOpenOnboardModal={onOpenOnboard} />}
-      {activeTab === 'invoices' && <InvoicesTab />}
+      {activeTab === 'invoices' && <InvoicesTab onNavigate={setActiveTab} />}
       {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
       {activeTab === 'customers' && <CustomerSyncTab />}
       {activeTab === 'items' && <ItemDictionaryTab />}
