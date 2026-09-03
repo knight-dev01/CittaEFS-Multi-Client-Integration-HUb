@@ -1,7 +1,10 @@
 /**
  * Shared invoice row validation — used by ExcelDocumentViewer and QBO ingest.
  * Single source of truth for HS/TIN/Qty etc. so QBO and Excel stay normalised to CittaEFS.
+ * Wired to invoice_template.xlsx:Instructions reference (src/data/invoiceTemplateReference.ts)
  */
+import { INVOICE_TYPE_REQUIRES_IRN, INVOICE_NUMBER_PATTERN } from "../data/invoiceTemplateReference";
+
 export interface RowLike {
   clientInvoiceNumber: string;
   documentNumber?: string;
@@ -25,6 +28,7 @@ export interface RowLike {
 export function getRowErrors(row: RowLike): string[] {
   const errs: string[] = [];
   if (!row.clientInvoiceNumber || String(row.clientInvoiceNumber).trim().length < 3) errs.push('Invoice # missing/short');
+  else if (!INVOICE_NUMBER_PATTERN.test(String(row.clientInvoiceNumber).trim())) errs.push('Invoice # must be ONLY CAPS A-Z + NUMBERS, no dash/underscore/lowercase');
   if (!row.issueDate || isNaN(Date.parse(row.issueDate))) errs.push('Issue Date invalid');
   if (!row.customerCode || String(row.customerCode).trim().length < 2) errs.push('Customer Code missing');
   if (!row.customerName || String(row.customerName).trim().length < 2) errs.push('Customer Name missing');
@@ -34,9 +38,8 @@ export function getRowErrors(row: RowLike): string[] {
   if (!row.quantity || Number(row.quantity) <= 0) errs.push('Qty >0 required');
   if (row.unitPrice === undefined || Number(row.unitPrice) < 0) errs.push('Price required');
   if (row.vatRate === undefined || Number(row.vatRate) < 0 || Number(row.vatRate) > 100) errs.push('VAT 0-100 required');
-  // Gold: InvoiceTypeCode requiring BillingReferenceIRNs for 380/381/384/393
-  const codeRequiringIRN = ['380','381','384','385','393'];
-  if (row.invoiceTypeCode && codeRequiringIRN.includes(String(row.invoiceTypeCode).trim()) && (!row.billingReferenceIrns || String(row.billingReferenceIrns).trim().length < 5)) {
+  // Instructions:113-115 — only 380/384/393 require Billing Reference (381 Commercial Invoice does NOT)
+  if (row.invoiceTypeCode && INVOICE_TYPE_REQUIRES_IRN.has(String(row.invoiceTypeCode).trim()) && (!row.billingReferenceIrns || String(row.billingReferenceIrns).trim().length < 5)) {
     errs.push(`InvoiceTypeCode ${row.invoiceTypeCode} requires Billing Reference IRN(s)`);
   }
   if (row.headerCharges !== undefined && Number(row.headerCharges) < 0) errs.push('HeaderCharges cannot be negative');

@@ -27,7 +27,7 @@ export const invoiceLineItemSchema = z.object({
 export const invoiceIngestionSchema = z
   .object({
     tenantId: z.string().min(1, "Tenant ID is required"),
-    clientInvoiceNumber: z.string().min(1, "Client Invoice Number is required"),
+    clientInvoiceNumber: z.string().min(1, "Client Invoice Number is required").regex(/^[A-Z0-9]+$/, "Invoice Number must be ONLY CAPS A-Z + NUMBERS, no dash/underscore/lowercase"),
     documentNumber: z.string().optional(), // spec: distinct from Invoice Number, optional
     invoiceType: z
       .enum(["STANDARD", "CREDIT_NOTE", "DEBIT_NOTE", "CANCELLATION"])
@@ -54,14 +54,15 @@ export const invoiceIngestionSchema = z
       .min(1, "At least one line item is required"),
   })
   .transform((data) => {
-    // Gold: InvoiceTypeCode passthrough (380,381,384...) maps to invoiceType; 380/381->CREDIT, 384->DEBIT etc.
+    // Reference: invoice_template.xlsx Instructions:113-115 — 380 Credit Note / 384 Debit Note / 393 Self-billed Credit Note require IRN, 381 Commercial Invoice is STANDARD
     let effectiveInvoiceType = data.invoiceType;
     if ((data as any).invoiceTypeCode) {
       const code = String((data as any).invoiceTypeCode).trim();
-      if (["380","381"].includes(code)) effectiveInvoiceType = "CREDIT_NOTE" as any;
-      else if (["384","383"].includes(code)) effectiveInvoiceType = "DEBIT_NOTE" as any;
-      else if (["388"].includes(code)) effectiveInvoiceType = "STANDARD" as any;
-      // Keep original code for gateway via customFields
+      if (["380"].includes(code)) effectiveInvoiceType = "CREDIT_NOTE" as any;
+      else if (["384"].includes(code)) effectiveInvoiceType = "DEBIT_NOTE" as any;
+      else if (["393"].includes(code)) effectiveInvoiceType = "CREDIT_NOTE" as any;
+      else if (["381","388","389","390","392"].includes(code)) effectiveInvoiceType = "STANDARD" as any;
+      // Keep original code for gateway passthrough
     }
     // Gold: BillingReferenceIrns comma-split -> originalIrn alternative
     let effectiveOriginalIrn = data.originalIrn;

@@ -161,7 +161,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                 CittaEFS
               </h1>
               <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
-                v2.7
+                v2.8
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-normal mt-1">

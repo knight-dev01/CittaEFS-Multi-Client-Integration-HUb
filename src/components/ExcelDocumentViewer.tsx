@@ -291,9 +291,12 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           }
           parseAndLoadRows(invData, fileName, custData, prodData);
         } else {
-          const firstSheet = sheetNames[0];
-          if (sheetNames.length > 1 || !/^(Customer Template|Item Template|Invoice Template|Sheet1)$/i.test(firstSheet)) {
-            console.warn(`[Compliance] Expected sheet "Invoices" but got "${firstSheet}". Using first sheet.`);
+          // Reference: invoice_template.xlsx Instructions: must delete Instructions sheet — prefer InvoiceTemplate explicitly
+          const invoiceTemplateSheet = sheetNames.find((n:string)=> /^InvoiceTemplate$/i.test(n.trim()))
+            || sheetNames.find((n:string)=> /Invoice/.test(n.trim()));
+          const firstSheet = invoiceTemplateSheet || sheetNames[0];
+          if (!invoiceTemplateSheet && (sheetNames.length > 1 || !/^(Customer Template|Item Template|Invoice Template|Sheet1)$/i.test(firstSheet))) {
+            console.warn(`[Compliance] Expected sheet "InvoiceTemplate" or "Invoices" but got "${firstSheet}". Using "${firstSheet}". Reference: invoice_template.xlsx Instructions says delete Instructions sheet.`);
           }
           const rawData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: '' });
           parseAndLoadRows(rawData, fileName);
@@ -693,10 +696,12 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
         });
       }
       const inv = groupedMap.get(r.clientInvoiceNumber);
-      // Merge header-level gold fields if this row has them and inv doesn't yet
-      if ((r as any).headerCharges !== undefined && inv.headerCharges === undefined) inv.headerCharges = (r as any).headerCharges;
-      if ((r as any).headerDiscount !== undefined && inv.headerDiscount === undefined) inv.headerDiscount = (r as any).headerDiscount;
-      if ((r as any).billingReferenceIrns && !inv.billingReferenceIrns) inv.billingReferenceIrns = (r as any).billingReferenceIrns;
+      // Instructions:35-38 — Header Charges/Discount same on all rows for same invoice, Last row wins
+      if ((r as any).headerCharges !== undefined) inv.headerCharges = (r as any).headerCharges;
+      if ((r as any).headerDiscount !== undefined) inv.headerDiscount = (r as any).headerDiscount;
+      if ((r as any).billingReferenceIrns) inv.billingReferenceIrns = (r as any).billingReferenceIrns;
+      if ((r as any).currency) inv.currency = (r as any).currency;
+      if ((r as any).customFields) inv.customFields = { ...(inv.customFields || {}), ...(r as any).customFields };
       inv.lineItems.push({
         itemCode: r.itemCode,
         description: r.description,
