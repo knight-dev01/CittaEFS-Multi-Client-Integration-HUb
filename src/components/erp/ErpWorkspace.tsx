@@ -83,8 +83,8 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
       {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
       {activeTab === 'customers' && <CustomerSyncTab />}
       {activeTab === 'items' && <ItemDictionaryTab />}
-      {activeTab === 'staging' && <StagingTab />}
-      {activeTab === 'validation' && <ValidationErrorsTab />}
+      {activeTab === 'staging' && <StagingTab onNavigate={setActiveTab} />}
+      {activeTab === 'validation' && <ValidationErrorsTab onNavigate={setActiveTab} />}
       {activeTab === 'connectors' && <ConnectorsTab />}
       {activeTab === 'mapping' && <ErpMappingTab />}
       {activeTab === 'gateway' && <CittaGatewayTab />}

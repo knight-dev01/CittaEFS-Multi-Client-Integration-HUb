@@ -5,12 +5,11 @@ import { toastGlobal } from './ui/Toast';
 import { Layers, Clock, CheckCircle2, AlertTriangle, RotateCcw, Send, Pencil, Database, RefreshCw } from 'lucide-react';
 import { getRowErrors } from '../lib/invoiceValidation';
 
-export function StagingTab() {
-  const { activeTenant, refreshAll, retryBulkInvoices, isBgRefreshing } = useHub() as any;
+export function StagingTab({ onNavigate }: { onNavigate?: (t: string) => void } = {}) {
+  const { activeTenant, isBgRefreshing } = useHub() as any;
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [retrying, setRetrying] = useState(false);
-  const isAnyPropagating = retrying || isBgRefreshing;
+  const isAnyPropagating = isBgRefreshing;
   const [propagatingSince, setPropagatingSince] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   useEffect(() => {
@@ -34,26 +33,10 @@ export function StagingTab() {
   };
   useEffect(()=>{ load(); }, [activeTenant?.id]);
 
-  const handleBulkRetry = async () => {
-    if (!summary?.counts?.rejected && summary?.dlqPreview?.length===0) { toastGlobal('info','Nothing to retry','No REJECTED/DLQ'); return; }
-    setRetrying(true);
-    try {
-      await retryBulkInvoices(activeTenant.id);
-      await load();
-      await refreshAll();
-    } finally { setRetrying(false); }
-  };
-
-  const handleRetryAllPending = async () => {
-    // Re-queue all pending via bulk retry (covers PENDING_NRS_STAMP stuck)
-    setRetrying(true);
-    try {
-      const res = await fetchWithAuth('/api/invoices/retry-bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tenantId: activeTenant.id, statusFilter: 'PENDING_NRS_STAMP' })});
-      await parseJsonResponse(res);
-      toastGlobal('success','Pending re-queued','All pending staging invoices refreshed to queue');
-      await load();
-      await refreshAll();
-    } catch (e:any){ toastGlobal('error','Retry failed', e.message); } finally { setRetrying(false); }
+  const goToInvoices = () => {
+    if (onNavigate) onNavigate('invoices');
+    else try { localStorage.setItem('citta_active_tab','invoices'); window.location.search='?tab=invoices'; } catch {}
+    toastGlobal('info','Go to Invoices to retry','Invoices is the single propagation module — Send → then Retry');
   };
 
   if (!activeTenant) return <div className="p-8 text-center text-slate-500 text-xs">Select a workspace</div>;
@@ -75,9 +58,9 @@ export function StagingTab() {
           </div>
         </div>
         <div className="flex items-center gap-2 font-sans">
-          <button onClick={load} disabled={loading || retrying || isBgRefreshing} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer font-sans text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /> Refresh</button>
-          <button onClick={handleBulkRetry} disabled={retrying || loading || isBgRefreshing} title={hasDLQ ? 'Retry DLQ first — Re-queue dulled until DLQ cleared' : ''} className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale"><RotateCcw className={`w-3.5 h-3.5 ${retrying?'animate-spin':''}`} /> Retry DLQ</button>
-          <button onClick={handleRetryAllPending} disabled={retrying || loading || isBgRefreshing || counts.pending===0 || hasDLQ} title={hasDLQ ? 'Re-queue paused — clear Retry DLQ first (Send → then Retry)' : ''} className={`px-3.5 py-1.5 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale shadow-sm ${hasDLQ ? 'bg-slate-600 opacity-40 grayscale cursor-not-allowed' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className="w-3.5 h-3.5" /> Re-queue Pending ({counts.pending})</button>
+          <button onClick={load} disabled={loading || isBgRefreshing} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer font-sans text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /> Refresh</button>
+          <button onClick={goToInvoices} title="Staging is view-only — retry in Invoices (single propagation module)" className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs shadow-sm"><RotateCcw className="w-3.5 h-3.5" /> Go to Invoices to Retry {hasDLQ ? `(${counts.dlqCount} DLQ)` : ''}</button>
+          <button onClick={goToInvoices} title="Staging is view-only — use Invoices Bulk Send" className={`px-3.5 py-1.5 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs shadow-sm ${hasDLQ ? 'bg-slate-600 opacity-60' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className="w-3.5 h-3.5" /> Go to Invoices ({counts.pending} pending)</button>
         </div>
       </div>
 

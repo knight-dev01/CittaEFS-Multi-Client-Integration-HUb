@@ -13,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 
-export function ValidationErrorsTab() {
+export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) => void } = {}) {
   const { validationErrors, activeTenant, resolveValidationError, currentUser } = useHub();
 
   const [selectedError, setSelectedError] = useState<ValidationErrorItem | null>(null);
@@ -36,6 +36,8 @@ export function ValidationErrorsTab() {
     );
     setIsResolving(false);
     setSelectedError(null);
+    // Validation is fix-only — direct to Invoices for propagation (single retry module)
+    if (onNavigate) onNavigate('invoices');
   };
 
   return (
@@ -56,13 +58,14 @@ export function ValidationErrorsTab() {
             </p>
           </div>
         </div>
-        <div className="flex items-center space-x-2 text-xs shrink-0">
+        <div className="flex items-center space-x-2 text-xs shrink-0 font-sans">
           <span className="px-3 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full font-medium">
             {openErrors.length} Open Rejections
           </span>
           <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-medium">
             {resolvedErrors.length} Auto-Resolved
           </span>
+          <button onClick={() => onNavigate ? onNavigate('invoices') : null} title="Validation is fix-only — propagate in Invoices" className="px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-full font-semibold">Go to Invoices to Retry →</button>
         </div>
       </div>
 
@@ -239,9 +242,9 @@ export function ValidationErrorsTab() {
               <button
                 onClick={handleResolve}
                 disabled={isResolving}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-1.5 transition-colors disabled:opacity-50"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-1.5 transition-colors disabled:opacity-50 font-sans"
               >
-                <span>{isResolving ? 'Re-Transmitting...' : 'Fix & Re-Transmit Invoice'}</span>
+                <span>{isResolving ? 'Fixing…' : 'Fix'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
