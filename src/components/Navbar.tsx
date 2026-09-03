@@ -60,6 +60,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const erp = getErpForTenant(activeTenant?.platformType);
   const erpTabs = erp.tabs;
   const openErrorCount = tenants.length > 0 && activeTenant ? validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
+  const pendingStagingCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(i.status)).length : 0;
+  const failedInvoiceCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['REJECTED','FAILED'].includes(i.status)).length : 0;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -119,9 +121,9 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const allTabs = [
     // Main tabs (Available to all roles)
     { id: 'clients', label: 'Overview', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: pendingStagingCount + failedInvoiceCount },
     { id: 'import', label: 'Import', icon: Download, category: 'erp', requiredRoles: ['ADMIN', 'OPERATOR'], erpOnly: true },
-    { id: 'staging', label: 'Staging', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] }, // pre-transmission holding area
+    { id: 'staging', label: 'Staging', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: pendingStagingCount }, // pre-transmission holding area
     { id: 'customers', label: 'Customers', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'items', label: 'Items', icon: Tag, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
@@ -161,7 +163,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                 CittaEFS
               </h1>
               <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
-                v2.16
+                v2.17
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-normal mt-1">
@@ -405,13 +407,13 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       )}
 
-      {/* Desktop Persistent Sidebar (Large screen layout) — collapsible */}
-      <aside className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
+      {/* Desktop Persistent Sidebar — single toggle + hover to expand */}
+      <aside onMouseEnter={() => { if (isCollapsed) toggleCollapsed(); }} className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
         <div className="flex flex-col w-full h-full relative">
-          {/* Collapse toggle — top-right of sidebar */}
+          {/* Single collapse toggle — top-right */}
           <button
             onClick={toggleCollapsed}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={isCollapsed ? 'Expand sidebar (also hover to expand)' : 'Collapse sidebar'}
             className="absolute -right-3 top-5 z-40 w-6 h-6 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center text-slate-600 hover:text-violet-600 hover:border-violet-300 cursor-pointer"
           >
             {isCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
@@ -423,7 +425,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             <div className="flex flex-col h-full bg-slate-900 text-slate-100 border-r border-slate-800">
               <div className="p-3 border-b border-slate-800 flex flex-col items-center gap-2">
                 <div className="bg-gradient-to-tr from-violet-600 to-indigo-500 p-2 rounded-xl text-white"><Layers className="w-4 h-4" /></div>
-                <button onClick={toggleCollapsed} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 cursor-pointer"><ChevronsLeft className="w-3.5 h-3.5 rotate-180" /></button>
               </div>
               <div className="flex-1 overflow-y-auto py-3 space-y-1">
                 {visibleTabs.slice(0,8).map(tab => {

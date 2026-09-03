@@ -12,11 +12,12 @@ import {
   Mail, 
   Phone, 
   MapPin,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 
 export function CustomerSyncTab() {
-  const { customers, activeTenant, addCustomer } = useHub();
+  const { customers, activeTenant, addCustomer, deleteCustomer } = useHub() as any;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
@@ -174,6 +175,7 @@ export function CustomerSyncTab() {
                 <th className="py-3 px-4">Country</th>
                 <th className="py-3 px-4">TIN Validation</th>
                 <th className="py-3 px-4 text-right">Last Synced</th>
+                <th className="py-3 px-4 text-center">Delete</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -221,6 +223,9 @@ export function CustomerSyncTab() {
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-[11px] text-slate-400">
                       {c.lastSyncedAt}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button onClick={async()=>{ if(!confirm(`Delete customer ${c.name}?`)) return; try{ await deleteCustomer(c.id); }catch(e:any){ alert(e.message); } }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                     </td>
                   </tr>
                 ))

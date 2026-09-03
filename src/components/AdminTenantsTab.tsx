@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useHub } from '../lib/store';
 import { ERP_REGISTRY } from '../config/erpRegistry';
-import { Building2, Plus, Trash2, Settings, UserPlus, CheckCircle2, AlertCircle, Plug } from 'lucide-react';
+import { Building2, Plus, Trash2, Settings, UserPlus, CheckCircle2, AlertCircle, Plug, Users, Shield } from 'lucide-react';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 
 export function AdminTenantsTab() {
   const { tenants, tenantErps, activeTenant, addTenantErp, removeTenantErp, createTenantUser, currentUser } = useHub() as any;
@@ -21,6 +22,8 @@ export function AdminTenantsTab() {
   const [userRole, setUserRole] = useState('OPERATOR');
   const [userMsg, setUserMsg] = useState<{type:'success'|'error', text:string} | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   if (!isAdmin) return <div className="p-8 text-center text-slate-400 text-xs">Admin access required.</div>;
 
@@ -53,9 +56,22 @@ export function AdminTenantsTab() {
       await createTenantUser({ email: userEmail, password: userPassword, name: userName, role: userRole, organization: selectedTenant?.companyName || selectedTenant?.name, tenantId: selectedTenant.id });
       setUserMsg({ type: 'success', text: `Login created: ${userEmail} for ${selectedTenant?.name} (${userRole})` });
       setUserEmail(''); setUserPassword(''); setUserName('');
+      loadUsers();
     } catch (err:any) { setUserMsg({ type: 'error', text: err.message }); }
     finally { setIsCreatingUser(false); }
   };
+
+  const loadUsers = async () => {
+    if (!selectedTenant?.id) return;
+    setLoadingUsers(true);
+    try {
+      const res = await fetchWithAuth(`/api/users?tenantId=${selectedTenant.id}`);
+      const data = await parseJsonResponse(res);
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      setUsers(list.filter((u:any)=> !u.tenantId || u.tenantId===selectedTenant.id));
+    } catch { setUsers([]); } finally { setLoadingUsers(false); }
+  };
+  useEffect(()=>{ loadUsers(); }, [selectedTenantId]);
 
   const availableErps = Object.keys(ERP_REGISTRY);
 
@@ -117,6 +133,34 @@ export function AdminTenantsTab() {
           </div>
           <p className="text-[11px] text-slate-400">Each ERP keeps its own pull logic (QBO OAuth, Excel grouping, SAP OData). Invoices store <span className="font-mono">sourceErp</span> for traceability and writeback routing.</p>
         </div>
+      </div>
+
+      {/* Users list for company — admin sees credentials */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+          <span className="font-bold text-slate-900 text-xs flex items-center gap-2"><Users className="w-4 h-4 text-violet-600" /> Users for {selectedTenant?.name} ({users.length}) {loadingUsers && <span className="text-[11px] text-slate-400">loading…</span>}</span>
+          <span className="text-[11px] text-slate-500">Admin sees email • role • tenant</span>
+        </div>
+        {users.length===0 ? (
+          <div className="p-6 text-center text-slate-400 text-xs">No users for this company — create one below.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead><tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100"><th className="py-2.5 px-4">Name</th><th className="py-2.5 px-4">Email (login)</th><th className="py-2.5 px-4">Role</th><th className="py-2.5 px-4">Organization</th><th className="py-2.5 px-4">Tenant</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {users.map((u:any)=>(
+                  <tr key={u.id} className="hover:bg-violet-50/30">
+                    <td className="py-2.5 px-4 font-semibold text-slate-900 flex items-center gap-1.5"><Shield className="w-3.5 h-3.5 text-violet-600" />{u.name}</td>
+                    <td className="py-2.5 px-4 font-mono text-slate-700">{u.email}</td>
+                    <td className="py-2.5 px-4"><span className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] font-bold">{u.role}</span></td>
+                    <td className="py-2.5 px-4 text-slate-600">{u.organization}</td>
+                    <td className="py-2.5 px-4 font-mono text-[11px] text-slate-500">{u.tenantId || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Create login for company */}

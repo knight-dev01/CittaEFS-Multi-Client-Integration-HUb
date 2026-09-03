@@ -11,12 +11,13 @@ import {
   AlertCircle, 
   Tag, 
   Edit3, 
-  Layers
+  Layers,
+  Trash2
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
 
 export function ItemDictionaryTab() {
-  const { itemMappings, activeTenant, addItemMapping, autoMapItems } = useHub();
+  const { itemMappings, activeTenant, addItemMapping, autoMapItems, deleteItem } = useHub() as any;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -167,6 +168,7 @@ export function ItemDictionaryTab() {
                 <th className="py-3 px-4">Default VAT</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Last Updated</th>
+                <th className="py-3 px-4 text-center">Delete</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -207,6 +209,9 @@ export function ItemDictionaryTab() {
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-[11px] text-slate-400">
                       {m.updatedAt}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button onClick={async()=>{ if(!confirm(`Delete item ${m.clientSku}?`)) return; try{ await deleteItem(m.id); }catch(e:any){ alert(e.message); } }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                     </td>
                   </tr>
                 ))

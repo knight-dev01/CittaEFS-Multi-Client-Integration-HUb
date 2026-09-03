@@ -814,6 +814,21 @@ router.get("/api/queue/stats", async (req:any,res)=>{
   } catch(e:any){ res.status(500).json({ error:e.message});}
 });
 
+router.delete("/api/invoices/:id", async (req:any,res)=>{
+  try {
+    const inv = await prisma.invoice.findUnique({ where:{id:req.params.id}});
+    if(!inv) return res.status(404).json({ success:false, error:"Invoice not found"});
+    if(!canAccessTenant(req, inv.tenantId)) return res.status(403).json({ success:false, error:"Forbidden"});
+    // Allow deletion for PENDING/REJECTED/CANCELLED — not APPROVED/SIGNED
+    if(["APPROVED","SIGNED"].includes(inv.status)) return res.status(400).json({ success:false, error:"Approved invoices cannot be deleted — use Cancel" });
+    await prisma.invoiceLineItem.deleteMany({ where:{invoiceId: inv.id }});
+    await prisma.invoice.delete({ where:{id: inv.id }});
+    await prisma.queueJob.deleteMany({ where:{ payload:{contains: inv.id } } }).catch(()=>{});
+    await prisma.validationError.deleteMany({ where:{ tenantId: inv.tenantId, clientInvoiceNumber: inv.clientInvoiceId } }).catch(()=>{});
+    res.json({ success:true });
+  } catch(e:any){ res.status(500).json({ success:false, error:e.message });}
+});
+
 // ==========================================
 // HUB EXTERNAL API FOR EXISTING CITTAEFS SYSTEMS
 // ==========================================

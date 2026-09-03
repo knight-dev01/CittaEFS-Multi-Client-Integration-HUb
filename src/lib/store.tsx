@@ -51,6 +51,9 @@ interface HubContextType {
   removeTenantErp: (tenantId: string, erpId: string) => Promise<any>;
   createTenantUser: (userData: { email: string; password: string; name: string; role?: string; organization?: string; tenantId: string }) => Promise<any>;
   updateInvoice: (invoiceId: string, data: any) => Promise<any>;
+  deleteInvoice: (invoiceId: string) => Promise<any>;
+  deleteCustomer: (customerId: string) => Promise<any>;
+  deleteItem: (itemId: string) => Promise<any>;
   purgeDemoData: () => Promise<any>;
   retryInvoice: (invoiceId: string) => Promise<any>;
   retryBulkInvoices: (tenantId?: string, invoiceIds?: string[]) => Promise<any>;
@@ -711,6 +714,34 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const deleteInvoice = async (invoiceId: string) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth(`/api/invoices/${invoiceId}`, { method: 'DELETE' });
+      const data = await parseJsonResponse(res);
+      await refreshAll();
+      toastGlobal('success','Invoice deleted');
+      return data;
+    });
+  };
+  const deleteCustomer = async (customerId: string) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth(`/api/customers/${customerId}`, { method: 'DELETE' });
+      const data = await parseJsonResponse(res);
+      await refreshAll();
+      toastGlobal('success','Customer deleted');
+      return data;
+    });
+  };
+  const deleteItem = async (itemId: string) => {
+    return withLoading(async () => {
+      const res = await fetchWithAuth(`/api/items/mappings/${itemId}`, { method: 'DELETE' });
+      const data = await parseJsonResponse(res);
+      await refreshAll();
+      toastGlobal('success','Item deleted');
+      return data;
+    });
+  };
+
   const purgeDemoData = async () => {
     return withLoading(async () => {
       try {
@@ -802,6 +833,9 @@ export function HubProvider({ children }: { children: ReactNode }) {
         removeTenantErp,
         createTenantUser,
         updateInvoice,
+        deleteInvoice,
+        deleteCustomer,
+        deleteItem,
         purgeDemoData,
         retryInvoice,
         retryBulkInvoices,

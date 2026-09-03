@@ -60,6 +60,18 @@ router.post("/api/validation-errors/resolve", async (req, res) => {
   }
 });
 
+router.post("/api/validation-errors/bulk-resolve", async (req: any, res) => {
+  try {
+    const tenantId = req.body?.tenantId || (req as any).user?.tenantId;
+    const where: any = tenantId ? { tenantId, status: "OPEN" } : { status: "OPEN" };
+    if (req.user && req.user.role !== "ADMIN" && tenantId !== req.user.tenantId) return res.status(403).json({ success: false, error: "Forbidden" });
+    const result = await prisma.validationError.updateMany({ where, data: { status: "RESOLVED" } });
+    res.json({ success: true, resolved: result.count, message: `Bulk fixed ${result.count} validation errors` });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ==========================================
 // 8. AUDIT LOGS & METRICS API (DB Backed)
 // ==========================================
@@ -107,14 +119,28 @@ router.get("/api/metrics", async (req: any, res) => {
         ? Number(((approvedInvoices / totalInvoices) * 100).toFixed(2))
         : 99.85;
 
+    // Real gateway latency: avg (updatedAt - createdAt) for recent COMPLETED queue jobs, default 138ms if none
+    let averageLatencyMs = 138;
+    let cittaGatewayStatus: string = "ONLINE";
+    try {
+      const recentJobs = await prisma.queueJob.findMany({ where: { status: "COMPLETED" }, orderBy: { updatedAt: "desc" }, take: 20 });
+      if (recentJobs.length) {
+        const latencies = recentJobs.map((j:any) => new Date(j.updatedAt).getTime() - new Date(j.createdAt).getTime()).filter((v:number)=> v>0 && v<60000);
+        if (latencies.length) averageLatencyMs = Math.round(latencies.reduce((a:number,b:number)=>a+b,0)/latencies.length);
+      }
+      const lastDLQ = await prisma.queueJob.findFirst({ where: { status: "DLQ" }, orderBy: { updatedAt: "desc" } });
+      if (lastDLQ && Date.now() - new Date(lastDLQ.updatedAt).getTime() < 5*60*1000) cittaGatewayStatus = "DEGRADED";
+      else if (!recentJobs.length) cittaGatewayStatus = "UNKNOWN";
+    } catch {}
+
     res.json({
       totalInvoicesProcessed: totalInvoices,
       nrsStampSuccessRate: successRate,
-      averageLatencyMs: 138,
+      averageLatencyMs,
       activeTenantsCount: tenantsCount,
       pendingValidationCount: openErrors,
       reconciliationCronStatus: "HEALTHY",
-      cittaGatewayStatus: "ONLINE",
+      cittaGatewayStatus,
     });
   } catch (e: any) {
     console.error("[API Error] GET /api/metrics failed:", e);
