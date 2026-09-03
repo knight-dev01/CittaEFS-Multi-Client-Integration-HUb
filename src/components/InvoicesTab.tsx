@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
 import { toastGlobal } from './ui/Toast';
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
 
 export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void } = {}) {
   const { invoices, activeTenant, customers, itemMappings, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices, updateInvoice, deleteInvoice, refreshAll, retryInvoice, retryBulkInvoices, isBgRefreshing } = useHub() as any;
@@ -742,7 +743,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                           {!tenantItems.find((x:any)=>x.clientSku===li.itemCode) && <option value={li.itemCode}>{li.itemCode} — current</option>}
                         </select>
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <label className="block text-[9px] font-semibold text-slate-500 mb-1">Description</label>
                         <input value={li.description} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, description:e.target.value} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="Description" className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs" />
                       </div>
@@ -758,9 +759,18 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                         <label className="block text-[9px] font-semibold text-slate-500 mb-1">VAT%</label>
                         <input type="number" step="0.1" value={li.vatRate ?? ''} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, vatRate: e.target.value==='' ? 0 : Number(e.target.value)} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="7.5" className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs text-right" />
                       </div>
-                      <div className="col-span-1">
-                        <label className="block text-[9px] font-semibold text-slate-500 mb-1">HS Code — hub</label>
-                        <input value={li.hsOrServiceCode || ''} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, hsOrServiceCode:e.target.value} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="HS" className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs font-mono" />
+                      <div className="col-span-2">
+                        <label className="block text-[9px] font-semibold text-slate-500 mb-1">HS/Service Code — general list</label>
+                        <select value={li.hsOrServiceCode || ''} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, hsOrServiceCode:e.target.value} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs font-mono bg-white">
+                          <option value="">— select HS/Service —</option>
+                          <optgroup label="HS Codes">
+                            {CITTA_HS_CODES_REFERENCE.map(c=> (<option key={c.code} value={c.code}>{c.code} — {c.name}</option>))}
+                          </optgroup>
+                          <optgroup label="Service Codes">
+                            {CITTA_SERVICE_CODES_REFERENCE.map(s=> (<option key={s.code} value={s.code}>{s.code} — {s.name}</option>))}
+                          </optgroup>
+                          {li.hsOrServiceCode && ![...CITTA_HS_CODES_REFERENCE, ...CITTA_SERVICE_CODES_REFERENCE].some(x=>x.code===li.hsOrServiceCode) && <option value={li.hsOrServiceCode}>{li.hsOrServiceCode} — current</option>}
+                        </select>
                       </div>
                       <div className="col-span-1 flex items-center justify-center pb-0.5">
                         <button onClick={()=>{ const n=editingInvoice.lineItems.filter((_:any,i:number)=>i!==idx); if(n.length===0) { setEditError('At least one line required'); return; } setEditingInvoice({...editingInvoice, lineItems:n}); }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg"><Trash2 className="w-3 h-3" /></button>

@@ -7,6 +7,7 @@ import {
 import { QuickBooksAdapter } from "../adapters/connectorAdapters";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from "../data/referenceData";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -744,8 +745,8 @@ export async function ingestQboInvoice(
     });
     throw new Error(`No invoice data provided for QBO Invoice ${docNumber}`);
   }
-  // Strict HS validation — if still invalid, block queue and create ValidationError (Option A)
-  const validSet = new Set(["HS-8471.30","HS-8517.62","HS-7304.11","HS-3926.90","HS-4819.10","HS-1006.30","HS-3004.90","SRV-7212.10","SRV-7414.00","SRV-8703.20","SRV-6202.90","SRV-8010.15","HS-8471.50"]);
+  // Strict HS validation — unified general list same as Validation + Invoice edit (referenceData)
+  const validSet = new Set([...CITTA_HS_CODES_REFERENCE.map(c=>c.code), ...CITTA_SERVICE_CODES_REFERENCE.map(s=>s.code), "HS-8471.50"]);
   for (const li of processedLineItems) {
     if (!validSet.has(li.hsOrServiceCode)) {
       await prisma.validationError.create({
