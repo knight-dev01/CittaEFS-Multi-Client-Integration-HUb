@@ -64,11 +64,11 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
             for (const li of list) {
               const existingItem = await prisma.item.findFirst({ where: { tenantId: inv.tenantId, clientSku: li.itemCode } });
               if (existingItem) {
-                await prisma.item.update({ where: { id: existingItem.id }, data: { hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", codeType: isService ? "SERVICE_CODE" : "HS_CODE", status: "MAPPED" } });
+                await prisma.item.update({ where: { id: existingItem.id }, data: { hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService } });
               } else {
-                await prisma.item.create({ data: { tenantId: inv.tenantId, clientSku: li.itemCode, description: li.description || "Mapped via validation fix", hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", codeType: isService ? "SERVICE_CODE" : "HS_CODE", defaultVatRate: 7.5, status: "MAPPED" } as any });
+                await prisma.item.create({ data: { tenantId: inv.tenantId, clientSku: li.itemCode, description: li.description || "Mapped via validation fix", hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService, defaultVatRate: 7.5 } as any });
               }
-              await prisma.invoiceLineItem.update({ where: { id: li.id }, data: { hsOrServiceCode: cleanHs, codeType: isService ? "SERVICE_CODE" : "HS_CODE" } });
+              await prisma.invoiceLineItem.update({ where: { id: li.id }, data: { hsOrServiceCode: cleanHs } });
             }
             if (["REJECTED","FAILED","CANCELLED"].includes(inv.status)) {
               await prisma.invoice.update({ where: { id: inv.id }, data: { status: "PENDING_NRS_STAMP" } });
@@ -80,8 +80,8 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
           try { const sample = typeof errRecord.rawPayloadSample === 'string' ? JSON.parse(errRecord.rawPayloadSample) : errRecord.rawPayloadSample; skuFromError = sample?.lineItems?.[0]?.itemCode || sample?.lineItems?.[0]?.clientSku || sample?.Line?.[0]?.SalesItemLineDetail?.ItemRef?.name || null; } catch {}
           const sku = skuFromError || "SKU-GENERIC";
           const existing = await prisma.item.findFirst({ where: { tenantId: errRecord.tenantId, clientSku: sku } });
-          if (existing) await prisma.item.update({ where: { id: existing.id }, data: { hsOrServiceCode: cleanHs, status: "MAPPED" } });
-          else await prisma.item.create({ data: { tenantId: errRecord.tenantId, clientSku: sku, description: "Mapped via validation fix", hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", codeType: isService ? "SERVICE_CODE" : "HS_CODE", defaultVatRate: 7.5, status: "MAPPED" } as any });
+          if (existing) await prisma.item.update({ where: { id: existing.id }, data: { hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService } });
+          else await prisma.item.create({ data: { tenantId: errRecord.tenantId, clientSku: sku, description: "Mapped via validation fix", hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService, defaultVatRate: 7.5 } as any });
         }
       }
       if (correctedTin && (errRecord.errorCategory === "INVALID_TIN_FORMAT" || errRecord.errorCategory === "MISSING_B2B_TIN")) {
