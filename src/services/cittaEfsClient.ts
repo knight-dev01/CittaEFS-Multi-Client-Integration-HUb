@@ -258,7 +258,7 @@ export class CittaEfsClient {
       taxAmount: item.vatAmount,
       taxableAmount: item.taxableAmount,
       hsOrServiceCode: item.hsOrServiceCode || "SERV-DEFAULT",
-      lineNum: (item as any).lineNum || index + 1,
+      lineNum: String((item as any).lineNum ?? index + 1),
       unitCode: (item as any).unitCode || "EA",
       taxCategoryId: (item as any).taxCategoryId || "STANDARD_VAT",
       currencyCode: (payload as any).currency || "NGN",
@@ -280,7 +280,7 @@ export class CittaEfsClient {
         Authorization: `Bearer ${decryptedApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(dtoArray),
+      body: JSON.stringify({ invoices: dtoArray }),
     });
 
     if (!res.ok) {
