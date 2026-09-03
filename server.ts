@@ -1280,7 +1280,9 @@ async function startServer() {
         documentNumber,
         invoiceKind,
         invoiceType,
+        invoiceTypeCode,
         originalIrn,
+        billingReferenceIrns,
         lineItems,
         customerCode,
         customerName,
@@ -1288,7 +1290,19 @@ async function startServer() {
         issueDate,
         sourceErp,
         erpId,
+        headerCharges,
+        headerDiscount,
+        currency,
+        customFields,
+        metadata,
       } = req.body;
+      // Gold: normalize header case variants (HeaderCharges/HeaderCharges etc.)
+      const _hc = (req.body as any).HeaderCharges ?? (req.body as any).headerCharges ?? headerCharges;
+      const _hd = (req.body as any).HeaderDiscount ?? (req.body as any).headerDiscount ?? headerDiscount;
+      const _itc = (req.body as any).InvoiceTypeCode ?? (req.body as any).invoiceTypeCode ?? invoiceTypeCode;
+      const _br = (req.body as any).billingReferenceIrns ?? (req.body as any)['Billing Reference IRNs'] ?? billingReferenceIrns;
+      const _cf = (req.body as any).customFields ?? customFields;
+      const _md = (req.body as any).metadata ?? metadata;
 
       const targetTenantId = tenantId || (req as any).user?.tenantId || "tenant_qbo_smb";
       if ((req as any).user && (req as any).user.role !== "ADMIN" && targetTenantId !== (req as any).user.tenantId) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation — cannot send to another tenant" });
@@ -1394,7 +1408,14 @@ async function startServer() {
         (li: any, idx: number) => {
           let mapping = tenantItems.find((m) => m.clientSku === li.itemCode);
           const hsOrServiceCode =
-            li.hsOrServiceCode || mapping?.hsOrServiceCode || "UNMAPPED";
+            li.hsOrServiceCode || (li as any).HsorServiceCode || (li as any).HSCode || mapping?.hsOrServiceCode || "UNMAPPED";
+          // Gold: Linenumber, UnitCode, TaxCategory, LineDiscount, taxableamount/taxamount
+          const _lineNum = (li as any).Linenumber ?? (li as any).lineNum ?? (li as any).LineNumber ?? idx + 1;
+          const _unitCode = (li as any).UnitCode ?? (li as any).unitCode ?? "EA";
+          const _taxCat = (li as any).TaxCategory ?? (li as any).taxCategoryId ?? "STANDARD_VAT";
+          const _discount = Number((li as any).LineDiscount ?? (li as any).lineDiscount ?? li.discountAmount ?? 0);
+          const _taxable = (li as any).taxableamount ?? (li as any).TaxableAmount ?? (li as any).taxableAmount;
+          const _tax = (li as any).taxamount ?? (li as any).TaxAmount ?? (li as any).taxAmount ?? (li as any).vatAmount;
 
           if (hsOrServiceCode === "UNMAPPED") {
             errors.push(
@@ -1403,9 +1424,9 @@ async function startServer() {
           }
 
           const qty = Number(li.quantity || 1);
-          const price = Number(li.unitPrice || 0);
-          const discount = Number(li.discountAmount || 0);
-          const taxable = qty * price - discount;
+          const price = Number(li.unitPrice || li.Price || 0);
+          const discount = Number(_discount);
+          const taxable = _taxable !== undefined ? Number(_taxable) : qty * price - discount;
           const vatRate =
             li.vatRate !== undefined
               ? Number(li.vatRate)
@@ -1484,22 +1505,27 @@ async function startServer() {
       }
       // Insert as PENDING_NRS_STAMP — the real IRN/QR only exist once the queue worker
       // gets a response back from the CittaEFS Gateway (same pipeline QBO invoices use).
+      const _effectiveCurrency = (currency as any) || (req.body as any).CurrencyCode || "NGN";
+      const _effectiveHeaderCharges = Number(_hc ?? 0);
+      const _effectiveHeaderDiscount = Number(_hd ?? 0);
       const rawNewInvoice = await prisma.invoice.create({
         data: {
           tenantId: tenant.id,
           sourceErp: resolvedSourceErp,
           clientInvoiceId: clientInvoiceNumber || `INV-${Date.now()}`,
           documentNumber: documentNumber || null,
-          invoiceType: invoiceType || "STANDARD",
+          invoiceType: (_itc as any) ? (_itc as string) : (invoiceType || "STANDARD"),
           invoiceKind: invoiceKind || "B2B",
           issueDate: new Date(issueDate || Date.now()),
           customerCode: customerCode || "CUST-CITTA-GENERIC",
           customerName: customerName || "Valued Client",
           customerTin: effectiveCustomerTin || null,
-          currency: "NGN",
+          currency: _effectiveCurrency,
           subtotal,
           taxAmount: totalVat,
           totalAmount: grandTotal,
+          headerCharges: _effectiveHeaderCharges,
+          headerDiscount: _effectiveHeaderDiscount,
           status: "PENDING_NRS_STAMP",
           ledgerWritebackStatus: "PENDING",
           lineItems: {
@@ -1511,29 +1537,42 @@ async function startServer() {
 
       const newInvoice = formatInvoice(rawNewInvoice);
 
+      const _brArr = _br ? String(_br).split(',').map((x:string)=>x.trim()).filter(Boolean) : undefined;
       const validatedPayload = invoiceIngestionSchema.parse({
         tenantId: tenant.id,
         clientInvoiceNumber:
           clientInvoiceNumber || rawNewInvoice.clientInvoiceId,
         documentNumber: documentNumber || undefined,
-        invoiceType: invoiceType || "STANDARD",
+        invoiceType: (_itc as any) ? undefined : (invoiceType || "STANDARD"),
+        invoiceTypeCode: _itc ? String(_itc) : undefined,
         invoiceKind: invoiceKind || "B2B",
         issueDate: issueDate || new Date().toISOString().substring(0, 10),
         customerCode: customerCode || "CUST-CITTA-GENERIC",
         customerName: customerName || "Valued Client",
         customerTin: effectiveCustomerTin,
         originalIrn: originalIrn || undefined,
+        billingReferenceIrns: _brArr,
+        headerCharges: _effectiveHeaderCharges,
+        headerDiscount: _effectiveHeaderDiscount,
+        currency: _effectiveCurrency,
+        customFields: _cf,
+        metadata: _md,
         lineItems: processedLineItems.map((li: any) => ({
           itemCode: li.itemCode,
           description: li.description,
           quantity: li.quantity,
           unitPrice: li.unitPrice,
-          discountAmount: 0,
+          discountAmount: (li as any).discountAmount ?? 0,
           hsOrServiceCode: li.hsOrServiceCode,
           codeType: li.hsOrServiceCode?.startsWith("HS")
             ? "HS_CODE"
             : "SERVICE_CODE",
           vatRate: li.vatRate,
+          lineNum: (li as any).lineNum,
+          unitCode: (li as any).unitCode,
+          taxCategoryId: (li as any).taxCategoryId,
+          taxableAmount: (li as any).taxableAmount,
+          vatAmount: (li as any).vatAmount,
         })),
       });
 
@@ -1618,7 +1657,11 @@ async function startServer() {
       const results: any[] = [];
       const seenInBatch = new Set<string>();
       for (const payload of bulkInvoices) { try {
-        const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn, sourceErp, erpId } = payload || {};
+        const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, invoiceTypeCode, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn, billingReferenceIrns, sourceErp, erpId, headerCharges, headerDiscount, currency, customFields, metadata } = payload || {};
+        const _hc_b = (payload as any).HeaderCharges ?? (payload as any).headerCharges ?? headerCharges;
+        const _hd_b = (payload as any).HeaderDiscount ?? (payload as any).headerDiscount ?? headerDiscount;
+        const _itc_b = (payload as any).InvoiceTypeCode ?? (payload as any).invoiceTypeCode ?? invoiceTypeCode;
+        const _br_b = (payload as any).billingReferenceIrns ?? (payload as any)['Billing Reference IRNs'] ?? billingReferenceIrns;
         const errors: string[] = [];
         if (!clientInvoiceNumber) errors.push("clientInvoiceNumber mandatory");
         if (!issueDate) errors.push("issueDate mandatory");
@@ -1670,11 +1713,16 @@ async function startServer() {
         const tenantItems = await prisma.item.findMany({ where: { tenantId: tenant.id } });
         const processed = (lineItems || []).map((li: any, idx: number) => {
           const mapping = tenantItems.find(m => m.clientSku === li.itemCode);
-          const hs = li.hsOrServiceCode || mapping?.hsOrServiceCode || "UNMAPPED";
+          const hs = li.hsOrServiceCode || (li as any).HsorServiceCode || (li as any).HSCode || mapping?.hsOrServiceCode || "UNMAPPED";
+          const _lineNum_b = (li as any).Linenumber ?? (li as any).lineNum ?? (li as any).LineNumber ?? idx + 1;
+          const _unitCode_b = (li as any).UnitCode ?? (li as any).unitCode ?? "EA";
+          const _taxCat_b = (li as any).TaxCategory ?? (li as any).taxCategoryId ?? "STANDARD_VAT";
+          const _discount_b = Number((li as any).LineDiscount ?? (li as any).lineDiscount ?? li.discountAmount ?? 0);
           const qty = Number(li.quantity || 1);
-          const price = Number(li.unitPrice || 0);
-          const disc = Number(li.discountAmount || 0);
-          const taxable = qty * price - disc;
+          const price = Number(li.unitPrice || (li as any).Price || 0);
+          const disc = Number(_discount_b);
+          const _taxable_b = (li as any).taxableamount ?? (li as any).TaxableAmount ?? (li as any).taxableAmount;
+          const taxable = _taxable_b !== undefined ? Number(_taxable_b) : qty * price - disc;
           const vatRate = li.vatRate !== undefined ? Number(li.vatRate) : Number(mapping?.defaultVatRate ?? tenant.defaultVatRate);
           const vatAmount = (taxable * vatRate) / 100;
           return { itemCode: li.itemCode || "SKU-GENERIC", description: li.description || "Generic", quantity: qty, unitPrice: price, taxableAmount: taxable, vatRate, vatAmount, totalAmount: taxable + vatAmount, hsOrServiceCode: hs };
@@ -1692,20 +1740,26 @@ async function startServer() {
         }
         let raw: any;
         try {
+          const _effCurrency_b = (currency as any) || (payload as any).CurrencyCode || "NGN";
+          const _effHC_b = Number(_hc_b ?? 0);
+          const _effHD_b = Number(_hd_b ?? 0);
+          const _itc_b_val = _itc_b ? String(_itc_b) : (invoiceType || "STANDARD");
           raw = await prisma.invoice.create({
             data: {
               tenantId: tenant.id,
               sourceErp: bulkSourceErp,
               clientInvoiceId: clientInvoiceNumber,
               documentNumber: documentNumber || null,
-              invoiceType: invoiceType || "STANDARD",
+              invoiceType: _itc_b_val,
               invoiceKind: invoiceKind || "B2B",
               issueDate: new Date(issueDate),
               customerCode: customerCode || "CUST-CITTA-GENERIC",
               customerName: customerName || "Valued Client",
               customerTin: effectiveTin,
-              currency: "NGN",
+              currency: _effCurrency_b,
               subtotal, taxAmount: totalVat, totalAmount: grandTotal,
+              headerCharges: _effHC_b,
+              headerDiscount: _effHD_b,
               status: "PENDING_NRS_STAMP", ledgerWritebackStatus: "PENDING",
               lineItems: { create: processed },
             },
@@ -1741,13 +1795,16 @@ async function startServer() {
           }
         }
         const newInv = formatInvoice(raw);
+        const _brArr_b = _br_b ? String(_br_b).split(',').map((x:string)=>x.trim()).filter(Boolean) : undefined;
         const validated = invoiceIngestionSchema.parse({
           tenantId: tenant.id, clientInvoiceNumber, documentNumber: documentNumber || undefined,
-          invoiceType: invoiceType || "STANDARD", invoiceKind: invoiceKind || "B2B",
+          invoiceType: _itc_b ? undefined : (invoiceType || "STANDARD"), invoiceTypeCode: _itc_b ? String(_itc_b) : undefined,
+          invoiceKind: invoiceKind || "B2B",
           issueDate: issueDate || new Date().toISOString().substring(0,10),
           customerCode: customerCode || "CUST-CITTA-GENERIC", customerName: customerName || "Valued Client",
-          customerTin: effectiveTin || undefined, originalIrn: originalIrn || undefined,
-          lineItems: processed.map((li: any) => ({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS") ? "HS_CODE" : "SERVICE_CODE", vatRate: li.vatRate })),
+          customerTin: effectiveTin || undefined, originalIrn: originalIrn || undefined, billingReferenceIrns: _brArr_b,
+          headerCharges: _effHC_b, headerDiscount: _effHD_b, currency: _effCurrency_b, customFields: (payload as any).customFields, metadata: (payload as any).metadata,
+          lineItems: processed.map((li: any) => ({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: (li as any).discountAmount ?? 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS") ? "HS_CODE" : "SERVICE_CODE", vatRate: li.vatRate, lineNum: (li as any).lineNum ?? (li as any).Linenumber, unitCode: (li as any).unitCode, taxCategoryId: (li as any).taxCategoryId, taxableAmount: (li as any).taxableAmount, vatAmount: (li as any).vatAmount })),
         });
         const bulkIdemKey = `${tenant.id}:${clientInvoiceNumber}`;
         await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: raw.id }, { idempotencyKey: bulkIdemKey });

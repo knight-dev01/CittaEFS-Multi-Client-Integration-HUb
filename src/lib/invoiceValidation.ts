@@ -4,16 +4,22 @@
  */
 export interface RowLike {
   clientInvoiceNumber: string;
+  documentNumber?: string;
   issueDate: string;
   customerCode: string;
   customerName: string;
   customerTin: string;
   invoiceKind: string;
+  invoiceTypeCode?: string;
   itemCode: string;
   hsOrServiceCode: string;
   quantity: any;
   unitPrice: any;
   vatRate: any;
+  headerCharges?: number;
+  headerDiscount?: number;
+  billingReferenceIrns?: string;
+  currency?: string;
 }
 
 export function getRowErrors(row: RowLike): string[] {
@@ -28,6 +34,13 @@ export function getRowErrors(row: RowLike): string[] {
   if (!row.quantity || Number(row.quantity) <= 0) errs.push('Qty >0 required');
   if (row.unitPrice === undefined || Number(row.unitPrice) < 0) errs.push('Price required');
   if (row.vatRate === undefined || Number(row.vatRate) < 0 || Number(row.vatRate) > 100) errs.push('VAT 0-100 required');
+  // Gold: InvoiceTypeCode requiring BillingReferenceIRNs for 380/381/384/393
+  const codeRequiringIRN = ['380','381','384','385','393'];
+  if (row.invoiceTypeCode && codeRequiringIRN.includes(String(row.invoiceTypeCode).trim()) && (!row.billingReferenceIrns || String(row.billingReferenceIrns).trim().length < 5)) {
+    errs.push(`InvoiceTypeCode ${row.invoiceTypeCode} requires Billing Reference IRN(s)`);
+  }
+  if (row.headerCharges !== undefined && Number(row.headerCharges) < 0) errs.push('HeaderCharges cannot be negative');
+  if (row.headerDiscount !== undefined && Number(row.headerDiscount) < 0) errs.push('HeaderDiscount cannot be negative');
   return errs;
 }
 

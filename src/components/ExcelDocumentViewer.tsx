@@ -28,7 +28,9 @@ import {
 export interface SpreadsheetRow {
   id: string;
   clientInvoiceNumber: string;
+  documentNumber?: string;
   invoiceKind: 'B2B' | 'B2C' | 'B2G' | 'EXPORT';
+  invoiceTypeCode?: string;
   issueDate: string;
   customerCode: string;
   customerName: string;
@@ -39,6 +41,17 @@ export interface SpreadsheetRow {
   unitPrice: number;
   hsOrServiceCode: string;
   vatRate: number;
+  lineNum?: number;
+  unitCode?: string;
+  taxCategoryId?: string;
+  discountAmount?: number;
+  taxableAmount?: number;
+  vatAmount?: number;
+  headerCharges?: number;
+  headerDiscount?: number;
+  currency?: string;
+  billingReferenceIrns?: string;
+  customFields?: Record<string, any>;
   partyNormalized?: boolean;
   itemNormalized?: boolean;
 }
@@ -241,7 +254,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     setIsNormalized(false);
   };
 
-  // Handle Excel / CSV File Upload
+  // Handle Excel / CSV File Upload — gold: supports 3-sheet EFS Template (Invoices/Customer/Product) + single-sheet alternative
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -252,18 +265,51 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
 
     const reader = new FileReader();
 
+    const processWorkbook = (workbook: any, fileName: string) => {
+      try {
+        const sheetNames = workbook.SheetNames || [];
+        // Gold: 3-sheet EFS Template
+        const hasInvoices = sheetNames.some((n:string)=> /^Invoices$/i.test(n.trim()));
+        const hasCustomer = sheetNames.some((n:string)=> /^Customer$/i.test(n.trim()));
+        const hasProduct = sheetNames.some((n:string)=> /^Product$/i.test(n.trim()));
+        if (hasInvoices) {
+          const invSheet = sheetNames.find((n:string)=> /^Invoices$/i.test(n.trim())) || sheetNames[0];
+          const custSheet = sheetNames.find((n:string)=> /^Customer$/i.test(n.trim()));
+          const prodSheet = sheetNames.find((n:string)=> /^Product$/i.test(n.trim()));
+          const invData:any[] = XLSX.utils.sheet_to_json(workbook.Sheets[invSheet], { defval: '' });
+          let custData:any[] = [];
+          let prodData:any[] = [];
+          if (custSheet) custData = XLSX.utils.sheet_to_json(workbook.Sheets[custSheet], { defval: '' });
+          if (prodSheet) prodData = XLSX.utils.sheet_to_json(workbook.Sheets[prodSheet], { defval: '' });
+          // Pre-populate master data from Customer/Product sheets before invoice rows
+          if (custData.length) {
+            custData.forEach((r:any)=>{
+              const code = r.CustomerCode || r['CustomerCode'] || r['Customer Code'] || '';
+              if (!code) return;
+              // Will be normalized via handleNormalizeMasterData; just log
+            });
+          }
+          parseAndLoadRows(invData, fileName, custData, prodData);
+        } else {
+          const firstSheet = sheetNames[0];
+          if (sheetNames.length > 1 || !/^(Customer Template|Item Template|Invoice Template|Sheet1)$/i.test(firstSheet)) {
+            console.warn(`[Compliance] Expected sheet "Invoices" but got "${firstSheet}". Using first sheet.`);
+          }
+          const rawData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: '' });
+          parseAndLoadRows(rawData, fileName);
+        }
+      } catch (err:any) {
+        setIsProcessing(false);
+        setStatusMsg({ text: `Parse Error: ${err.message}`, type: 'error' });
+      }
+    };
+
     if (file.name.endsWith('.csv') || file.type.includes('csv')) {
       reader.onload = (evt) => {
         try {
           const csvText = evt.target?.result as string;
           const workbook = XLSX.read(csvText, { type: 'string' });
-          const firstSheet = workbook.SheetNames[0];
-          if (workbook.SheetNames.length > 1 || !/^(Customer Template|Item Template|Invoice Template|Sheet1)$/i.test(firstSheet)) {
-            console.warn(`[Compliance] Expected sheet "Customer/Item/Invoice Template" but got "${firstSheet}". Using first sheet.`);
-          }
-          const rawData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
-
-          parseAndLoadRows(rawData, file.name);
+          processWorkbook(workbook, file.name);
         } catch (err: any) {
           setIsProcessing(false);
           setStatusMsg({ text: `CSV Parse Error: ${err.message}`, type: 'error' });
@@ -275,13 +321,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
         try {
           const data = new Uint8Array(evt.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.SheetNames[0];
-          if (workbook.SheetNames.length > 1 || !/^(Customer Template|Item Template|Invoice Template|Sheet1)$/i.test(firstSheet)) {
-            console.warn(`[Compliance] Expected sheet "Customer/Item/Invoice Template" but got "${firstSheet}". Using first sheet.`);
-          }
-          const rawData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
-
-          parseAndLoadRows(rawData, file.name);
+          processWorkbook(workbook, file.name);
         } catch (err: any) {
           setIsProcessing(false);
           setStatusMsg({ text: `Excel Parse Error: ${err.message}`, type: 'error' });
@@ -307,36 +347,80 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     return new Date().toISOString().substring(0, 10);
   };
 
-  const parseAndLoadRows = (rawData: any[], fileName: string) => {
+  const parseAndLoadRows = (rawData: any[], fileName: string, custData?: any[], prodData?: any[]) => {
     if (!rawData || rawData.length === 0) {
       setIsProcessing(false);
       setStatusMsg({ text: `File '${fileName}' contains no data rows.`, type: 'error' });
       return;
     }
 
+    // Helper to get case-insensitive field with gold aliases
+    const get = (r:any, ...keys:string[]) => {
+      for (const k of keys) {
+        if (r[k] !== undefined && r[k] !== '') return r[k];
+        const found = Object.keys(r).find(x=> x.toLowerCase().replace(/[^a-z0-9]/g,'') === k.toLowerCase().replace(/[^a-z0-9]/g,''));
+        if (found && r[found] !== '') return r[found];
+      }
+      return undefined;
+    };
+
     const loadedRows: SpreadsheetRow[] = rawData.map((r, i) => {
-      const cCode = r.customerCode || r.CustomerCode || `CUST-${i + 101}`;
-      const cTin = r.customerTin || r.CustomerTin || (r.invoiceKind === 'B2C' ? 'N/A' : 'P019283746Z');
-      const iCode = r.itemCode || r.ItemCode || r.SKU || `SKU-${i + 1}`;
+      const cCode = get(r, 'customerCode','CustomerCode','Customercode','Customer Code') || `CUST-${i + 101}`;
+      const cTin = get(r, 'customerTin','CustomerTin','TIN','Tax ID') || (r.invoiceKind === 'B2C' ? 'N/A' : 'P019283746Z');
+      const iCode = get(r, 'itemCode','ItemCode','itemcode','SKU','Item Code') || `SKU-${i + 1}`;
+      const docNum = get(r, 'documentNumber','DocumentNumber','Document Number');
+      const invNum = get(r, 'clientInvoiceNumber','InvoiceNumber','Invoice number','Invoice Number') || `EXCEL-${i + 1}`;
+      const itc = get(r, 'invoiceTypeCode','InvoiceTypeCode','Invoice Type','InvoiceType');
+      const hdrCharges = Number(get(r, 'headerCharges','HeaderCharges','Header Charges') ?? 0);
+      const hdrDiscount = Number(get(r, 'headerDiscount','HeaderDiscount','Header Discount') ?? 0);
+      const lineNum = Number(get(r, 'lineNum','Linenumber','Line Number','Line number') ?? i+1);
+      const unitCode = get(r, 'unitCode','UnitCode') || 'EA';
+      const taxCat = get(r, 'taxCategoryId','TaxCategory','Tax Category') || 'STANDARD_VAT';
+      const discount = Number(get(r, 'discountAmount','LineDiscount','Line Discount') ?? 0);
+      const taxable = get(r, 'taxableAmount','taxableamount','Taxable Amount');
+      const taxAmt = get(r, 'vatAmount','taxamount','Tax Amount','taxAmount');
+      const currency = get(r, 'currency','Currency Code','CurrencyCode') || 'NGN';
+      const billingIRNs = get(r, 'billingReferenceIrns','Billing Reference IRNs','BillingReferenceIRNs');
+      // User defined 1-10 and Days...Division -> customFields
+      const customFields: Record<string,any> = {};
+      for (let n=1;n<=10;n++) { const v=get(r, `User defined${n}`, `UserDefined${n}`); if(v) customFields[`User defined${n}`]=v; }
+      for (const k of ['Days','Group Code','Telephone','Website','Branch Network','Order Number','Sales Outlet','Sales Person','Branch Name','Division Code']) { const v=get(r,k); if(v) customFields[k]=v; }
 
       return {
         id: `row_up_${i}_${Date.now()}`,
-        clientInvoiceNumber: r.clientInvoiceNumber || r.InvoiceNumber || r.invoiceNumber || `EXCEL-${i + 1}`,
-        invoiceKind: (r.invoiceKind || r.Kind || 'B2B').toUpperCase() as any,
-        issueDate: normalizeIssueDate(r.issueDate ?? r.Date),
-        customerCode: cCode,
-        customerName: r.customerName || r.CustomerName || 'Uploaded Customer Entity',
-        customerTin: cTin,
-        itemCode: iCode,
-        description: r.description || r.Description || r.ItemDescription || 'Uploaded Product Line Item',
-        quantity: Number(r.quantity || r.Qty || 1),
-        unitPrice: Number(r.unitPrice || r.UnitPrice || r.Price || 0),
-        hsOrServiceCode: r.hsOrServiceCode || r.HsOrServiceCode || r.HSCode || 'HS-8471.30',
-        vatRate: Number(r.vatRate || r.VatRate || 16),
-        partyNormalized: checkPartyNormalized(cCode, cTin),
-        itemNormalized: checkItemNormalized(iCode)
+        clientInvoiceNumber: String(invNum).trim(),
+        documentNumber: docNum ? String(docNum).trim() : undefined,
+        invoiceKind: (get(r, 'invoiceKind','Kind','InvoiceKind') || 'B2B').toUpperCase() as any,
+        invoiceTypeCode: itc ? String(itc).trim() : undefined,
+        issueDate: normalizeIssueDate(get(r, 'issueDate','IssueDate','Issuedate','Date')),
+        customerCode: String(cCode).trim(),
+        customerName: get(r, 'customerName','CustomerName','Name') || 'Uploaded Customer Entity',
+        customerTin: String(cTin).trim(),
+        itemCode: String(iCode).trim(),
+        description: get(r, 'description','Description','ItemDescription','Item Description') || 'Uploaded Product Line Item',
+        quantity: Number(get(r, 'quantity','Quantity','Qty') ?? 1),
+        unitPrice: Number(get(r, 'unitPrice','UnitPrice','Price','price') ?? 0),
+        hsOrServiceCode: get(r, 'hsOrServiceCode','HsOrServiceCode','HsorServiceCode','HSCode','HS Code') || 'HS-8471.30',
+        vatRate: Number(get(r, 'vatRate','VatRate','VAT Rate') ?? 16),
+        lineNum, unitCode, taxCategoryId: taxCat, discountAmount: discount,
+        taxableAmount: taxable !== undefined ? Number(taxable) : undefined,
+        vatAmount: taxAmt !== undefined ? Number(taxAmt) : undefined,
+        headerCharges: hdrCharges, headerDiscount: hdrDiscount, currency,
+        billingReferenceIrns: billingIRNs ? String(billingIRNs) : undefined,
+        customFields: Object.keys(customFields).length ? customFields : undefined,
+        partyNormalized: checkPartyNormalized(String(cCode).trim(), String(cTin).trim()),
+        itemNormalized: checkItemNormalized(String(iCode).trim())
       };
     });
+
+    // If 3-sheet gold, also handle Customer/Product sheets for master population (deferred to normalize step)
+    if (custData && custData.length) {
+      // Store for normalize step via window temp
+      (window as any).__goldCustData = custData;
+    }
+    if (prodData && prodData.length) {
+      (window as any).__goldProdData = prodData;
+    }
 
     setRows(loadedRows);
     setIsProcessing(false);
@@ -347,7 +431,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     });
   };
 
-  // Master Data Normalization Action
+  // Master Data Normalization Action — gold: also handles Customer/Product sheets if present
   const handleNormalizeMasterData = async () => {
     if (rows.length === 0) {
       setStatusMsg({ text: 'Upload an Excel or CSV file before normalizing master data.', type: 'error' });
@@ -359,6 +443,61 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
 
     try {
       const updatedRows = [...rows];
+
+      // Gold: if 3-sheet upload, use Customer/Product sheets for master data
+      const goldCustData = (window as any).__goldCustData as any[] | undefined;
+      const goldProdData = (window as any).__goldProdData as any[] | undefined;
+      if (goldCustData && goldCustData.length) {
+        for (const r of goldCustData) {
+          const code = r.CustomerCode || r['CustomerCode'] || r['Customer Code'];
+          const name = r['Name '] || r.Name || r['Name'];
+          const tin = r['TIN '] || r.TIN || r['TIN'];
+          const email = r['Email '] || r.Email || r['Email'];
+          const ccEmail = r['CCEmail (optional) (seperate with ;)'] || r.CCEmail;
+          const street = r['StreetName '] || r.StreetName || r['StreetName'];
+          const city = r['CityName '] || r.CityName || r['CityName'];
+          const country = r[' Country'] || r.Country || r['Country'] || 'NG';
+          if (!code) continue;
+          const exists = customers.find(c => c.clientCustomerCode === String(code).trim());
+          if (!exists) {
+            await addCustomer({
+              clientCustomerCode: String(code).trim(),
+              name: String(name || code).trim(),
+              tin: String(tin || 'N/A').trim(),
+              isB2B: String(tin || '').trim() !== 'N/A' && String(tin || '').trim() !== '',
+              email: String(email || `billing@${String(code).toLowerCase().replace(/[^a-z0-9]/g,'')}.com`).trim(),
+              street: String(street || 'Commercial Business Park').trim(),
+              city: String(city || 'Lagos').trim(),
+              country: String(country || 'NG').trim()
+            }, targetTenantId);
+            if (ccEmail) { /* ccEmail stored via addCustomer if supported */ }
+          }
+        }
+      }
+      if (goldProdData && goldProdData.length) {
+        for (const r of goldProdData) {
+          const code = r.ItemCode || r['ItemCode'] || r['Item Code'];
+          if (!code) continue;
+          const exists = itemMappings.find(m => m.clientSku === String(code).trim());
+          if (!exists) {
+            const hs = r.HsorServiceCode || r['HsorServiceCode'] || r['HSorServiceCode'] || 'HS-8471.30';
+            const price = Number(r.price || r.Price || 0);
+            const taxCat = r.TaxCategory || r['TaxCategory'] || 'STANDARD_VAT';
+            await addItemMapping({
+              clientSku: String(code).trim(),
+              name: String(r.ItemName || r['ItemName'] || r.ItemDescription || code).trim(),
+              description: String(r.ItemDescription || r['ItemDescription'] || r.ItemName || code).trim(),
+              unitCode: String(r.UnitCode || r['UnitCode'] || 'EA').trim(),
+              hsOrServiceCode: String(hs).trim(),
+              category: 'General Goods',
+              codeType: String(hs).startsWith('HS') ? 'HS_CODE' : 'SERVICE_CODE',
+              codeDescription: String(r.ItemDescription || r['ItemDescription'] || '').trim(),
+              defaultVatRate: taxCat === 'EXEMPT' ? 0 : (activeTenant?.defaultVatRate || 7.5),
+              status: 'MAPPED'
+            }, targetTenantId);
+          }
+        }
+      }
 
       for (let i = 0; i < updatedRows.length; i++) {
         const row = updatedRows[i];
@@ -386,7 +525,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             clientSku: row.itemCode,
             name: row.description,
             description: row.description,
-            unitCode: 'EA',
+            unitCode: (row as any).unitCode || 'EA',
             hsOrServiceCode: row.hsOrServiceCode || 'HS-8471.30',
             category: 'General Goods',
             codeType: (row.hsOrServiceCode || '').startsWith('HS') ? 'HS_CODE' : 'SERVICE_CODE',
@@ -538,22 +677,39 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
       if (!groupedMap.has(r.clientInvoiceNumber)) {
         groupedMap.set(r.clientInvoiceNumber, {
           clientInvoiceNumber: r.clientInvoiceNumber,
+          documentNumber: (r as any).documentNumber,
           invoiceKind: r.invoiceKind,
+          invoiceTypeCode: (r as any).invoiceTypeCode,
           issueDate: r.issueDate,
           customerCode: r.customerCode,
           customerName: r.customerName,
           customerTin: r.customerTin,
+          headerCharges: (r as any).headerCharges,
+          headerDiscount: (r as any).headerDiscount,
+          currency: (r as any).currency,
+          billingReferenceIrns: (r as any).billingReferenceIrns,
+          customFields: (r as any).customFields,
           lineItems: []
         });
       }
       const inv = groupedMap.get(r.clientInvoiceNumber);
+      // Merge header-level gold fields if this row has them and inv doesn't yet
+      if ((r as any).headerCharges !== undefined && inv.headerCharges === undefined) inv.headerCharges = (r as any).headerCharges;
+      if ((r as any).headerDiscount !== undefined && inv.headerDiscount === undefined) inv.headerDiscount = (r as any).headerDiscount;
+      if ((r as any).billingReferenceIrns && !inv.billingReferenceIrns) inv.billingReferenceIrns = (r as any).billingReferenceIrns;
       inv.lineItems.push({
         itemCode: r.itemCode,
         description: r.description,
         quantity: Number(r.quantity),
         unitPrice: Number(r.unitPrice),
         vatRate: Number(r.vatRate || 7.5),
-        hsOrServiceCode: r.hsOrServiceCode
+        hsOrServiceCode: r.hsOrServiceCode,
+        lineNum: (r as any).lineNum,
+        unitCode: (r as any).unitCode,
+        taxCategoryId: (r as any).taxCategoryId,
+        discountAmount: (r as any).discountAmount,
+        taxableAmount: (r as any).taxableAmount,
+        vatAmount: (r as any).vatAmount,
       });
     });
     const grouped = Array.from(groupedMap.values());

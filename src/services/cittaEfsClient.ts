@@ -230,18 +230,20 @@ export class CittaEfsClient {
     const customerCode = payload.customerCode;
     const originalIrn = payload.originalIrn;
     const invoiceTypeCode =
-      payload.invoiceType === "STANDARD"
+      (payload as any).invoiceTypeCode?.toString().trim() ||
+      (payload.invoiceType === "STANDARD"
         ? "388"
         : payload.invoiceType === "CREDIT_NOTE"
           ? "381"
           : payload.invoiceType === "DEBIT_NOTE"
             ? "383"
-            : "388";
-    const headerDiscount = (payload as any).headerDiscount || 0;
-    const headerCharges = (payload as any).headerCharges || 0;
+            : "388");
+    const headerDiscount = (payload as any).headerDiscount ?? 0;
+    const headerCharges = (payload as any).headerCharges ?? 0;
     const useStateTax = (payload as any).useStateTax || false;
     const documentNumber = payload.documentNumber || payload.clientInvoiceNumber;
-    const billingReferenceIrns = originalIrn ? [originalIrn] : [];
+    const _brArr = (payload as any).billingReferenceIrns;
+    const billingReferenceIrns = Array.isArray(_brArr) && _brArr.length ? _brArr : originalIrn ? [originalIrn] : [];
     const customFields = (payload as any).customFields || {};
     const metadata = (payload as any).metadata || {};
 

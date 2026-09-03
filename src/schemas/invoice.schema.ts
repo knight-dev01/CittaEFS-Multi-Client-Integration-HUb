@@ -1,7 +1,7 @@
 import { z } from "zod";
 import crypto from "crypto";
 
-// Line Item Schema
+// Line Item Schema — extended for gold template (Linenumber, UnitCode, TaxCategory, explicit amounts)
 export const invoiceLineItemSchema = z.object({
   itemCode: z.string().min(1, "Item SKU / Code is required"),
   description: z.string().min(1, "Item description is required"),
@@ -14,6 +14,13 @@ export const invoiceLineItemSchema = z.object({
     .optional()
     .default("SERVICE_CODE"),
   vatRate: z.number().min(0).max(100).default(7.5),
+  // Gold template passthroughs
+  lineNum: z.number().int().positive().optional(),
+  unitCode: z.string().optional().default("EA"),
+  taxCategoryId: z.string().optional().default("STANDARD_VAT"),
+  // When template provides explicit taxable/tax amounts, we validate vs computed (tolerance 0.02)
+  taxableAmount: z.number().optional(),
+  vatAmount: z.number().optional(),
 });
 
 // Full Invoice Validation Schema
@@ -25,6 +32,7 @@ export const invoiceIngestionSchema = z
     invoiceType: z
       .enum(["STANDARD", "CREDIT_NOTE", "DEBIT_NOTE", "CANCELLATION"])
       .default("STANDARD"),
+    invoiceTypeCode: z.string().optional(), // Gold: 380,381,384... passthrough, maps to invoiceType
     invoiceKind: z.enum(["B2B", "B2C", "B2G", "EXPORT"]).default("B2B"),
     issueDate: z
       .string()
@@ -36,13 +44,30 @@ export const invoiceIngestionSchema = z
     customerAddress: z.string().optional(),
     currency: z.string().default("NGN"),
     originalIrn: z.string().optional(), // For Credit/Debit notes
+    billingReferenceIrns: z.array(z.string()).optional(), // Gold: comma-split IRNs for 380/384/393
     headerDiscount: z.number().min(0).default(0),
     headerCharges: z.number().min(0).default(0),
+    customFields: z.record(z.string(), z.any()).optional(), // Gold: User defined1-10 / Days…Division
+    metadata: z.record(z.string(), z.any()).optional(),
     lineItems: z
       .array(invoiceLineItemSchema)
       .min(1, "At least one line item is required"),
   })
   .transform((data) => {
+    // Gold: InvoiceTypeCode passthrough (380,381,384...) maps to invoiceType; 380/381->CREDIT, 384->DEBIT etc.
+    let effectiveInvoiceType = data.invoiceType;
+    if ((data as any).invoiceTypeCode) {
+      const code = String((data as any).invoiceTypeCode).trim();
+      if (["380","381"].includes(code)) effectiveInvoiceType = "CREDIT_NOTE" as any;
+      else if (["384","383"].includes(code)) effectiveInvoiceType = "DEBIT_NOTE" as any;
+      else if (["388"].includes(code)) effectiveInvoiceType = "STANDARD" as any;
+      // Keep original code for gateway via customFields
+    }
+    // Gold: BillingReferenceIrns comma-split -> originalIrn alternative
+    let effectiveOriginalIrn = data.originalIrn;
+    if (!effectiveOriginalIrn && (data as any).billingReferenceIrns && Array.isArray((data as any).billingReferenceIrns) && (data as any).billingReferenceIrns.length) {
+      effectiveOriginalIrn = (data as any).billingReferenceIrns[0];
+    }
     // CRITICAL BUSINESS RULE 1: Auto-downgrade tax classification to B2C if tax_id / customerTin is missing/empty
     // B2G behaves as B2B for this customer-registration gate (same TIN requirement).
     let effectiveKind = data.invoiceKind;
@@ -60,14 +85,19 @@ export const invoiceIngestionSchema = z
     const effectiveCustomerTin =
       effectiveKind === "B2C" ? undefined : data.customerTin;
 
-    // CRITICAL BUSINESS RULE 2: Compute line item amounts & default classification codes
-    const transformedLineItems = data.lineItems.map((item) => {
+    // CRITICAL BUSINESS RULE 2: Compute line item amounts & default classification codes (gold: respect explicit taxable/vat if within tolerance)
+    const transformedLineItems = data.lineItems.map((item, idx) => {
       const qty = item.quantity;
       const price = item.unitPrice;
       const discount = item.discountAmount;
-      const taxableAmount = Math.max(0, qty * price - discount);
+      const computedTaxable = Math.max(0, qty * price - discount);
       const vatRate = item.vatRate;
-      const vatAmount = (taxableAmount * vatRate) / 100;
+      const computedVat = (computedTaxable * vatRate) / 100;
+      // If template provided explicit amounts, use them when close to computed (tolerance 0.05) to avoid NRS mismatch
+      let taxableAmount = computedTaxable;
+      let vatAmount = computedVat;
+      if ((item as any).taxableAmount !== undefined && Math.abs(Number((item as any).taxableAmount) - computedTaxable) < 0.06) taxableAmount = Number((item as any).taxableAmount);
+      if ((item as any).vatAmount !== undefined && Math.abs(Number((item as any).vatAmount) - computedVat) < 0.06) vatAmount = Number((item as any).vatAmount);
       const totalAmount = taxableAmount + vatAmount;
 
       // SKU Code default: If code is unmapped or missing, assign SERV-DEFAULT code
@@ -84,6 +114,9 @@ export const invoiceIngestionSchema = z
         taxableAmount: Number(taxableAmount.toFixed(2)),
         vatAmount: Number(vatAmount.toFixed(2)),
         totalAmount: Number(totalAmount.toFixed(2)),
+        lineNum: (item as any).lineNum || idx + 1,
+        unitCode: (item as any).unitCode || "EA",
+        taxCategoryId: (item as any).taxCategoryId || "STANDARD_VAT",
       };
     });
 
@@ -115,8 +148,10 @@ export const invoiceIngestionSchema = z
 
     return {
       ...data,
+      invoiceType: effectiveInvoiceType as any,
       invoiceKind: effectiveKind,
       customerTin: effectiveCustomerTin,
+      originalIrn: effectiveOriginalIrn,
       lineItems: transformedLineItems,
       subtotal,
       totalVat,

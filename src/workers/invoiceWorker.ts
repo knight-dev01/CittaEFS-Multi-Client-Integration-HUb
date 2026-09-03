@@ -27,10 +27,12 @@ export async function processInvoiceJob(
   await invoiceQueue.updateJob(job);
 
   try {
-    // 1. Dispatch payload to CittaEFS Gateway C# REST API
+    // 1. Dispatch payload to CittaEFS Gateway C# REST API — forward all gold fields (header, currency, IRNs, customFields)
+    const _d:any = job.data as any;
     const response: CittaEfsResponse = await cittaEfsClient.signAndStampInvoice({
       tenantId: job.data.tenantId,
       clientInvoiceNumber: job.data.clientInvoiceNumber,
+      documentNumber: _d.documentNumber,
       invoiceType: job.data.invoiceType,
       invoiceKind: job.data.invoiceKind,
       customerCode: job.data.customerCode,
@@ -38,8 +40,16 @@ export async function processInvoiceJob(
       customerTin: job.data.customerTin || undefined,
       lineItems: job.data.lineItems,
       issueDate: job.data.issueDate,
-      originalIrn: job.data.originalIrn
-    });
+      originalIrn: job.data.originalIrn,
+      // Gold passthroughs
+      ...( _d.invoiceTypeCode ? { invoiceTypeCode: _d.invoiceTypeCode } : {}),
+      ...( _d.billingReferenceIrns ? { billingReferenceIrns: _d.billingReferenceIrns } : {}),
+      ...( _d.headerDiscount !== undefined ? { headerDiscount: _d.headerDiscount } : {}),
+      ...( _d.headerCharges !== undefined ? { headerCharges: _d.headerCharges } : {}),
+      ...( _d.currency ? { currency: _d.currency } : {}),
+      ...( _d.customFields ? { customFields: _d.customFields } : {}),
+      ...( _d.metadata ? { metadata: _d.metadata } : {}),
+    } as any);
 
     if (response.success && response.irn) {
       job.status = 'COMPLETED';
