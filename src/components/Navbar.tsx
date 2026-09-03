@@ -73,6 +73,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
   });
+  const hoverExpandedRef = useRef(false);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef<number>(0);
   useEffect(() => {
@@ -80,14 +81,40 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     if (el) el.scrollTop = scrollTopRef.current;
   }, [activeTab, tenants.length, userRole, isCollapsed]);
 
-  const toggleCollapsed = () => {
+  const toggleCollapsed = (opts?: { fromHover?: boolean }) => {
     if (navScrollRef.current) scrollTopRef.current = navScrollRef.current.scrollTop;
     setIsCollapsed(v => {
       const nv = !v;
+      if (!opts?.fromHover) hoverExpandedRef.current = false;
       try { localStorage.setItem('citta_sidebar_collapsed', nv ? '1' : '0'); } catch {}
       try { window.dispatchEvent(new CustomEvent('citta_sidebar_collapsed', { detail: nv })); } catch {}
       return nv;
     });
+  };
+  const handleHoverEnter = () => {
+    if (isCollapsed && !hoverExpandedRef.current) {
+      hoverExpandedRef.current = true;
+      toggleCollapsed({ fromHover: true });
+    }
+  };
+  const handleHoverLeave = () => {
+    if (hoverExpandedRef.current && !isCollapsed) {
+      hoverExpandedRef.current = false;
+      toggleCollapsed({ fromHover: true });
+    }
+  };
+  const handleNavClick = (tabId: string) => {
+    setActiveTab(tabId);
+    setIsMobileMenuOpen(false);
+    if (hoverExpandedRef.current) {
+      // close after interaction — slight delay so click registers
+      setTimeout(() => {
+        if (hoverExpandedRef.current && !isCollapsed) {
+          hoverExpandedRef.current = false;
+          toggleCollapsed({ fromHover: true });
+        }
+      }, 300);
+    }
   };
 
   const handleDeleteActiveTenant = async () => {
@@ -164,7 +191,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                 CittaEFS
               </h1>
               <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
-                v2.18
+                v2.19
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-normal mt-1">
@@ -257,10 +284,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => {
-                        setActiveTab(tab.id);
-                        setIsMobileMenuOpen(false);
-                      }}
+                      onClick={() => handleNavClick(tab.id)}
                       className={`flex items-center justify-between w-full px-3 py-2 rounded-lg font-medium text-xs transition-all cursor-pointer ${
                         isActive
                           ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
@@ -408,8 +432,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       )}
 
-      {/* Desktop Persistent Sidebar — single toggle + hover to expand */}
-      <aside onMouseEnter={() => { if (isCollapsed) toggleCollapsed(); }} className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
+      {/* Desktop Persistent Sidebar — single toggle + hover to expand, collapses on leave / after click */}
+      <aside onMouseEnter={handleHoverEnter} onMouseLeave={handleHoverLeave} className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
         <div className="flex flex-col w-full h-full relative">
           {/* Single collapse toggle — top-right */}
           <button
@@ -432,7 +456,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
                   return (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} title={tab.label} className={`w-full flex justify-center py-2.5 ${isActive ? 'text-violet-400 bg-violet-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'} cursor-pointer`}>
+                    <button key={tab.id} onClick={() => handleNavClick(tab.id)} title={tab.label} className={`w-full flex justify-center py-2.5 ${isActive ? 'text-violet-400 bg-violet-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'} cursor-pointer`}>
                       <Icon className="w-4 h-4" />
                     </button>
                   );

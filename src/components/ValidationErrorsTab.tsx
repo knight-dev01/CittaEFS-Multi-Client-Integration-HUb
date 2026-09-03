@@ -14,12 +14,13 @@ import {
 } from 'lucide-react';
 
 export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) => void } = {}) {
-  const { validationErrors, activeTenant, resolveValidationError, currentUser } = useHub();
+  const { validationErrors, activeTenant, resolveValidationError, currentUser, refreshAll } = useHub() as any;
 
   const [selectedError, setSelectedError] = useState<ValidationErrorItem | null>(null);
   const [selectedHsCode, setSelectedHsCode] = useState<string>('HS-3926.90');
   const [correctedTin, setCorrectedTin] = useState<string>('P019283746Z');
   const [isResolving, setIsResolving] = useState(false);
+  const [isBulkFixing, setIsBulkFixing] = useState(false);
 
   const tenantErrors = validationErrors.filter(e => e.tenantId === activeTenant.id);
   const openErrors = tenantErrors.filter(e => e.status === 'OPEN');
@@ -65,7 +66,20 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
           <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-medium">
             {resolvedErrors.length} Auto-Resolved
           </span>
-          <button onClick={() => onNavigate ? onNavigate('invoices') : null} title="Validation is fix-only — propagate in Invoices" className="px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-full font-semibold">Go to Invoices to Retry →</button>
+          <button onClick={async () => {
+            if (openErrors.length===0) return;
+            if (!confirm(`Bulk fix ${openErrors.length} open validation errors? This marks them RESOLVED.`)) return;
+            setIsBulkFixing(true);
+            try {
+              const { fetchWithAuth, parseJsonResponse } = await import('../lib/api');
+              const res = await fetchWithAuth('/api/validation-errors/bulk-resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tenantId: activeTenant.id }) });
+              await parseJsonResponse(res);
+              await refreshAll();
+            } catch(e:any){ alert(e.message); } finally { setIsBulkFixing(false); }
+          }} disabled={isBulkFixing || openErrors.length===0} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-semibold disabled:opacity-50 cursor-pointer flex items-center gap-1">
+            <Wrench className={`w-3 h-3 ${isBulkFixing?'animate-spin':''}`} /> {isBulkFixing ? 'Fixing…' : `One-Click Bulk Fix (${openErrors.length})`}
+          </button>
+          <button onClick={() => onNavigate ? onNavigate('invoices') : null} title="Validation is fix-only — propagate in Invoices" className="px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-full font-semibold">Go to Invoices →</button>
         </div>
       </div>
 
