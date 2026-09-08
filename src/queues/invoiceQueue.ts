@@ -336,6 +336,41 @@ class InvoiceQueueManager {
   public isBullMqEnabled(): boolean { return bullMqEnabled; }
   public getBullMqQueue(): any { return bullMqQueue; }
 
+  // A job is marked PROCESSING before the gateway call, then COMPLETED/DLQ
+  // after. If the process dies mid-call (crash, redeploy, or a forced
+  // restart during local dev) nothing else ever revisits it — recoverOrphans
+  // only catches invoices with NO queue entry at all, so an already-PROCESSING
+  // job looks "handled" forever. This reclaims any PROCESSING job that's been
+  // stuck longer than the threshold: back to QUEUED if it still has retries
+  // left, straight to DLQ if it doesn't (matches the normal max-retries path
+  // instead of retrying indefinitely). Single-instance assumption — there's
+  // no distributed lock, so this isn't safe to run against a job another
+  // instance is genuinely still mid-call on within the same window.
+  public async recoverStaleProcessingJobs(staleThresholdMs = 120000): Promise<number> {
+    await this.hydrateIfNeeded();
+    const cutoff = Date.now() - staleThresholdMs;
+    const stale = this.queue.filter(
+      (j) => j.status === 'PROCESSING' && new Date(j.updatedAt).getTime() < cutoff
+    );
+    for (const job of stale) {
+      if (job.attempts >= job.maxRetries) {
+        await this.moveToDLQ(
+          job,
+          `Abandoned mid-processing after ${job.attempts} attempt(s) — the worker process likely restarted before this job finished. Moved to DLQ instead of retrying indefinitely.`
+        );
+      } else {
+        job.status = 'QUEUED';
+        job.updatedAt = new Date().toISOString();
+        job.nextAttemptAt = new Date().toISOString();
+        await this.updateJob(job);
+      }
+    }
+    if (stale.length > 0) {
+      console.warn(`[Queue] Recovered ${stale.length} stale PROCESSING job(s) abandoned by a dead/restarted worker`);
+    }
+    return stale.length;
+  }
+
   // Re-hydrate + recover orphaned PENDING_NRS_STAMP invoices that have no queue entry
   public async recoverOrphans(): Promise<number> {
     await this.hydrateIfNeeded();

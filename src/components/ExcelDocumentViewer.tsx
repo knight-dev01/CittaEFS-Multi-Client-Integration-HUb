@@ -213,7 +213,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           itemCode: item.clientSku,
           description: item.description,
           hsOrServiceCode: item.hsOrServiceCode,
-          vatRate: item.defaultVatRate || 16,
+          vatRate: item.defaultVatRate || 7.5, // Nigeria STANDARD_VAT is 7.5%, not 16%
           itemNormalized: true
         };
       }
@@ -405,7 +405,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
         quantity: Number(get(r, 'quantity','Quantity','Qty') ?? 1),
         unitPrice: Number(get(r, 'unitPrice','UnitPrice','Price','price') ?? 0),
         hsOrServiceCode: get(r, 'hsOrServiceCode','HsOrServiceCode','HsorServiceCode','HSCode','HS Code') || 'UNMAPPED',
-        vatRate: Number(get(r, 'vatRate','VatRate','VAT Rate') ?? 16),
+        vatRate: Number(get(r, 'vatRate','VatRate','VAT Rate') ?? 7.5), // Nigeria STANDARD_VAT is 7.5%, not 16%
         lineNum, unitCode, taxCategoryId: taxCat, discountAmount: discount,
         taxableAmount: taxable !== undefined ? Number(taxable) : undefined,
         vatAmount: taxAmt !== undefined ? Number(taxAmt) : undefined,

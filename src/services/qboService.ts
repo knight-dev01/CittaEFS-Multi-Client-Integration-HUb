@@ -726,7 +726,7 @@ export async function ingestQboInvoice(
       const vatRate =
         li.vatRate !== undefined
           ? Number(li.vatRate)
-          : Number(mapping?.defaultVatRate || 16);
+          : Number(mapping?.defaultVatRate || 7.5); // Nigeria STANDARD_VAT is 7.5%, not 16%
       const vatAmount = (taxable * vatRate) / 100;
       const totalAmount = taxable + vatAmount;
 

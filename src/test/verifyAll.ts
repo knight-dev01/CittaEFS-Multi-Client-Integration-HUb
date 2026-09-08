@@ -160,7 +160,7 @@ async function runAllTests() {
   try {
     const validInvoice = {
       tenantId: "tenant_qbo",
-      clientInvoiceNumber: "INV-2026-999",
+      clientInvoiceNumber: "INV2026999",
       issueDate: "2026-07-29",
       dueDate: "2026-08-29",
       currency: "NGN",
@@ -533,21 +533,23 @@ async function runAllTests() {
       `Success: ${efsResponse.success}, IRN: ${efsResponse.irn}, QR URL: ${efsResponse.qrCodeUrl?.substring(0, 30)}...`,
     );
 
-    // 1b. Per-tenant credential isolation: the gateway request must carry the
-    // tenant's own DB-stored cittaApiKey, not the shared CITTAEFS_API_KEY env var.
+    // 1b. Shared global gateway key (by design — see the "UPDATED 2026-08-29:
+    // All tenants share ONE global API key (per user request)" note in
+    // cittaEfsClient.ts): the env var wins over any tenant-specific
+    // cittaApiKey stored in the DB, for every tenant.
     const tenantRecord = await prisma.tenant.findUnique({
       where: { id: "tenant_qbo" },
       select: { cittaApiKey: true },
     });
-    let perTenantKeyUsed = false;
-    let perTenantError: any = null;
+    let globalKeyUsed = false;
+    let globalKeyError: any = null;
     try {
       nock("https://ei-api.azurewebsites.net", {
-        reqheaders: { authorization: `Bearer ${tenantRecord?.cittaApiKey}` },
+        reqheaders: { authorization: `Bearer ${process.env.CITTAEFS_API_KEY}` },
       })
         .post("/api/integration/gen/invoices")
         .reply(() => {
-          perTenantKeyUsed = true;
+          globalKeyUsed = true;
           return [
             200,
             {
@@ -558,10 +560,10 @@ async function runAllTests() {
               items: [
                 {
                   invoiceNumber: testInvoice.clientInvoiceNumber,
-                  irn: "IRN-NRS-2026-PERTENANT",
+                  irn: "IRN-NRS-2026-GLOBALKEY",
                   qrCodeUrl:
-                    "https://nrs.portal.gov/verify?irn=IRN-NRS-2026-PERTENANT",
-                  csid: "CSID-PERTENANT",
+                    "https://nrs.portal.gov/verify?irn=IRN-NRS-2026-GLOBALKEY",
+                  csid: "CSID-GLOBALKEY",
                 },
               ],
             },
@@ -569,45 +571,67 @@ async function runAllTests() {
         });
       await cittaEfsClient.signAndStampInvoice(testInvoice);
     } catch (e) {
-      perTenantError = e;
+      globalKeyError = e;
     }
     assert(
       "CittaEFS Gateway Client",
-      "Per-Tenant Gateway Credential Isolation",
+      "Shared Global Gateway Key Used For Every Tenant (By Design)",
       "Security",
-      perTenantKeyUsed &&
-        !perTenantError &&
-        Boolean(tenantRecord?.cittaApiKey) &&
-        tenantRecord!.cittaApiKey !== process.env.CITTAEFS_API_KEY,
-      "Gateway request is signed with the tenant's own DB-stored cittaApiKey, not the shared CITTAEFS_API_KEY env var",
-      perTenantKeyUsed
-        ? "Request carried the tenant-specific Authorization header"
-        : `Request did not match tenant-specific key${perTenantError ? ` (${perTenantError.message})` : ""}`,
+      globalKeyUsed && !globalKeyError,
+      "Gateway request is signed with the shared CITTAEFS_API_KEY env var, taking priority over any tenant-specific DB-stored cittaApiKey",
+      globalKeyUsed
+        ? `Request carried the shared global Authorization header (tenant's own DB key ${tenantRecord?.cittaApiKey ? "present but correctly not used" : "not set"})`
+        : `Request did not use the global key${globalKeyError ? ` (${globalKeyError.message})` : ""}`,
     );
 
-    // 1c. Unknown tenant must fail loudly rather than silently signing under a shared/global key.
-    let threwForUnknownTenant = false;
-    let unknownTenantErrorMsg = "";
+    // 1c. An unrecognized tenantId still succeeds via the shared global key —
+    // getCittaEfsConfig() checks the env var first and returns immediately,
+    // before any tenant lookup is even consulted, so gateway auth needs no
+    // per-tenant onboarding at all when CITTAEFS_API_KEY is set.
+    let unknownTenantUsedGlobalKey = false;
+    let unknownTenantError: any = null;
     try {
+      nock("https://ei-api.azurewebsites.net", {
+        reqheaders: { authorization: `Bearer ${process.env.CITTAEFS_API_KEY}` },
+      })
+        .post("/api/integration/gen/invoices")
+        .reply(() => {
+          unknownTenantUsedGlobalKey = true;
+          return [
+            200,
+            {
+              totalInvoices: 1,
+              successCount: 1,
+              failedCount: 0,
+              errors: [],
+              items: [
+                {
+                  invoiceNumber: testInvoice.clientInvoiceNumber,
+                  irn: "IRN-NRS-2026-UNKNOWNTENANT",
+                  qrCodeUrl:
+                    "https://nrs.portal.gov/verify?irn=IRN-NRS-2026-UNKNOWNTENANT",
+                  csid: "CSID-UNKNOWNTENANT",
+                },
+              ],
+            },
+          ];
+        });
       await cittaEfsClient.signAndStampInvoice({
         ...testInvoice,
         tenantId: "tenant_does_not_exist_xyz",
       });
     } catch (e: any) {
-      unknownTenantErrorMsg = e.message || "";
-      threwForUnknownTenant = /No CittaEFS Gateway API key configured/.test(
-        unknownTenantErrorMsg,
-      );
+      unknownTenantError = e;
     }
     assert(
       "CittaEFS Gateway Client",
-      "Unknown Tenant Rejected Instead Of Falling Back To Shared Key",
+      "Unknown Tenant Still Succeeds Via Shared Global Key",
       "Security",
-      threwForUnknownTenant,
-      "Throws a clear error for a tenant with no configured gateway credentials, instead of silently using a shared key",
-      threwForUnknownTenant
-        ? `Threw expected error: ${unknownTenantErrorMsg}`
-        : "Did not throw the expected credential error",
+      unknownTenantUsedGlobalKey && !unknownTenantError,
+      "A tenantId with no matching DB row still signs successfully with the shared global CITTAEFS_API_KEY, since the env var short-circuits before any tenant lookup",
+      unknownTenantUsedGlobalKey
+        ? "Request succeeded using the shared global key despite an unknown tenantId"
+        : `Did not use the global key for an unknown tenant${unknownTenantError ? ` (${unknownTenantError.message})` : ""}`,
     );
 
     // 1d. Document Number is distinct from Invoice Number when explicitly supplied
@@ -773,7 +797,7 @@ async function runAllTests() {
   try {
     const testPayload = invoiceIngestionSchema.parse({
       tenantId: "tenant_qbo",
-      clientInvoiceNumber: `INV-Q-${Date.now()}`,
+      clientInvoiceNumber: `INVQ${Date.now()}`,
       issueDate: "2026-07-29",
       dueDate: "2026-08-29",
       currency: "NGN",
@@ -817,6 +841,53 @@ async function runAllTests() {
       "Job is safely isolated in DLQ for compliance auditing",
       inDlq ? "Successfully held in DLQ" : "Failed to move to DLQ",
     );
+
+    // Stale PROCESSING recovery — a job abandoned mid-call by a dead/restarted
+    // worker (still has retries left) gets reclaimed back to QUEUED instead
+    // of sitting stuck forever.
+    const staleJob = await invoiceQueue.add(
+      "signInvoice",
+      { ...testPayload, clientInvoiceNumber: `INVSTALE${Date.now()}`, dbInvoiceId: "test-dbinvoice-stale" },
+      { attempts: 3 },
+    );
+    staleJob.status = "PROCESSING";
+    staleJob.attempts = 1;
+    staleJob.updatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await invoiceQueue.updateJob(staleJob);
+    const recoveredCount = await invoiceQueue.recoverStaleProcessingJobs(120000);
+    const requeued = invoiceQueue
+      .getPendingJobs()
+      .some((j) => j.id === staleJob.id && j.status === "QUEUED");
+    assert(
+      "Async Queue Engine",
+      "Stale PROCESSING Job Recovery (Abandoned Worker Reclaim)",
+      "FailureRecovery",
+      recoveredCount >= 1 && requeued,
+      "A job stuck in PROCESSING past the stale threshold is requeued (still has retries left) rather than abandoned forever",
+      `Recovered count: ${recoveredCount}, Requeued: ${requeued}`,
+    );
+
+    // Same scenario but retries already exhausted — should go straight to DLQ
+    // instead of being requeued indefinitely.
+    const staleExhaustedJob = await invoiceQueue.add(
+      "signInvoice",
+      { ...testPayload, clientInvoiceNumber: `INVSTALEDLQ${Date.now()}`, dbInvoiceId: "test-dbinvoice-stale-dlq" },
+      { attempts: 3 },
+    );
+    staleExhaustedJob.status = "PROCESSING";
+    staleExhaustedJob.attempts = 3;
+    staleExhaustedJob.updatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await invoiceQueue.updateJob(staleExhaustedJob);
+    await invoiceQueue.recoverStaleProcessingJobs(120000);
+    const inDlqAfterRecover = invoiceQueue.getDLQJobs().some((j) => j.id === staleExhaustedJob.id);
+    assert(
+      "Async Queue Engine",
+      "Stale PROCESSING Job At Max Retries Moves To DLQ",
+      "FailureRecovery",
+      inDlqAfterRecover,
+      "A stale PROCESSING job that already exhausted its retries moves to DLQ instead of being requeued indefinitely",
+      inDlqAfterRecover ? "Found in DLQ" : "Not found in DLQ",
+    );
   } catch (err: any) {
     assert(
       "Async Queue Engine",
@@ -834,7 +905,7 @@ async function runAllTests() {
   try {
     const workerPayload = invoiceIngestionSchema.parse({
       tenantId: "tenant_qbo",
-      clientInvoiceNumber: `INV-WORKER-${Date.now()}`,
+      clientInvoiceNumber: `INVWORKER${Date.now()}`,
       issueDate: "2026-07-29",
       dueDate: "2026-08-29",
       currency: "NGN",
