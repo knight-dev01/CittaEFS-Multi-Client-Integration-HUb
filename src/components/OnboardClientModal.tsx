@@ -9,6 +9,7 @@ import {
   Sparkles,
   Zap,
   FileSpreadsheet,
+  Layers,
   AlertCircle,
   RefreshCw,
   ArrowRight,
@@ -20,6 +21,7 @@ interface OnboardClientModalProps {
 }
 
 type QboConnectState = 'idle' | 'connecting' | 'connected' | 'syncing' | 'synced' | 'error';
+type OdooConnectState = 'idle' | 'connecting' | 'syncing' | 'synced' | 'error';
 
 interface QboOAuthResult {
   type: 'qbo-oauth-result';
@@ -60,7 +62,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
   // Step 1 fields
   const [companyName, setCompanyName] = useState('');
   const [tin, setTin] = useState('');
-  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Excel & CSV Import'>('QuickBooks Online');
+  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Excel & CSV Import' | 'Odoo ERP'>('QuickBooks Online');
   const [marketTier, setMarketTier] = useState('Enterprise');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({ companyName: false, tin: false });
@@ -75,6 +77,46 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
   const popupRef = useRef<Window | null>(null);
   const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qboSyncStartedRef = useRef(false);
+
+  // Step 2: Odoo ERP connect form + initial sync state
+  const [odooState, setOdooState] = useState<OdooConnectState>('idle');
+  const [odooError, setOdooError] = useState<string | null>(null);
+  const [odooSyncStats, setOdooSyncStats] = useState<{ totalFound: number; newSynced: number; alreadySynced: number } | null>(null);
+  const [odooForm, setOdooForm] = useState({ odooUrl: '', odooDatabase: '', odooUsername: '', odooApiKey: '' });
+
+  const handleConnectOdoo = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!tenant) return;
+    setOdooError(null);
+    setOdooState('connecting');
+    try {
+      const res = await fetchWithAuth('/api/integrations/odoo/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: tenant.id, ...odooForm })
+      });
+      const data = await parseJsonResponse(res);
+      if (!data.success) throw new Error(data.error || 'Failed to connect to Odoo.');
+
+      setOdooState('syncing');
+      const syncRes = await fetchWithAuth('/api/integrations/odoo/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: tenant.id })
+      });
+      const syncData = await parseJsonResponse(syncRes);
+      setOdooSyncStats({
+        totalFound: syncData.totalFound ?? 0,
+        newSynced: syncData.newSynced ?? 0,
+        alreadySynced: syncData.alreadySynced ?? 0
+      });
+      setOdooState('synced');
+      await refreshAll();
+    } catch (err: any) {
+      setOdooState('error');
+      setOdooError(err.message || 'Failed to connect to Odoo.');
+    }
+  };
 
   const clearPopupPoll = () => {
     if (popupPollRef.current) {
@@ -258,6 +300,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
   };
 
   const isQbo = platformType === 'QuickBooks Online';
+  const isOdoo = platformType === 'Odoo ERP';
   const nameError = touched.companyName ? validateCompanyName(companyName) : null;
   const tinError = touched.tin ? validateTin(tin) : null;
 
@@ -277,7 +320,9 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
                 ? 'Register a client organization and choose how their invoice data reaches CittaEFS.'
                 : isQbo
                   ? 'Authorize QuickBooks Online and pull the initial historical invoice sync.'
-                  : 'Upload a spreadsheet and normalize it against Master Data to complete onboarding.'}
+                  : isOdoo
+                    ? 'Enter Odoo instance credentials and pull the initial historical invoice sync.'
+                    : 'Upload a spreadsheet and normalize it against Master Data to complete onboarding.'}
             </p>
           </div>
           <button
@@ -296,7 +341,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
           <span className={step >= 1 ? 'text-indigo-600' : 'text-slate-400'}>Client & Channel</span>
           <div className="flex-1 h-px bg-slate-200" />
           <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
-          <span className={step >= 2 ? 'text-indigo-600' : 'text-slate-400'}>{isQbo ? 'Connect QuickBooks' : 'Upload & Normalize'}</span>
+          <span className={step >= 2 ? 'text-indigo-600' : 'text-slate-400'}>{isQbo ? 'Connect QuickBooks' : isOdoo ? 'Connect Odoo' : 'Upload & Normalize'}</span>
         </div>
 
         {step === 1 ? (
@@ -403,8 +448,8 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
             {/* Company first, then ERPs — selector lives in step 2 (not step 1) */}
             <div className="p-3 bg-white rounded-xl border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(['QuickBooks Online','Excel & CSV Import'] as const).map(opt => (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"
@@ -412,14 +457,21 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
                       if (opt === platformType) return;
                       setPlatformType(opt);
                       if (tenant?.id) {
+                        // Persist the chosen channel as the tenant's primary platformType —
+                        // without this, the workspace stays whatever Step 1 defaulted to
+                        // (QuickBooks Online) regardless of what's picked here.
+                        try {
+                          const updated = await updateTenant(tenant.id, { platformType: opt });
+                          setTenant(updated);
+                        } catch (e:any) { console.warn('updateTenant platformType:', e.message); }
                         try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
                         await refreshAll();
                       }
                     }}
                     className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                   >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : opt==='Odoo ERP' ? <Layers className="w-3.5 h-3.5 text-violet-600"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : opt==='Odoo ERP' ? 'API key + auto sync' : 'Spreadsheet upload + normalize'}</span>
                   </button>
                 ))}
               </div>
@@ -504,12 +556,22 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
               </button>
             </div>
           </div>
-        ) : (
+        ) : isOdoo ? (
           <div className="space-y-4">
+            <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-slate-500 font-medium text-[11px] block">Tenant ID</span>
+                <span className="font-mono font-bold text-slate-900">{tenant?.id}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 font-medium text-[11px] block">Client Entity</span>
+                <span className="font-bold text-slate-900">{tenant?.name}</span>
+              </div>
+            </div>
             <div className="p-3 bg-white rounded-xl border border-slate-200">
-              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(['QuickBooks Online','Excel & CSV Import'] as const).map(opt => (
+              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"
@@ -517,14 +579,132 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
                       if (opt === platformType) return;
                       setPlatformType(opt);
                       if (tenant?.id) {
+                        // Persist the chosen channel as the tenant's primary platformType —
+                        // without this, the workspace stays whatever Step 1 defaulted to
+                        // (QuickBooks Online) regardless of what's picked here.
+                        try {
+                          const updated = await updateTenant(tenant.id, { platformType: opt });
+                          setTenant(updated);
+                        } catch (e:any) { console.warn('updateTenant platformType:', e.message); }
                         try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
                         await refreshAll();
                       }
                     }}
                     className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                   >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : opt==='Odoo ERP' ? <Layers className="w-3.5 h-3.5 text-violet-600"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : opt==='Odoo ERP' ? 'API key + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">You can add more ERPs later in Admin → Companies & ERPs. Each ERP keeps isolated config & pull.</p>
+            </div>
+
+            {(odooState === 'idle' || odooState === 'error') && (
+              <form onSubmit={handleConnectOdoo} className="p-5 bg-white rounded-xl border border-slate-200/80 space-y-3">
+                <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                  <Layers className="w-5 h-5 text-violet-600" />
+                  <span>Connect Odoo Instance</span>
+                </div>
+                <p className="text-slate-500 text-[11px]">Generate an API key under Settings → Users → API Keys in the client's Odoo instance, then enter their details below.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block font-medium text-slate-700 mb-1">Odoo URL *</label>
+                    <input type="url" required value={odooForm.odooUrl} onChange={e => setOdooForm(f => ({ ...f, odooUrl: e.target.value }))} placeholder="https://client.odoo.com" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block font-medium text-slate-700 mb-1">Database *</label>
+                    <input type="text" required value={odooForm.odooDatabase} onChange={e => setOdooForm(f => ({ ...f, odooDatabase: e.target.value }))} placeholder="odoo_prod" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block font-medium text-slate-700 mb-1">Username / Email *</label>
+                    <input type="text" required value={odooForm.odooUsername} onChange={e => setOdooForm(f => ({ ...f, odooUsername: e.target.value }))} placeholder="integration@client.com" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block font-medium text-slate-700 mb-1">API Key *</label>
+                    <input type="password" required value={odooForm.odooApiKey} onChange={e => setOdooForm(f => ({ ...f, odooApiKey: e.target.value }))} placeholder="••••••••••••" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                  </div>
+                </div>
+                {odooState === 'error' && (
+                  <div className="p-3 bg-rose-50 text-rose-900 rounded-lg border border-rose-200 flex items-start gap-2 text-xs">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>{odooError}</span>
+                  </div>
+                )}
+                <button type="submit" className="w-full px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center justify-center gap-2 transition-colors">
+                  <Layers className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Connect & Sync Odoo</span>
+                </button>
+              </form>
+            )}
+
+            {(odooState === 'connecting' || odooState === 'syncing') && (
+              <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-200/80 text-center space-y-2">
+                <RefreshCw className="w-6 h-6 text-indigo-500 mx-auto animate-spin" />
+                <p className="text-slate-600 text-xs">{odooState === 'connecting' ? 'Authenticating with Odoo...' : 'Odoo connected. Pulling historical invoices, customers, and items...'}</p>
+              </div>
+            )}
+
+            {odooState === 'synced' && (
+              <div className="p-4 bg-emerald-50 text-emerald-900 rounded-xl border border-emerald-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <span>Odoo ERP Connected & Synced!</span>
+                </div>
+                <p className="text-xs">
+                  Found <strong>{odooSyncStats?.totalFound ?? 0}</strong> invoices &mdash;
+                  {' '}<strong>{odooSyncStats?.newSynced ?? 0}</strong> newly ingested,
+                  {' '}<strong>{odooSyncStats?.alreadySynced ?? 0}</strong> already on file.
+                </p>
+              </div>
+            )}
+
+            <div className="pt-3 flex justify-between items-center">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg cursor-pointer inline-flex items-center gap-1.5 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Previous</span>
+              </button>
+              <button
+                onClick={onClose}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
+              >
+                <CheckCircle2 className="w-4 h-4 text-indigo-200" />
+                <span>{odooState === 'synced' ? `Go to ${tenant?.name}` : 'Finish Later & Close'}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="p-3 bg-white rounded-xl border border-slate-200">
+              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={async () => {
+                      if (opt === platformType) return;
+                      setPlatformType(opt);
+                      if (tenant?.id) {
+                        // Persist the chosen channel as the tenant's primary platformType —
+                        // without this, the workspace stays whatever Step 1 defaulted to
+                        // (QuickBooks Online) regardless of what's picked here.
+                        try {
+                          const updated = await updateTenant(tenant.id, { platformType: opt });
+                          setTenant(updated);
+                        } catch (e:any) { console.warn('updateTenant platformType:', e.message); }
+                        try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
+                        await refreshAll();
+                      }
+                    }}
+                    className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : opt==='Odoo ERP' ? <Layers className="w-3.5 h-3.5 text-violet-600"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : opt==='Odoo ERP' ? 'API key + auto sync' : 'Spreadsheet upload + normalize'}</span>
                   </button>
                 ))}
               </div>

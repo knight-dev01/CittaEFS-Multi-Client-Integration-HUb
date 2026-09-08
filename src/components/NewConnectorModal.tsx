@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
-  X
+  X,
+  Layers
 } from 'lucide-react';
 import { Connector, TenantId } from '../types';
 
@@ -31,7 +32,7 @@ interface NewConnectorModalProps {
 }
 
 // ================================================
-// ACTIVE CONNECTORS: QuickBooks Online & Excel Only
+// ACTIVE CONNECTORS: QuickBooks Online, Odoo ERP & Excel
 // Other ERP adapters (SAP, NetSuite, SQL) are FROZEN
 // ================================================
 
@@ -44,6 +45,17 @@ const PLATFORM_OPTIONS = [
     defaultEndpoint: 'https://sandbox-quickbooks.api.intuit.com/v3/company/9130351112',
     icon: Globe,
     desc: 'Native OAuth2 flow with CDC webhooks for real-time invoice ingestion.',
+    badge: 'ACTIVE / LIVE',
+    isActive: true
+  },
+  {
+    id: 'Odoo ERP',
+    name: 'Odoo ERP',
+    protocol: 'JSON-RPC (execute_kw)',
+    authType: 'API Key (Static)',
+    defaultEndpoint: 'https://client.odoo.com/jsonrpc',
+    icon: Layers,
+    desc: 'Stateless JSON-RPC pull of posted account.move invoices, with chatter-based IRN/QR writeback.',
     badge: 'ACTIVE / LIVE',
     isActive: true
   },
@@ -95,7 +107,7 @@ export function NewConnectorModal({ isOpen, onClose, tenantId, tenantName, onAdd
 
   const handleSelectPlatform = (opt: typeof PLATFORM_OPTIONS[0]) => {
     if (!opt.isActive) {
-      alert(`ℹ️ ${opt.name} is currently marked COMING SOON in this MVP release.\n\nActive fully-supported connectors:\n1. QuickBooks Online\n2. Excel & CSV Import (.xlsx, .csv)\n3. CittaEFS Gateway (CSL)`);
+      alert(`ℹ️ ${opt.name} is currently marked COMING SOON in this MVP release.\n\nActive fully-supported connectors:\n1. QuickBooks Online\n2. Odoo ERP\n3. Excel & CSV Import (.xlsx, .csv)\n4. CittaEFS Gateway (CSL)`);
       return;
     }
     setSelectedPlatform(opt);
@@ -111,8 +123,9 @@ export function NewConnectorModal({ isOpen, onClose, tenantId, tenantName, onAdd
 
     try {
       const isQbo = selectedPlatform.id === 'QuickBooks Online';
-      const url = isQbo ? '/api/connectors/qbo/test-live' : '/api/connectors/test';
-      const body = isQbo
+      const isOdoo = selectedPlatform.id === 'Odoo ERP';
+      const url = isQbo ? '/api/connectors/qbo/test-live' : isOdoo ? '/api/connectors/odoo/test-live' : '/api/connectors/test';
+      const body = (isQbo || isOdoo)
         ? { tenantId, environment, endpointUrl }
         : { platform: selectedPlatform.name, config: { endpointUrl, authType: authScheme } };
 
@@ -173,13 +186,13 @@ export function NewConnectorModal({ isOpen, onClose, tenantId, tenantName, onAdd
           <div>
             <h3 className="font-bold text-white text-base flex items-center gap-2">
               <Plug className="w-5 h-5 text-indigo-400" />
-              <span>Add QuickBooks or Excel Connector</span>
+              <span>Add QuickBooks, Odoo, or Excel Connector</span>
               <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                QBO + EXCEL ACTIVE
+                QBO + ODOO + EXCEL ACTIVE
               </span>
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Active: QuickBooks Online (OAuth2) & Excel/CSV Upload • Other adapters (SAP, NetSuite, SQL) frozen • Workspace: <strong className="text-white font-medium">{tenantName}</strong>
+              Active: QuickBooks Online (OAuth2), Odoo ERP (JSON-RPC) & Excel/CSV Upload • Other adapters (SAP, NetSuite, SQL) frozen • Workspace: <strong className="text-white font-medium">{tenantName}</strong>
             </p>
           </div>
           <button 

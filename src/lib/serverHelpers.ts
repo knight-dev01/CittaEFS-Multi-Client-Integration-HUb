@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from './prisma';
+import { getCittaCodeType } from '../data/referenceData';
 
 export function generateSha256(data: string): string {
   return crypto.createHash('sha256').update(data, 'utf8').digest('hex');
@@ -54,7 +55,7 @@ export function formatInvoice(inv: any) {
     paymentStatus: inv.paymentStatus || 'PAID',
     createdAt: inv.createdAt ? new Date(inv.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: inv.updatedAt ? new Date(inv.updatedAt).toISOString() : new Date().toISOString(),
-    lineItems: (inv.lineItems || []).map((li:any)=>({ ...li, discountAmount: li.discountAmount ?? 0, codeType: li.hsOrServiceCode?.startsWith('SRV') ? 'SERVICE_CODE' : 'HS_CODE' })),
+    lineItems: (inv.lineItems || []).map((li:any)=>({ ...li, discountAmount: li.discountAmount ?? 0, codeType: getCittaCodeType(li.hsOrServiceCode) || 'HS_CODE' })),
   };
 }
 

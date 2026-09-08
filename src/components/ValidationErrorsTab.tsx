@@ -1,29 +1,116 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useHub } from '../lib/store';
 import { ValidationErrorItem } from '../types';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
-import { 
-  AlertTriangle, 
-  CheckCircle2, 
-  Wrench, 
-  FileCode, 
-  ArrowRight, 
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, searchCittaCodes } from '../data/referenceData';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Wrench,
+  FileCode,
+  ArrowRight,
   Building2,
   ListFilter,
   ChevronDown,
+  Search,
   X
 } from 'lucide-react';
+
+/**
+ * The raw gateway rejection is a large JSON blob (one entry per invoice line,
+ * each carrying the full echoed request). Extract a short, human-readable
+ * summary instead of dumping it verbatim — the full text is still available
+ * via the "Show raw response" toggle for anyone who needs it.
+ */
+function summarizeErrorMessage(msg: string): { summary: string; raw: string | null } {
+  const gatewayMatch = msg.match(/^CittaEFS Gateway error \((\d+)\):\s*(\{[\s\S]*)/);
+  if (gatewayMatch) {
+    try {
+      const parsed = JSON.parse(gatewayMatch[2]);
+      const rows: string[] = (parsed.errors || []).map((e: any) => {
+        const item = e.request?.itemName || e.request?.itemDescription || `row ${e.rowNumber ?? '?'}`;
+        const reason = e.error || 'Rejected by gateway';
+        const actual = e.actualValue !== undefined ? ` (got "${e.actualValue}")` : '';
+        return `${item}: ${reason}${actual}`;
+      });
+      const shown = rows.slice(0, 3);
+      const more = rows.length > 3 ? ` — +${rows.length - 3} more line(s)` : '';
+      const summary = shown.length
+        ? `Gateway rejected (HTTP ${gatewayMatch[1]}): ${shown.join(' · ')}${more}`
+        : `Gateway rejected the invoice (HTTP ${gatewayMatch[1]}).`;
+      return { summary, raw: msg };
+    } catch {
+      // Unparseable/truncated JSON — fall through to plain truncation below.
+    }
+  }
+  if (msg.length > 220) {
+    return { summary: msg.slice(0, 220) + '…', raw: msg };
+  }
+  return { summary: msg, raw: null };
+}
+
+/** Searchable code picker — a plain <select> is unusable across 6,000+ real HS/Service codes. */
+function CodePicker({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+  const [query, setQuery] = useState('');
+  const selected = useMemo(
+    () => [...CITTA_HS_CODES_REFERENCE, ...CITTA_SERVICE_CODES_REFERENCE].find(c => c.code === value),
+    [value]
+  );
+
+  const results = useMemo(() => {
+    if (query.trim().length < 2) return [];
+    return searchCittaCodes(query).slice(0, 50);
+  }, [query]);
+
+  return (
+    <div className="space-y-2">
+      {selected && (
+        <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs">
+          <span className="font-mono font-bold text-indigo-900">{selected.code} — {selected.name}</span>
+          <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-semibold">{selected.type === 'HS_CODE' ? 'HS' : 'Service'}</span>
+        </div>
+      )}
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Type a code or keyword (e.g. 8471 or laptop)…"
+          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+        />
+      </div>
+      {query.trim().length >= 2 && (
+        <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+          {results.length === 0 ? (
+            <div className="px-3 py-2 text-[11px] text-slate-400">No matching codes.</div>
+          ) : results.map(c => (
+            <button
+              key={c.code}
+              type="button"
+              onClick={() => { onChange(c.code); setQuery(''); }}
+              className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-slate-50 cursor-pointer flex items-center justify-between gap-2"
+            >
+              <span className="text-slate-800"><span className="font-mono font-bold">{c.code}</span> — {c.name}</span>
+              <span className="shrink-0 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">{c.type === 'HS_CODE' ? 'HS' : 'Svc'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) => void } = {}) {
   const { validationErrors, activeTenant, resolveValidationError, currentUser, refreshAll } = useHub() as any;
 
   const [selectedError, setSelectedError] = useState<ValidationErrorItem | null>(null);
-  const [selectedHsCode, setSelectedHsCode] = useState<string>('HS-3926.90');
+  const [selectedHsCode, setSelectedHsCode] = useState<string>('');
   const [correctedTin, setCorrectedTin] = useState<string>('P019283746Z');
   const [isResolving, setIsResolving] = useState(false);
   const [isBulkFixing, setIsBulkFixing] = useState(false);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
+  const [showRawError, setShowRawError] = useState(false);
 
   const tenantErrors = validationErrors.filter(e => e.tenantId === activeTenant.id);
   const openErrors = tenantErrors.filter(e => e.status === 'OPEN');
@@ -31,6 +118,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
 
   const handleResolve = async () => {
     if (!selectedError) return;
+    if (selectedError.errorCategory === 'MISSING_HS_CODE' && !selectedHsCode) return;
 
     setIsResolving(true);
     await resolveValidationError(
@@ -116,7 +204,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
                         <div className="flex items-center gap-3">
                           <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">{cat}</span>
                           <span className="text-xs font-bold text-slate-900">{list.length} error(s)</span>
-                          <span className="hidden sm:inline text-[11px] text-slate-500">— {list[0]?.fieldAffected} • {list[0]?.errorMessage.slice(0,60)}…</span>
+                          <span className="hidden sm:inline text-[11px] text-slate-500">— {list[0]?.fieldAffected} • {list[0] && summarizeErrorMessage(list[0].errorMessage).summary.slice(0,80)}</span>
                         </div>
                         <ChevronDown className={`w-4 h-4 text-slate-400 transition ${isOpen?'rotate-180':''}`} />
                       </button>
@@ -130,8 +218,8 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
                                   <td className="py-2.5 px-4"><span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-amber-50 text-amber-700 border-amber-200">{err.status}</span></td>
                                   <td className="py-2.5 px-4 font-mono font-bold">{err.clientInvoiceNumber}</td>
                                   <td className="py-2.5 px-4 font-mono text-[11px]">{err.fieldAffected}</td>
-                                  <td className="py-2.5 px-4 max-w-md text-slate-600 text-[11px] leading-relaxed whitespace-normal break-words" title={err.errorMessage}>{err.errorMessage}</td>
-                                  <td className="py-2.5 px-4 text-right"><button onClick={()=>{setSelectedError(err); if(err.errorCategory==='MISSING_HS_CODE') setSelectedHsCode('HS-3926.90');}} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1"><Wrench className="w-3 h-3" /> Fix</button></td>
+                                  <td className="py-2.5 px-4 max-w-md text-slate-600 text-[11px] leading-relaxed whitespace-normal break-words" title={err.errorMessage}>{summarizeErrorMessage(err.errorMessage).summary}</td>
+                                  <td className="py-2.5 px-4 text-right"><button onClick={()=>{setSelectedError(err); setSelectedHsCode(''); setShowRawError(false);}} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1"><Wrench className="w-3 h-3" /> Fix</button></td>
                                 </tr>
                               ))}
                             </tbody>
@@ -173,9 +261,30 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
               </button>
             </div>
 
-            <div className="bg-amber-50 rounded-xl border border-amber-200/80 p-3.5 text-xs text-amber-900 space-y-1">
+            <div className="bg-amber-50 rounded-xl border border-amber-200/80 p-3.5 text-xs text-amber-900 space-y-1.5">
               <p><strong>Affected Field:</strong> <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-300/80 font-bold text-amber-950">{selectedError.fieldAffected}</code></p>
-              <p className="text-amber-800"><strong>Error:</strong> {selectedError.errorMessage}</p>
+              {(() => {
+                const { summary, raw } = summarizeErrorMessage(selectedError.errorMessage);
+                return (
+                  <>
+                    <p className="text-amber-800"><strong>Error:</strong> {summary}</p>
+                    {raw && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowRawError(v => !v)}
+                          className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 underline cursor-pointer"
+                        >
+                          {showRawError ? 'Hide raw response' : 'Show raw response'}
+                        </button>
+                        {showRawError && (
+                          <pre className="max-h-40 overflow-y-auto bg-white border border-amber-200/80 rounded-lg p-2.5 text-[10px] text-slate-600 whitespace-pre-wrap break-words font-mono">{raw}</pre>
+                        )}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {selectedError.errorCategory === 'MISSING_HS_CODE' && (
@@ -183,26 +292,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
                 <label className="block font-medium text-slate-700">
                   Select Official CittaEFS Code Mapping:
                 </label>
-                <select
-                  value={selectedHsCode}
-                  onChange={(e) => setSelectedHsCode(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
-                >
-                  <optgroup label="Physical Goods (HS Codes)">
-                    {CITTA_HS_CODES_REFERENCE.map(c => (
-                      <option key={c.code} value={c.code}>
-                        {c.code} - {c.name} ({c.defaultVat}% VAT)
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Services (Service Codes)">
-                    {CITTA_SERVICE_CODES_REFERENCE.map(s => (
-                      <option key={s.code} value={s.code}>
-                        {s.code} - {s.name} ({s.defaultVat}% VAT)
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                <CodePicker value={selectedHsCode} onChange={setSelectedHsCode} />
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Resolving will automatically register this code in the Item Dictionary and re-transmit invoice {selectedError.clientInvoiceNumber} to CittaEFS.
                 </p>
@@ -236,7 +326,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
               </button>
               <button
                 onClick={handleResolve}
-                disabled={isResolving}
+                disabled={isResolving || (selectedError.errorCategory === 'MISSING_HS_CODE' && !selectedHsCode)}
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-1.5 transition-colors disabled:opacity-50 font-sans"
               >
                 <span>{isResolving ? 'Fixing…' : 'Fix'}</span>

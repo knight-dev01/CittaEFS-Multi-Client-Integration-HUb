@@ -186,7 +186,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
           unitPrice: li.unitPrice,
           hsOrServiceCode: li.hsOrServiceCode,
           vatRate: li.vatRate,
-        })) : [{ itemCode: 'SKU-001', description: 'Item', quantity: 1, unitPrice: inv.grandTotal || 5000, hsOrServiceCode: 'HS-8471.30', vatRate: 7.5 }]
+        })) : [{ itemCode: 'SKU-001', description: 'Item', quantity: 1, unitPrice: inv.grandTotal || 5000, hsOrServiceCode: 'UNMAPPED', vatRate: 7.5 }]
       }));
       const res = await bulkTransmitInvoices(payloads);
       const detail = res.results?.filter((r:any)=>!r.success).map((r:any)=> `${r.clientInvoiceNumber}: ${r.errors?.join(', ')}`).join(' | ');
@@ -733,7 +733,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-slate-600">Line Items ({editingInvoice.lineItems?.length || 0}) — pulled from hub: pick SKU from Items dictionary</span>
-                  <button onClick={()=>{ setEditError(null); const newLine={ itemCode: tenantItems[0]?.clientSku || `SKU-${Date.now().toString().slice(-4)}`, description: tenantItems[0]?.name || 'New line', quantity:1, unitPrice:1000, hsOrServiceCode: tenantItems[0]?.hsOrServiceCode || 'SRV-7212.10', vatRate: tenantItems[0]?.defaultVatRate ?? 7.5 }; setEditingInvoice({...editingInvoice, lineItems:[...(editingInvoice.lineItems||[]), newLine]}); }} className="px-2 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1"><Plus className="w-3 h-3" /> Add line (from hub)</button>
+                  <button onClick={()=>{ setEditError(null); const newLine={ itemCode: tenantItems[0]?.clientSku || `SKU-${Date.now().toString().slice(-4)}`, description: tenantItems[0]?.name || 'New line', quantity:1, unitPrice:1000, hsOrServiceCode: tenantItems[0]?.hsOrServiceCode || 'UNMAPPED', vatRate: tenantItems[0]?.defaultVatRate ?? 7.5 }; setEditingInvoice({...editingInvoice, lineItems:[...(editingInvoice.lineItems||[]), newLine]}); }} className="px-2 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1"><Plus className="w-3 h-3" /> Add line (from hub)</button>
                 </div>
                 <div className="mt-2 space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-xl p-2 bg-slate-50/50">
                   {(editingInvoice.lineItems || []).map((li:any, idx:number)=>(

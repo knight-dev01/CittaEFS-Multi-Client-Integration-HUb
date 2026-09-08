@@ -415,9 +415,12 @@ router.get("/api/connectors/status", async (req: any, res) => {
   try {
     const tenantId = (req.query.tenantId as string) || req.user?.tenantId || "tenant_qbo_smb";
 
-    const [integration, totalInvoices, lastInvoice, totalStamped, totalPending, totalRejected] = await Promise.all([
+    const [integration, odooIntegration, totalInvoices, lastInvoice, totalStamped, totalPending, totalRejected] = await Promise.all([
       prisma.integration.findUnique({
         where: { tenantId_sourceSystem: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } },
+      }),
+      prisma.integration.findUnique({
+        where: { tenantId_sourceSystem: { tenantId, sourceSystem: "ODOO" } },
       }),
       prisma.invoice.count({ where: { tenantId } }),
       prisma.invoice.findFirst({ where: { tenantId }, orderBy: { createdAt: "desc" } }),
@@ -432,6 +435,12 @@ router.get("/api/connectors/status", async (req: any, res) => {
         status: integration?.status || "NOT_CONNECTED",
         companyId: integration?.companyId || null,
         lastSyncAt: integration?.lastSyncAt ? integration.lastSyncAt.toISOString() : null,
+      },
+      odoo: {
+        connected: odooIntegration?.status === "CONNECTED",
+        status: odooIntegration?.status || "NOT_CONNECTED",
+        database: odooIntegration?.companyId || null,
+        lastSyncAt: odooIntegration?.lastSyncAt ? odooIntegration.lastSyncAt.toISOString() : null,
       },
       excelCsv: {
         totalInvoices,

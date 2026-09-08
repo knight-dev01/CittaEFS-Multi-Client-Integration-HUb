@@ -456,7 +456,13 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
-        toastGlobal('success', 'Items auto-mapped', `${data?.mapped ?? data?.count ?? ''} items mapped`);
+        const stillUnmapped = data?.stillUnmappedCount ?? 0;
+        toastGlobal(
+          'success',
+          'Items auto-mapped',
+          `${data?.mappedCount ?? data?.mapped ?? data?.count ?? ''} items mapped` +
+            (stillUnmapped ? ` — ${stillUnmapped} need a manual code (no confident match)` : '')
+        );
         return data;
       } catch (e: any) {
         console.error('Auto map error:', e);
@@ -639,7 +645,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
         toastGlobal('success', 'ERP connector added', platformType);
         return data;
       } catch (e: any) {
-        toastGlobal('error', 'Failed to add ERP', e.message || String(e));
+        // Callers deliberately swallow "already connected" as a benign no-op
+        // (e.g. re-clicking a channel already added) — don't alarm the user for it.
+        const isAlreadyConnected = String(e.message || '').toLowerCase().includes('already');
+        if (!isAlreadyConnected) {
+          toastGlobal('error', 'Failed to add ERP', e.message || String(e));
+        }
         throw e;
       }
     });

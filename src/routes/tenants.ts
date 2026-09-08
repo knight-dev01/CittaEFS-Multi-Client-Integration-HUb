@@ -14,6 +14,7 @@ import { packEncryptedString } from "../config/encryption";
 import { getErpForTenant } from "../config/erpRegistry";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { invoiceQueue } from "../queues/invoiceQueue";
+import { getCittaCodeType } from "../data/referenceData";
 
 const router = Router();
 
@@ -254,7 +255,7 @@ router.post("/api/tenants/:id/qbo-staging/approve", async (req: any, res) => {
           invoiceType: inv.invoiceType as any, invoiceKind: inv.invoiceKind as any,
           issueDate: inv.issueDate.toISOString().substring(0,10),
           customerCode: inv.customerCode, customerName: inv.customerName, customerTin: inv.customerTin || undefined,
-          lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+          lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE", vatRate: li.vatRate })),
         });
         await invoiceQueue.add("signInvoice", { ...v, dbInvoiceId: inv.id }, { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}` });
         queued++;

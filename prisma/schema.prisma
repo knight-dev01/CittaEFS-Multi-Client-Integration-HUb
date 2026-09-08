@@ -115,6 +115,7 @@ model Invoice {
   tenantId              String    @map("tenant_id")
   sourceErp             String?   @map("source_erp") // e.g. qbo, excel, sap — which ERP this invoice was pulled from (multi-ERP)
   qboInvoiceId          String?   @map("qbo_invoice_id") // immutable QBO Id when sourceErp=qbo; business key remains clientInvoiceId=DocNumber
+  odooInvoiceId         String?   @map("odoo_invoice_id") // immutable Odoo account.move id when sourceErp=odoo; business key remains clientInvoiceId=name
   clientInvoiceId       String    @map("client_invoice_id")
   documentNumber        String?   @map("document_number")
   invoiceType           String    @default("STANDARD") @map("invoice_type")

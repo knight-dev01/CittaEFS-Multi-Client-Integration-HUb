@@ -49,6 +49,10 @@ export function getRowErrors(row: RowLike): string[] {
 
 export function normalizeHsCode(sku: string, existingHs?: string): string {
   if (existingHs && existingHs !== 'UNMAPPED' && existingHs !== 'SERV-DEFAULT' && existingHs.trim()) return existingHs.trim();
+  // Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix. Without a
+  // description to keyword-match against, only the explicit "SRV" SKU prefix
+  // signal is confident enough to auto-classify; everything else needs a real
+  // mapping (Item Dictionary) rather than a guessed-but-likely-wrong code.
   const isService = (sku || '').toUpperCase().startsWith('SRV');
-  return isService ? 'SRV-7212.10' : 'HS-8471.30';
+  return isService ? '6209' : 'UNMAPPED'; // 6209 = Other information technology and computer service activities
 }

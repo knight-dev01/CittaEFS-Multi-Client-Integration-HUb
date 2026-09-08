@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDatabaseUrl } from '../config/dbConfig';
 import { invoiceQueue, QueueJob, QueueablePayload } from '../queues/invoiceQueue';
 import { cittaEfsClient, CittaEfsResponse } from '../services/cittaEfsClient';
+import { isValidCittaCode } from '../data/referenceData';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
@@ -33,21 +34,24 @@ export async function processInvoiceJob(
       const items = await prisma.item.findMany({ where: { tenantId: job.data.tenantId } });
       const inferServiceCode = (sku: string, desc: string) => {
         const text = `${sku} ${desc}`.toLowerCase();
-        if (/gardening|sod|rocks|fountain|pump|sprinkler|design|service|labor|labour|installation|maintenance|repair/.test(text)) return "SRV-7212.10";
-        return (sku || "").toUpperCase().startsWith("SRV") ? "SRV-7212.10" : "HS-8471.30";
+        // Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix. Only the
+        // few keyword matches we can be confident about get auto-classified.
+        if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+        if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
+        if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
+        return "UNMAPPED";
       };
-      const validSet = new Set(["HS-8471.30","HS-8517.62","HS-7304.11","HS-3926.90","HS-4819.10","HS-1006.30","HS-3004.90","SRV-7212.10","SRV-7414.00","SRV-8703.20","SRV-6202.90","SRV-8010.15"]);
       for (const li of (job.data.lineItems as any[])) {
         const mapping = items.find(m => m.clientSku === li.itemCode);
-        if (mapping && validSet.has(mapping.hsOrServiceCode)) {
+        if (mapping && isValidCittaCode(mapping.hsOrServiceCode)) {
           li.hsOrServiceCode = mapping.hsOrServiceCode;
-        } else if (!validSet.has(li.hsOrServiceCode) || li.hsOrServiceCode === "HS-8471.30") {
+        } else if (!isValidCittaCode(li.hsOrServiceCode)) {
           const inferred = inferServiceCode(li.itemCode || "", li.description || "");
-          if (validSet.has(inferred)) li.hsOrServiceCode = inferred;
+          if (isValidCittaCode(inferred)) li.hsOrServiceCode = inferred;
         }
       }
       // Strict check — if still invalid, don't retry 5x, go straight to DLQ as validation (Option A)
-      const stillInvalid = (job.data.lineItems as any[]).find(li => !validSet.has(li.hsOrServiceCode) || li.hsOrServiceCode === "HS-8471.30" && /gardening|design|fountain|pump|sod|rocks|sprinkler/i.test(`${li.itemCode} ${li.description}`));
+      const stillInvalid = (job.data.lineItems as any[]).find(li => !isValidCittaCode(li.hsOrServiceCode));
       if (stillInvalid) {
         throw new Error(`Invalid Product Code - must be valid HS Code or Service Code (found ${stillInvalid.hsOrServiceCode} for ${stillInvalid.itemCode})`);
       }
@@ -122,7 +126,7 @@ export async function processInvoiceJob(
             clientInvoiceNumber: job.data.clientInvoiceNumber,
             errorCategory: 'MISSING_HS_CODE',
             fieldAffected: 'hsOrServiceCode',
-            errorMessage: errorMsg.slice(0,800),
+            errorMessage: errorMsg.slice(0,4000),
             rawPayloadSample: JSON.stringify(job.data).slice(0,2000),
             status: 'OPEN',
           }
@@ -141,7 +145,7 @@ export async function processInvoiceJob(
             clientInvoiceNumber: job.data.clientInvoiceNumber,
             errorCategory: 'GATEWAY_NOT_CONFIGURED',
             fieldAffected: 'cittaApiKey',
-            errorMessage: `Gateway key not configured: ${errorMsg.slice(0,800)} — set CITTAEFS_API_KEY env var`,
+            errorMessage: `Gateway key not configured: ${errorMsg.slice(0,4000)} — set CITTAEFS_API_KEY env var`,
             rawPayloadSample: JSON.stringify(job.data).slice(0,2000),
             status: 'OPEN',
           }
@@ -165,7 +169,7 @@ export async function processInvoiceJob(
             clientInvoiceNumber: job.data.clientInvoiceNumber,
             errorCategory: errorMsg.includes('Gateway') || errorMsg.includes('CittaEFS') ? 'GATEWAY_REJECTED' : 'TRANSMIT_FAILED',
             fieldAffected: 'gateway',
-            errorMessage: `CittaEFS gateway rejected after ${job.maxRetries} retries: ${errorMsg.slice(0, 800)}`,
+            errorMessage: `CittaEFS gateway rejected after ${job.maxRetries} retries: ${errorMsg.slice(0, 4000)}`,
             rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
             status: 'OPEN',
           }

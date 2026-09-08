@@ -18,7 +18,7 @@ export function FieldMappingTab() {
 
   const [clientField, setClientField] = useState('LineItem.ProductSKU');
   const [transformation, setTransformation] = useState('MAP_TO_HS_CODE');
-  const [nrsTargetCode, setNrsTargetCode] = useState('HS-8471.30.00');
+  const [nrsTargetCode, setNrsTargetCode] = useState('8471.30');
   const [defaultVatRate, setDefaultVatRate] = useState(16);
   const [isSaved, setIsSaved] = useState(false);
 
@@ -136,7 +136,7 @@ export function FieldMappingTab() {
               value={nrsTargetCode}
               onChange={(e) => setNrsTargetCode(e.target.value)}
               className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              placeholder="e.g. HS-8471.30.00"
+              placeholder="e.g. 8471.30"
             />
           </div>
 

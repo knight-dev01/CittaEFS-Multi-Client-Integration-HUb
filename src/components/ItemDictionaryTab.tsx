@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useHub } from '../lib/store';
 import { ItemCodeMapping } from '../types';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, getCittaCodeType } from '../data/referenceData';
 import { 
   BookOpen, 
   Search, 
@@ -32,7 +32,7 @@ export function ItemDictionaryTab() {
   const [desc, setDesc] = useState('');
   const [unitCode, setUnitCode] = useState('EA');
   const [category, setCategory] = useState('General Merchandise');
-  const [selectedCode, setSelectedCode] = useState('HS-8471.30');
+  const [selectedCode, setSelectedCode] = useState('');
   const [vatRate, setVatRate] = useState(activeTenant?.defaultVatRate ?? 7.5);
 
   const tenantMappings = itemMappings.filter(m => m.tenantId === activeTenant.id);
@@ -50,9 +50,9 @@ export function ItemDictionaryTab() {
   const unmappedCount = tenantMappings.filter(m => m.status === 'UNMAPPED').length;
 
   const handleSaveMapping = async () => {
-    if (!sku) return;
+    if (!sku || !selectedCode) return;
 
-    const isService = selectedCode.startsWith('SRV');
+    const isService = getCittaCodeType(selectedCode) === 'SERVICE_CODE';
     const refList = isService ? CITTA_SERVICE_CODES_REFERENCE : CITTA_HS_CODES_REFERENCE;
     const refObj = refList.find(r => r.code === selectedCode);
 
