@@ -25,7 +25,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
       quantity: 1,
       unitPrice: 120000,
       vatRate: 16,
-      hsOrServiceCode: 'HS-8471.30'
+      hsOrServiceCode: '8471.30'
     }
   ]);
 
@@ -61,7 +61,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
         quantity: 1,
         unitPrice: 45000,
         vatRate: 16,
-        hsOrServiceCode: 'SRV-7212.10'
+        hsOrServiceCode: '6209'
       }
     ]);
   };

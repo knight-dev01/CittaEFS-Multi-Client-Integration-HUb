@@ -618,6 +618,45 @@ export class CittaEfsClient {
       );
     }
 
+    // Odoo ERP ledger writeback (chatter message_post) when target is HUB or BOTH
+    try {
+      const odooIntegration = await prisma.integration.findUnique({
+        where: {
+          tenantId_sourceSystem: {
+            tenantId,
+            sourceSystem: "ODOO",
+          },
+        },
+      });
+
+      if (odooIntegration) {
+        const invoice = await prisma.invoice.findFirst({
+          where: {
+            tenantId,
+            OR: [
+              { clientInvoiceId: clientInvoiceNumber },
+              { id: clientInvoiceNumber },
+            ],
+          },
+        });
+        const targetInvoiceId = invoice
+          ? invoice.clientInvoiceId
+          : clientInvoiceNumber;
+
+        const { writebackToOdoo } = await import("./odooService");
+        await writebackToOdoo(tenantId, targetInvoiceId, irn, qrCodeUrl);
+        return {
+          synced: true,
+          message: `Odoo ERP ledger updated for invoice ${targetInvoiceId} with IRN: ${irn} (writebackTarget=${writebackTarget})`,
+        };
+      }
+    } catch (err: any) {
+      console.error(
+        `[Writeback Error] Failed to execute Odoo writeback for invoice ${clientInvoiceNumber}:`,
+        err,
+      );
+    }
+
     return {
       synced: true,
       message: `Client ledger (${tenantId}) invoice ${clientInvoiceNumber} successfully updated with IRN: ${irn} and QR URL.`,

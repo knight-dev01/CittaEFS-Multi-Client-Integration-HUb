@@ -1,6 +1,6 @@
 // ================================================
-// ACTIVE CONNECTORS: QuickBooks Online & Excel Only
-// Other ERP adapters (SAP, NetSuite, SQL) are FROZEN for future release
+// ACTIVE CONNECTORS: QuickBooks Online, Excel & Odoo ERP
+// Other ERP adapters (SAP, NetSuite, Custom SQL) are FROZEN for future release
 // ================================================
 
 // Pluggable Adapter Pattern for Multi-Tenant ERP/Accounting Connectors
@@ -52,6 +52,8 @@ export interface IngestedPayload {
   }>;
   // QBO preserve
   qboInvoiceId?: string;
+  // Odoo preserve
+  odooInvoiceId?: string;
 }
 
 export interface ValidationResult {
@@ -108,8 +110,19 @@ export class QuickBooksAdapter implements ConnectorAdapter {
     const docNumber = rawPayload.DocNumber || rawPayload.clientInvoiceNumber || `QBO-${rawPayload.Id || Date.now()}`;
     const inferServiceCode = (sku: string, desc: string) => {
       const text = `${sku} ${desc}`.toLowerCase();
-      if (/gardening|sod|rocks|fountain|pump|sprinkler|design|service|labor|labour|installation|maintenance|repair/.test(text)) return "SRV-7212.10";
-      return (sku || "").toUpperCase().startsWith("SRV") ? "SRV-7212.10" : "HS-8471.30";
+      // Real CittaEFS/NRS codes (from CITTA_HS_CODES_REFERENCE / CITTA_SERVICE_CODES_REFERENCE)
+      // — bare numeric, no "HS-"/"SRV-" prefix. Only the few keyword matches we can
+      // be confident about get auto-classified; everything else is UNMAPPED.
+      if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+      if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
+      if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
+      // No confident keyword match — flag UNMAPPED rather than guessing a real-but-
+      // wrong code (e.g. an office chair or mouse pad classified as a laptop).
+      // A syntactically valid but semantically wrong code passes our own local
+      // validSet check yet gets rejected downstream by the compliance gateway as
+      // an "Invalid Product Code" mismatch — UNMAPPED instead fails locally with
+      // a clear message and routes to the Item Dictionary for a real mapping.
+      return "UNMAPPED";
     };
     return {
       clientInvoiceNumber: docNumber,
@@ -136,7 +149,7 @@ export class QuickBooksAdapter implements ConnectorAdapter {
           description: desc,
           quantity: l.SalesItemLineDetail?.Qty ?? l.quantity ?? 1,
           unitPrice: l.SalesItemLineDetail?.UnitPrice ?? l.unitPrice ?? 100,
-          hsOrServiceCode: l.hsOrServiceCode && l.hsOrServiceCode !== 'SERV-DEFAULT' && l.hsOrServiceCode !== 'HS-8471.30' ? l.hsOrServiceCode : inferServiceCode(sku, desc),
+          hsOrServiceCode: l.hsOrServiceCode && l.hsOrServiceCode !== 'SERV-DEFAULT' && l.hsOrServiceCode !== 'UNMAPPED' ? l.hsOrServiceCode : inferServiceCode(sku, desc),
           vatRate: l.vatRate,
           lineNum: (l as any).lineNum,
           unitCode: (l as any).unitCode || 'EA',
@@ -158,6 +171,123 @@ export class QuickBooksAdapter implements ConnectorAdapter {
 }
 
 
+
+/**
+ * Odoo ERP JSON-RPC Adapter (API key, stateless per-call auth via execute_kw).
+ * Unlike QuickBooks, Odoo has no OAuth handshake and does not nest line items or
+ * partner tax IDs on the account.move record itself — odooService.ts batches
+ * those in separately (account.move.line, res.partner) and composes the raw
+ * payload this adapter expects: {...move, _lines: [...], _partnerVat}.
+ */
+export class OdooAdapter implements ConnectorAdapter {
+  connectorType = 'REST_API';
+  platformName = 'Odoo ERP';
+
+  async authenticate(config: ConnectorConfig) {
+    // Real JSON-RPC common.authenticate call lives in odooService.authenticateOdoo();
+    // this lightweight check is for the test-connection engine only.
+    return { authenticated: true, tokenOrSession: `odoo_uid_${Date.now()}` };
+  }
+
+  async fetchData(config: ConnectorConfig) {
+    // Real historical/incremental pull lives in odooService.fetchAllOdooInvoicesPaginated()
+    // / fetchOdooInvoicesSince(), mirroring QuickBooksAdapter.fetchData()'s no-op stub.
+    return [];
+  }
+
+  validate(rawPayload: any): ValidationResult {
+    const errors: string[] = [];
+    if (!rawPayload.name && !rawPayload.clientInvoiceNumber) {
+      errors.push('Missing Odoo invoice name (account.move.name)');
+    }
+    if (!rawPayload.partner_id && !rawPayload.customerName) {
+      errors.push('Missing partner_id (customer reference)');
+    }
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings: []
+    };
+  }
+
+  transform(rawPayload: any): IngestedPayload {
+    const inferServiceCode = (sku: string, desc: string) => {
+      const text = `${sku} ${desc}`.toLowerCase();
+      // Real CittaEFS/NRS codes (from CITTA_HS_CODES_REFERENCE / CITTA_SERVICE_CODES_REFERENCE)
+      // — bare numeric, no "HS-"/"SRV-" prefix. Only the few keyword matches we can
+      // be confident about get auto-classified; everything else is UNMAPPED.
+      if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+      if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
+      if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
+      // No confident keyword match — flag UNMAPPED rather than guessing a real-but-
+      // wrong code (e.g. an office chair or mouse pad classified as a laptop).
+      // A syntactically valid but semantically wrong code passes our own local
+      // validSet check yet gets rejected downstream by the compliance gateway as
+      // an "Invalid Product Code" mismatch — UNMAPPED instead fails locally with
+      // a clear message and routes to the Item Dictionary for a real mapping.
+      return "UNMAPPED";
+    };
+    // Odoo's product_id is a many2one, returned as [id, display_name] (or false
+    // when unset). display_name is conventionally "[REF] Name" when the product
+    // has an internal reference (default_code) set — parse it out rather than
+    // issuing a separate product.read round-trip per line.
+    const parseProduct = (productField: [number, string] | false): { sku: string; name: string } => {
+      const text = (Array.isArray(productField) ? productField[1] : '').trim();
+      const match = text.match(/^\[(.+?)\]\s*(.+)$/);
+      if (match) return { sku: match[1], name: match[2] };
+      return { sku: text || 'ODOO-GENERIC', name: text || 'Odoo Invoice Line' };
+    };
+
+    const partnerId = Array.isArray(rawPayload.partner_id) ? rawPayload.partner_id[0] : undefined;
+    const partnerName = Array.isArray(rawPayload.partner_id) ? rawPayload.partner_id[1] : (rawPayload.customerName || 'Odoo Customer');
+    const currencyCode = Array.isArray(rawPayload.currency_id) ? rawPayload.currency_id[1] : undefined;
+
+    return {
+      clientInvoiceNumber: rawPayload.name || rawPayload.clientInvoiceNumber || `ODOO-${rawPayload.id || Date.now()}`,
+      documentNumber: rawPayload.name,
+      odooInvoiceId: String(rawPayload.id ?? ''),
+      issueDate: rawPayload.invoice_date || new Date().toISOString().substring(0, 10),
+      customerName: partnerName,
+      customerCode: partnerId !== undefined ? `CUST${partnerId}` : 'CUST-ODOO',
+      customerTin: rawPayload._partnerVat || rawPayload.customerTin || '',
+      invoiceKind: rawPayload._partnerVat ? 'B2B' : 'B2C',
+      invoiceType: rawPayload.move_type === 'out_refund' ? 'CREDIT_NOTE' : 'STANDARD',
+      currency: currencyCode || 'NGN',
+      headerCharges: 0,
+      headerDiscount: 0,
+      lineItems: (rawPayload._lines || rawPayload.lineItems || []).map((l: any) => {
+        const { sku, name } = parseProduct(l.product_id);
+        const description = l.name || name;
+        const priceSubtotal = Number(l.price_subtotal ?? 0);
+        const priceTotal = Number(l.price_total ?? priceSubtotal);
+        const vatAmount = priceTotal - priceSubtotal;
+        const vatRate = priceSubtotal > 0 ? (vatAmount / priceSubtotal) * 100 : 0;
+        return {
+          clientSku: sku,
+          description,
+          quantity: Number(l.quantity ?? 1),
+          unitPrice: Number(l.price_unit ?? priceSubtotal),
+          hsOrServiceCode: inferServiceCode(sku, description),
+          vatRate,
+          taxableAmount: priceSubtotal,
+          vatAmount,
+        };
+      })
+    } as any;
+  }
+
+  async submitToGateway(payload: IngestedPayload) {
+    // Odoo is a data source, not a delivery network — nothing to submit outward.
+    return { success: true, trackingId: `track_odoo_${Date.now()}` };
+  }
+
+  async receiveWebhook(headers: Record<string, string>, body: any) {
+    // Odoo has no universal outbound webhook (only via client-configured Studio
+    // Automation Rules, not guaranteed available) — MVP is polling-only via
+    // odooService.fetchOdooInvoicesSince(), so this stub is unused.
+    return { handled: false };
+  }
+}
 
 /**
  * CSV / Excel Direct File Stream Adapter
@@ -227,5 +357,6 @@ export class CsvAdapter implements ConnectorAdapter {
 export const CONNECTOR_ADAPTERS: Record<string, ConnectorAdapter> = {
   'QuickBooks Online': new QuickBooksAdapter(),
   'Excel & CSV Import': new CsvAdapter(),
+  'Odoo ERP': new OdooAdapter(),
 };
  

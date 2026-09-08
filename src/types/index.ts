@@ -18,7 +18,7 @@ export interface Tenant {
   name: string;
   companyName: string;
   tin: string;
-  platformType: 'QuickBooks Online' | 'SAP S/4HANA' | 'Microsoft Dynamics 365' | 'Xero' | string;
+  platformType: 'QuickBooks Online' | 'Odoo ERP' | 'SAP S/4HANA' | 'Microsoft Dynamics 365' | 'Xero' | string;
   region?: string;
   marketTier: 'Tier 1 (SMB)' | 'Tier 2 (Mid-Market)' | 'Tier 3 (Enterprise)' | string;
   cittaApiKey?: string;
@@ -58,6 +58,7 @@ export interface Invoice {
   id: string;
   tenantId: TenantId;
   sourceErp?: string | null; // which ERP this invoice originated from (multi-ERP per tenant)
+  odooInvoiceId?: string; // immutable Odoo account.move id when sourceErp=odoo
   clientInvoiceNumber: string;
   documentNumber?: string; // spec: distinct, optional sequential document reference
   invoiceType: InvoiceType;

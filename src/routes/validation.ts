@@ -4,6 +4,7 @@ import {
   getScopedTenantWhere,
   parsePagination,
 } from "../lib/serverHelpers";
+import { getCittaCodeType, isValidCittaCode } from "../data/referenceData";
 
 const router = Router();
 
@@ -48,7 +49,7 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
       if (hsOrServiceCode && errRecord.errorCategory === "MISSING_HS_CODE") {
         const cleanHs = String(hsOrServiceCode).trim();
         if (!cleanHs) throw new Error("hsOrServiceCode required");
-        const isService = cleanHs.startsWith("SRV");
+        const isService = getCittaCodeType(cleanHs) === "SERVICE_CODE";
         // Find invoice(s) to patch — primary by tenant+number, then any tenant with same number, then UNMAPPED search
         let primary = await prisma.invoice.findFirst({ where: { tenantId: errRecord.tenantId, clientInvoiceId: errRecord.clientInvoiceNumber }, include: { lineItems: true } });
         if (!primary) primary = await prisma.invoice.findFirst({ where: { clientInvoiceId: errRecord.clientInvoiceNumber }, include: { lineItems: true } });
@@ -58,7 +59,7 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
 
         if (invoicesToPatch.length) {
           for (const inv of invoicesToPatch) {
-            const targets = inv.lineItems.filter((li:any) => !li.hsOrServiceCode || li.hsOrServiceCode === "UNMAPPED" || li.hsOrServiceCode === "SERV-DEFAULT" || li.hsOrServiceCode === "HS-8471.30" || errRecord.fieldAffected.includes(li.itemCode) || errRecord.fieldAffected === "lineItems" || errRecord.fieldAffected === "hsOrServiceCode");
+            const targets = inv.lineItems.filter((li:any) => !isValidCittaCode(li.hsOrServiceCode) || errRecord.fieldAffected.includes(li.itemCode) || errRecord.fieldAffected === "lineItems" || errRecord.fieldAffected === "hsOrServiceCode");
             const toUpdate = targets.length ? targets : inv.lineItems.filter((li:any) => li.hsOrServiceCode === "UNMAPPED");
             const list = toUpdate.length ? toUpdate : inv.lineItems.slice(0,1);
             for (const li of list) {

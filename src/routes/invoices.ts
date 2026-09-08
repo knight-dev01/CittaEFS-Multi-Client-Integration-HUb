@@ -11,6 +11,7 @@ import {
 } from "../lib/serverHelpers";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { invoiceQueue } from "../queues/invoiceQueue";
+import { getCittaCodeType } from "../data/referenceData";
 
 const router = Router();
 
@@ -211,7 +212,7 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
                   invoiceType: duplicate.invoiceType as any, invoiceKind: duplicate.invoiceKind as any,
                   issueDate: duplicate.issueDate.toISOString().substring(0,10),
                   customerCode: duplicate.customerCode, customerName: duplicate.customerName, customerTin: duplicate.customerTin || undefined,
-                  lineItems: duplicate.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                  lineItems: duplicate.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
                 });
                 await invoiceQueue.add("signInvoice", { ...v, dbInvoiceId: duplicate.id }, { idempotencyKey: `${tenant.id}:${duplicate.clientInvoiceId}:retry` });
                 return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `Invoice "${clientInvoiceNumber}" was stuck in Hub (status ${duplicate.status}) — re-queued to CittaEFS`, cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true, requeued: true } });
@@ -417,9 +418,7 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
         unitPrice: li.unitPrice,
         discountAmount: (li as any).discountAmount ?? 0,
         hsOrServiceCode: li.hsOrServiceCode,
-        codeType: li.hsOrServiceCode?.startsWith("HS")
-          ? "HS_CODE"
-          : "SERVICE_CODE",
+        codeType: getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE",
         vatRate: li.vatRate,
         lineNum: (li as any).lineNum,
         unitCode: (li as any).unitCode,
@@ -475,7 +474,7 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
                 invoiceType: found.invoiceType as any, invoiceKind: found.invoiceKind as any,
                 issueDate: found.issueDate.toISOString().substring(0,10),
                 customerCode: found.customerCode, customerName: found.customerName, customerTin: found.customerTin || undefined,
-                lineItems: found.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                lineItems: found.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
               });
               await invoiceQueue.add("signInvoice", { ...vRetry, dbInvoiceId: found.id }, { idempotencyKey: `${found.tenantId}:${found.clientInvoiceId}:retry` });
             } catch {}
@@ -536,7 +535,7 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
                     invoiceType: dup.invoiceType as any, invoiceKind: dup.invoiceKind as any,
                     issueDate: dup.issueDate.toISOString().substring(0,10),
                     customerCode: dup.customerCode, customerName: dup.customerName, customerTin: dup.customerTin || undefined,
-                    lineItems: dup.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                    lineItems: dup.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
                   });
                   await invoiceQueue.add("signInvoice", { ...vBulk, dbInvoiceId: dup.id }, { idempotencyKey: `${tenant.id}:${dup.clientInvoiceId}:retry` });
                   results.push({ clientInvoiceNumber, success: true, idempotent: true, requeued: true, invoice: formatInvoice(dup), message: `Was stuck in Hub — re-queued to CittaEFS` });
@@ -623,7 +622,7 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
                   invoiceType: existing.invoiceType as any, invoiceKind: existing.invoiceKind as any,
                   issueDate: existing.issueDate.toISOString().substring(0,10),
                   customerCode: existing.customerCode, customerName: existing.customerName, customerTin: existing.customerTin || undefined,
-                  lineItems: existing.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+                  lineItems: existing.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
                 });
                 await invoiceQueue.add("signInvoice", { ...vRetryBulk, dbInvoiceId: existing.id }, { idempotencyKey: `${tenant.id}:${existing.clientInvoiceId}:retry` });
                 results.push({ clientInvoiceNumber, success: true, idempotent: true, requeued: true, invoice: formatInvoice(existing), message: `REJECTED — re-queued` });
@@ -650,7 +649,7 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
         customerCode: customerCode || "CUST-CITTA-GENERIC", customerName: customerName || "Valued Client",
         customerTin: effectiveTin || undefined, originalIrn: originalIrn || undefined, billingReferenceIrns: _brArr_b,
         headerCharges: Number(_hc_b ?? 0), headerDiscount: Number(_hd_b ?? 0), currency: (currency as any) || (payload as any).CurrencyCode || "NGN", customFields: (payload as any).customFields, metadata: (payload as any).metadata,
-        lineItems: processed.map((li: any) => ({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: (li as any).discountAmount ?? 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS") ? "HS_CODE" : "SERVICE_CODE", vatRate: li.vatRate, lineNum: (li as any).lineNum ?? (li as any).Linenumber, unitCode: (li as any).unitCode, taxCategoryId: (li as any).taxCategoryId, taxableAmount: (li as any).taxableAmount, vatAmount: (li as any).vatAmount })),
+        lineItems: processed.map((li: any) => ({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: (li as any).discountAmount ?? 0, hsOrServiceCode: li.hsOrServiceCode, codeType: getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE", vatRate: li.vatRate, lineNum: (li as any).lineNum ?? (li as any).Linenumber, unitCode: (li as any).unitCode, taxCategoryId: (li as any).taxCategoryId, taxableAmount: (li as any).taxableAmount, vatAmount: (li as any).vatAmount })),
       });
       const bulkIdemKey = `${tenant.id}:${clientInvoiceNumber}`;
       await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: raw.id }, { idempotencyKey: bulkIdemKey });
@@ -727,7 +726,7 @@ router.post("/api/invoices/:id/retry", async (req: any, res) => {
         customerCode: invoice.customerCode,
         customerName: invoice.customerName,
         customerTin: invoice.customerTin || undefined,
-        lineItems: invoice.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+        lineItems: invoice.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
       });
       requeuedJob = await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: invoice.id }, { idempotencyKey: `${invoice.tenantId}:${invoice.clientInvoiceId}:retry:${Date.now()}` });
     }
@@ -764,7 +763,7 @@ router.post("/api/invoices/retry-bulk", async (req: any, res) => {
             invoiceType: inv.invoiceType as any, invoiceKind: inv.invoiceKind as any,
             issueDate: inv.issueDate.toISOString().substring(0,10),
             customerCode: inv.customerCode, customerName: inv.customerName, customerTin: inv.customerTin || undefined,
-            lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount:0, hsOrServiceCode: li.hsOrServiceCode, codeType: li.hsOrServiceCode?.startsWith("HS")?"HS_CODE":"SERVICE_CODE", vatRate: li.vatRate })),
+            lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount:0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
           });
           job = await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: inv.id }, { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}:retry:${Date.now()}` });
         }
@@ -901,7 +900,7 @@ router.post("/api/hub/v1/invoices", async (req, res) => {
         quantity: Number(li.quantity || li.qty || 1),
         unitPrice: Number(li.unitPrice || li.price || 0),
         discountAmount: Number(li.discountAmount || li.discount || 0),
-        hsOrServiceCode: li.hsOrServiceCode || li.hsCode || "HS-8471.30",
+        hsOrServiceCode: li.hsOrServiceCode || li.hsCode || "UNMAPPED",
         vatRate: li.vatRate !== undefined ? Number(li.vatRate) : undefined,
       })),
     };

@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   Globe,
+  Layers,
   Zap
 } from 'lucide-react';
 import { Connector } from '../types';
@@ -19,6 +20,7 @@ import { QboStagingInbox } from './QboStagingInbox';
 
 interface ConnectorStatus {
   qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null };
+  odoo: { connected: boolean; status: string; database: string | null; lastSyncAt: string | null };
   excelCsv: { totalInvoices: number; lastInvoiceAt: string | null };
   cittaGateway: { totalStamped: number; totalPending: number; totalRejected: number };
 }
@@ -36,6 +38,8 @@ export function ConnectorsTab() {
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [testingQbo, setTestingQbo] = useState(false);
   const [syncingQbo, setSyncingQbo] = useState(false);
+  const [testingOdoo, setTestingOdoo] = useState(false);
+  const [syncingOdoo, setSyncingOdoo] = useState(false);
 
   const queryParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const qboRedirectStatus = queryParams.get('qbo');
@@ -119,6 +123,51 @@ export function ConnectorsTab() {
     }
   };
 
+  const handleSyncOdoo = async () => {
+    setSyncingOdoo(true);
+    try {
+      const res = await fetchWithAuth('/api/integrations/odoo/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: activeTenant.id })
+      });
+      const data = await parseJsonResponse(res);
+      setSyncingOdoo(false);
+      if (data.success) {
+        toastGlobal('success', 'Odoo sync complete', `Found ${data.totalFound} · New ${data.newSynced} · Already synced ${data.alreadySynced}`);
+      } else {
+        toastGlobal('error', 'Sync failed', data.error || 'Unknown error');
+      }
+      await loadStatus();
+    } catch (err: any) {
+      setSyncingOdoo(false);
+      toastGlobal('error', 'Sync error', err.message);
+      await loadStatus();
+    }
+  };
+
+  const handleTestOdoo = async () => {
+    setTestingOdoo(true);
+    try {
+      const res = await fetchWithAuth('/api/connectors/odoo/test-live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: activeTenant.id })
+      });
+      const data = await parseJsonResponse(res);
+      setTestingOdoo(false);
+      if (data.success) {
+        toastGlobal('success', 'Live Odoo test passed', `Company: ${data.companyInfo?.CompanyName} · ${data.companyInfo?.Currency} · ${data.latencyMs}ms`);
+      } else {
+        toastGlobal('error', 'Connection test failed', data.error || 'Unknown error');
+      }
+      await loadStatus();
+    } catch (err: any) {
+      setTestingOdoo(false);
+      toastGlobal('error', 'API error testing connector', err.message);
+    }
+  };
+
   const handleAddConnector = (newConn: Connector) => {
     toastGlobal('info', `${newConn.platform} noted`, 'Only QuickBooks Online and Excel/CSV are live in this release — other adapters are coming soon.');
   };
@@ -131,13 +180,13 @@ export function ConnectorsTab() {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
             <Plug className="w-5 h-5 text-indigo-400" />
-            QuickBooks Online & Excel Connectors Hub
+            QuickBooks, Odoo & Excel Connectors Hub
             <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              QBO + EXCEL ACTIVE
+              QBO + ODOO + EXCEL ACTIVE
             </span>
           </h2>
           <p className="text-slate-400 text-xs mt-1">
-            Active Connectors: QuickBooks Online (OAuth2) & Excel/CSV Upload • Other adapters (SAP, NetSuite, SQL) frozen for future release • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
+            Active Connectors: QuickBooks Online (OAuth2), Odoo ERP (JSON-RPC) & Excel/CSV Upload • Other adapters (SAP, NetSuite, SQL) frozen for future release • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
           </p>
         </div>
         <button
@@ -280,6 +329,55 @@ export function ConnectorsTab() {
             </div>
           </div>
 
+          {/* Odoo ERP — real Integration status */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-violet-600" />
+                <span className="font-semibold text-slate-900 text-sm">Odoo ERP</span>
+              </div>
+              <span className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                status?.odoo.connected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+              }`}>
+                {status?.odoo.status || 'NOT_CONNECTED'}
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between text-slate-500">
+                <span>Auth Scheme:</span>
+                <span className="font-medium text-slate-900">JSON-RPC API Key</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>Database:</span>
+                <span className="font-mono font-medium text-slate-900">{status?.odoo.database || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>Last Sync:</span>
+                <span className="font-medium text-slate-900">{formatWhen(status?.odoo.lastSyncAt ?? null)}</span>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
+              <button
+                onClick={handleSyncOdoo}
+                disabled={syncingOdoo}
+                className="px-2.5 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold text-xs rounded-lg border border-violet-200 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
+              >
+                <RefreshCw className={`w-3 h-3 ${syncingOdoo ? 'animate-spin' : ''}`} />
+                <span>{syncingOdoo ? 'Syncing...' : 'Sync Now'}</span>
+              </button>
+              <button
+                onClick={handleTestOdoo}
+                disabled={testingOdoo}
+                className="font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 text-violet-600 hover:text-violet-700"
+              >
+                <RefreshCw className={`w-3 h-3 ${testingOdoo ? 'animate-spin' : ''}`} />
+                <span>{testingOdoo ? 'Testing...' : 'Test (Live)'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Excel & CSV Import — real tenant invoice counts (all channels, honestly labeled) */}
           <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -356,11 +454,11 @@ export function ConnectorsTab() {
       <div className="bg-emerald-50/60 rounded-xl border border-emerald-200/80 p-5 space-y-2">
         <div className="flex items-center gap-2 font-bold text-emerald-800">
           <Globe className="w-4 h-4 text-emerald-600" />
-          <span>Active: QuickBooks Online & Excel/CSV Connectors</span>
+          <span>Active: QuickBooks Online, Odoo ERP & Excel/CSV Connectors</span>
         </div>
         <p className="text-emerald-700 text-xs leading-relaxed">
-          <strong>Currently Active:</strong> QuickBooks Online (OAuth2 REST/Webhook) and Excel/CSV File Upload adapters are fully operational.
-          <br/><strong>Frozen for future release:</strong> SAP S/4HANA, NetSuite SuiteTalk, Custom SQL Staging, Odoo ERP, and Sage ERP adapters.
+          <strong>Currently Active:</strong> QuickBooks Online (OAuth2 REST/Webhook), Odoo ERP (JSON-RPC), and Excel/CSV File Upload adapters are fully operational.
+          <br/><strong>Frozen for future release:</strong> SAP S/4HANA, NetSuite SuiteTalk, Custom SQL Staging, and Sage ERP adapters.
         </p>
       </div>
 

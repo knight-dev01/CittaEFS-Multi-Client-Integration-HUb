@@ -20,6 +20,7 @@ import customersRouter from "./src/routes/customers";
 import itemsRouter from "./src/routes/items";
 import validationRouter from "./src/routes/validation";
 import qboRouter from "./src/routes/qbo";
+import odooRouter from "./src/routes/odoo";
 import webhooksRouter from "./src/routes/webhooks";
 import systemRouter from "./src/routes/system";
 
@@ -120,6 +121,7 @@ async function startServer() {
   app.use(itemsRouter);
   app.use(validationRouter);
   app.use(qboRouter);
+  app.use(odooRouter);
   app.use(webhooksRouter);
   app.use(systemRouter);
 

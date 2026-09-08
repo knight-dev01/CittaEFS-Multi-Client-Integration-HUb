@@ -7,7 +7,7 @@ import {
 import { QuickBooksAdapter } from "../adapters/connectorAdapters";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from "../data/referenceData";
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, isValidCittaCode, getCittaCodeType } from "../data/referenceData";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -615,11 +615,11 @@ async function upsertQboMasterData(
         data: {
           tenantId,
           clientSku: item.itemCode,
+          name: item.description,
           description: item.description,
           hsOrServiceCode: item.hsOrServiceCode,
-          categoryType: /^SRV|^SERV/.test(item.hsOrServiceCode)
-            ? "SERVICE"
-            : "GOODS",
+          categoryType: getCittaCodeType(item.hsOrServiceCode) === "SERVICE_CODE" ? "SERVICE" : "GOODS",
+          isService: getCittaCodeType(item.hsOrServiceCode) === "SERVICE_CODE",
           defaultVatRate: item.vatRate,
         },
       });
@@ -691,20 +691,30 @@ export async function ingestQboInvoice(
   const tenantItems = await prisma.item.findMany({ where: { tenantId } });
   const inferServiceCode = (sku: string, desc: string) => {
     const text = `${sku} ${desc}`.toLowerCase();
-    if (/gardening|sod|rocks|fountain|pump|sprinkler|design|service|labor|labour|installation|maintenance|repair/.test(text)) return "SRV-7212.10";
-    if (/laptop|computer|router|switch|server/.test(text)) return "HS-8471.30";
-    return (sku || "").toUpperCase().startsWith("SRV") ? "SRV-7212.10" : "HS-8471.30";
+    // Real CittaEFS/NRS codes (from CITTA_HS_CODES_REFERENCE / CITTA_SERVICE_CODES_REFERENCE)
+    // — bare numeric, no "HS-"/"SRV-" prefix. Only the few keyword matches we can
+    // be confident about get auto-classified; everything else is UNMAPPED.
+    if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+    if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
+    if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
+    // No confident keyword match — flag UNMAPPED rather than guessing a real-but-
+    // wrong code (e.g. an office chair or mouse pad classified as a laptop).
+    // A syntactically valid but semantically wrong code passes our own local
+    // validSet check yet gets rejected downstream by the compliance gateway as
+    // an "Invalid Product Code" mismatch — UNMAPPED instead fails locally with
+    // a clear message and routes to the Item Dictionary for a real mapping.
+    return "UNMAPPED";
   };
   const processedLineItems = transformed.lineItems.map(
     (li: any, idx: number) => {
       let mapping = tenantItems.find((m) => m.clientSku === li.clientSku);
       const inferredDefault = inferServiceCode(li.clientSku || "", li.description || "");
       const rawHs = li.hsOrServiceCode;
-      // Inference takes precedence over generic/mis-mapped tenantItems; only use mapping if it's a valid SRV/HS code not the default generic
+      // Inference takes precedence over generic/mis-mapped tenantItems; only use mapping if it's a real, currently-valid code
       const mappingCode = mapping?.hsOrServiceCode;
-      const mappingIsGeneric = mappingCode === "HS-8471.30" || mappingCode === "SERV-DEFAULT" || !mappingCode;
+      const mappingIsGeneric = !mappingCode || !isValidCittaCode(mappingCode);
       const hsOrServiceCode =
-        (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT" && rawHs !== "HS-8471.30"
+        (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT" && isValidCittaCode(rawHs)
           ? rawHs
           : mappingIsGeneric
             ? inferredDefault
@@ -750,9 +760,8 @@ export async function ingestQboInvoice(
     throw new Error(`No invoice data provided for QBO Invoice ${docNumber}`);
   }
   // Strict HS validation — unified general list same as Validation + Invoice edit (referenceData)
-  const validSet = new Set([...CITTA_HS_CODES_REFERENCE.map(c=>c.code), ...CITTA_SERVICE_CODES_REFERENCE.map(s=>s.code), "HS-8471.50"]);
   for (const li of processedLineItems) {
-    if (!validSet.has(li.hsOrServiceCode)) {
+    if (!isValidCittaCode(li.hsOrServiceCode)) {
       await prisma.validationError.create({
         data: {
           tenantId,
@@ -848,7 +857,7 @@ export async function ingestQboInvoice(
         unitPrice: li.unitPrice,
         discountAmount: 0,
         hsOrServiceCode: li.hsOrServiceCode,
-        codeType: (li.hsOrServiceCode?.startsWith("HS") ? "HS_CODE" : "SERVICE_CODE") as any,
+        codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE") as any,
         vatRate: li.vatRate,
       })),
     });

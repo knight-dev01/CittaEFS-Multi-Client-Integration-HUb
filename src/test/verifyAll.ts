@@ -21,7 +21,7 @@ import {
   invoiceIngestionSchema,
   invoiceLineItemSchema,
 } from "../schemas/invoice.schema";
-import { QuickBooksAdapter, CsvAdapter } from "../adapters/connectorAdapters";
+import { QuickBooksAdapter, CsvAdapter, OdooAdapter } from "../adapters/connectorAdapters";
 import { cittaEfsClient } from "../services/cittaEfsClient";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { processInvoiceJob } from "../workers/invoiceWorker";
@@ -173,7 +173,7 @@ async function runAllTests() {
           quantity: 2,
           unitPrice: 50000,
           vatRate: 16,
-          hsOrServiceCode: "HS-8471.50",
+          hsOrServiceCode: "8471.50",
         },
       ],
     };
@@ -241,7 +241,7 @@ async function runAllTests() {
           description: "Line item with no explicit vatRate",
           quantity: 1,
           unitPrice: 1000,
-          hsOrServiceCode: "HS-8471.50",
+          hsOrServiceCode: "8471.50",
         },
       ],
     };
@@ -382,8 +382,8 @@ async function runAllTests() {
     );
 
     // All registered adapters verification
-    // NOTE: SAP, NetSuite, Odoo, Sage, SQL adapters are FROZEN - only QBO and CSV active
-    const adapters = [new QuickBooksAdapter(), new CsvAdapter()];
+    // NOTE: SAP, NetSuite, Sage, SQL adapters are FROZEN - QBO, CSV, and Odoo are active
+    const adapters = [new QuickBooksAdapter(), new CsvAdapter(), new OdooAdapter()];
     const allAuth = await Promise.all(
       adapters.map((a) =>
         a.authenticate({
@@ -441,7 +441,7 @@ async function runAllTests() {
           vatRate: 16,
           vatAmount: 8000,
           totalAmount: 58000,
-          hsOrServiceCode: "HS-8471.50",
+          hsOrServiceCode: "8471.50",
         },
       ],
     };
@@ -786,7 +786,7 @@ async function runAllTests() {
           quantity: 1,
           unitPrice: 100000,
           vatRate: 16,
-          hsOrServiceCode: "HS-8471.50",
+          hsOrServiceCode: "8471.50",
         },
       ],
     });
@@ -847,7 +847,7 @@ async function runAllTests() {
           quantity: 1,
           unitPrice: 20000,
           vatRate: 16,
-          hsOrServiceCode: "HS-8471.50",
+          hsOrServiceCode: "8471.50",
         },
       ],
     });
@@ -1195,7 +1195,7 @@ async function runAllTests() {
           Amount: 5000,
           Description: "Consulting Services",
           SalesItemLineDetail: {
-            ItemRef: { name: "SERV-CONSULT" },
+            ItemRef: { name: "SRV-CONSULT" },
             Qty: 1,
             UnitPrice: 5000,
           },
@@ -1319,6 +1319,196 @@ async function runAllTests() {
     assert(
       "QuickBooks Integration",
       "QBO Suite Verification",
+      "Runtime",
+      false,
+      "No unhandled exceptions",
+      err.message,
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // MODULE 11: Odoo ERP Integration (JSON-RPC, Ingestion & Writeback)
+  // ------------------------------------------------------------------
+  try {
+    const {
+      connectOdoo,
+      getValidOdooCredentials,
+      fetchAllOdooInvoicesPaginated,
+      ingestOdooInvoice,
+      writebackToOdoo,
+    } = await import("../services/odooService");
+
+    const testOdooUrl = "https://odoo-test.example.com";
+    const testOdooDb = "test_odoo_db";
+    const testOdooUsername = "integration@example.com";
+    const testOdooApiKey = "test_odoo_api_key_123";
+    const testUid = 7;
+
+    // 1. connectOdoo — validates credentials via JSON-RPC common.authenticate, persists Integration + erpConfig
+    nock(testOdooUrl)
+      .post("/jsonrpc")
+      .reply(200, (_uri, body: any) => ({ jsonrpc: "2.0", id: body.id, result: testUid }));
+
+    const connectResult = await connectOdoo("tenant_qbo", {
+      odooUrl: testOdooUrl,
+      odooDatabase: testOdooDb,
+      odooUsername: testOdooUsername,
+      odooApiKey: testOdooApiKey,
+    });
+    nock.cleanAll();
+
+    assert(
+      "Odoo Integration",
+      "connectOdoo Authenticates & Persists Integration",
+      "Integration",
+      connectResult.connected === true && connectResult.uid === testUid,
+      "Validates credentials via JSON-RPC and persists Integration + Tenant.erpConfig",
+      `Connected: ${connectResult.connected}, uid: ${connectResult.uid}`,
+    );
+
+    // 2. getValidOdooCredentials — retrieves & decrypts stored connection details (no refresh needed, unlike QBO)
+    const creds = await getValidOdooCredentials("tenant_qbo");
+    assert(
+      "Odoo Integration",
+      "getValidOdooCredentials Retrieval & Decryption",
+      "Security",
+      creds.url === testOdooUrl && creds.database === testOdooDb && creds.apiKey === testOdooApiKey && creds.uid === testUid,
+      "Retrieves and decrypts stored Odoo connection details from Integration + Tenant.erpConfig",
+      `URL: ${creds.url}, DB: ${creds.database}, uid: ${creds.uid}`,
+    );
+
+    // 3. Paginated fetch with batched line-item and partner-VAT composition
+    const testMoveId = 90001;
+    const testPartnerId = 501;
+    const testMoveName = `ODOO-DOC-${Date.now()}`;
+    const testRawMove = {
+      id: testMoveId,
+      name: testMoveName,
+      invoice_date: "2026-07-30",
+      move_type: "out_invoice",
+      partner_id: [testPartnerId, "Odoo Test Customer"],
+      amount_untaxed: 5000,
+      amount_tax: 800,
+      amount_total: 5800,
+      currency_id: [1, "NGN"],
+      write_date: "2026-07-30 10:00:00",
+    };
+    const testLines = [
+      {
+        id: 1,
+        move_id: [testMoveId, testMoveName],
+        product_id: [55, "[SRV-CONSULT] Consulting Services"],
+        name: "Consulting Services",
+        display_type: "product",
+        quantity: 1,
+        price_unit: 5000,
+        price_subtotal: 5000,
+        price_total: 5800,
+      },
+    ];
+
+    nock(testOdooUrl)
+      .post("/jsonrpc")
+      .times(3)
+      .reply(200, (_uri, body: any) => {
+        const model = body?.params?.args?.[3];
+        let result: any = null;
+        if (model === "account.move") result = [testRawMove];
+        else if (model === "account.move.line") result = testLines;
+        else if (model === "res.partner") result = [{ id: testPartnerId, vat: "P051987654Z" }];
+        return { jsonrpc: "2.0", id: body.id, result };
+      });
+
+    const composedInvoices = await fetchAllOdooInvoicesPaginated("tenant_qbo");
+    nock.cleanAll();
+
+    const composed = composedInvoices.find((m: any) => m.id === testMoveId);
+    assert(
+      "Odoo Integration",
+      "Paginated Fetch Batches Line Items & Partner VAT (No N+1)",
+      "Integration",
+      Boolean(composed && composed._lines?.length === 1 && composed._partnerVat === "P051987654Z"),
+      "Composes account.move + account.move.line + res.partner.vat into one self-contained payload per invoice",
+      `Composed lines: ${composed?._lines?.length}, partnerVat: ${composed?._partnerVat}`,
+    );
+
+    // 4. Ingestion test — full pipeline (validate, transform, HS inference, master-data upsert, DB insert)
+    const ingested = await ingestOdooInvoice("tenant_qbo", composed);
+    assert(
+      "Odoo Integration",
+      "Odoo Raw Payload Normalization & Ingestion",
+      "Integration",
+      Boolean(ingested && ingested.id && ingested.clientInvoiceId === testMoveName),
+      "Normalizes Odoo account.move and inserts local DB record in PENDING_NRS_STAMP state",
+      `Db Invoice ID: ${ingested.id}, ClientInvoiceId: ${ingested.clientInvoiceId}, Status: ${ingested.status}`,
+    );
+
+    // 5. Ingestion failure — invoice with no line items is rejected, not silently accepted
+    const emptyMove = { ...testRawMove, id: testMoveId + 1, name: `ODOO-EMPTY-${Date.now()}`, _lines: [], _partnerVat: undefined };
+    let emptyRejected = false;
+    let emptyErr = "";
+    try {
+      await ingestOdooInvoice("tenant_qbo", emptyMove);
+    } catch (e: any) {
+      emptyRejected = true;
+      emptyErr = e.message;
+    }
+    assert(
+      "Odoo Integration",
+      "Odoo Ingestion Rejects Invoice With No Line Items",
+      "FailureRecovery",
+      emptyRejected && emptyErr.includes("No invoice data provided"),
+      "Throws and logs a ValidationError instead of inserting an empty invoice",
+      emptyRejected ? `Caught real error: ${emptyErr}` : "Failed to throw error",
+    );
+
+    // 6. Writeback via message_post (chatter) — Odoo has no guaranteed custom fields, unlike QBO's sparse CustomField update
+    nock(testOdooUrl)
+      .post("/jsonrpc")
+      .reply(200, (_uri, body: any) => ({ jsonrpc: "2.0", id: body.id, result: true }));
+
+    const writebackRes = await writebackToOdoo(
+      "tenant_qbo",
+      testMoveName,
+      "IRN-ODOO-2026-STAMPED",
+      "https://qr.gov/odoo/stamped",
+    );
+    nock.cleanAll();
+
+    assert(
+      "Odoo Integration",
+      "Odoo Ledger Writeback (Chatter message_post)",
+      "Integration",
+      Boolean(writebackRes && writebackRes.success),
+      "Posts IRN and QR Code URL as a chatter message on the source account.move record",
+      `Writeback Success for Odoo Invoice ${testMoveName}`,
+    );
+
+    // 7. Failed Odoo API Call Failure Recovery Test — real error propagation, no fake fallback data
+    nock(testOdooUrl).post("/jsonrpc").reply(500, "Internal Server Error");
+
+    let syncFailedCorrectly = false;
+    let syncErrorMsg = "";
+    try {
+      await fetchAllOdooInvoicesPaginated("tenant_qbo");
+    } catch (err: any) {
+      syncFailedCorrectly = true;
+      syncErrorMsg = err.message;
+    }
+    nock.cleanAll();
+
+    assert(
+      "Odoo Integration",
+      "Failed Odoo API Call Error Propagation",
+      "FailureRecovery",
+      syncFailedCorrectly && syncErrorMsg.includes("Could not reach Odoo"),
+      "Throws real error on Odoo API failure instead of returning fake fallback data",
+      syncFailedCorrectly ? `Caught real error: ${syncErrorMsg}` : "Failed to throw error",
+    );
+  } catch (err: any) {
+    assert(
+      "Odoo Integration",
+      "Odoo Suite Verification",
       "Runtime",
       false,
       "No unhandled exceptions",

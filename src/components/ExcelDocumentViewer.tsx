@@ -2,6 +2,7 @@ import { useState, ChangeEvent } from 'react';
 import * as XLSX from 'xlsx';
 import { useHub } from '../lib/store';
 import { getRowErrors as sharedGetRowErrors } from '../lib/invoiceValidation';
+import { getCittaCodeType } from '../data/referenceData';
 import { InvoicePreview } from './InvoicePreview';
 import {
   FileSpreadsheet,
@@ -74,7 +75,7 @@ const DEFAULT_SAMPLE_ROWS: SpreadsheetRow[] = [
     description: 'Dell XPS 15 Business Laptop',
     quantity: 2,
     unitPrice: 120000,
-    hsOrServiceCode: 'HS-8471.30',
+    hsOrServiceCode: '8471.30',
     vatRate: 16,
     partyNormalized: true,
     itemNormalized: true
@@ -91,7 +92,7 @@ const DEFAULT_SAMPLE_ROWS: SpreadsheetRow[] = [
     description: 'Onsite Server Setup Service',
     quantity: 1,
     unitPrice: 45000,
-    hsOrServiceCode: 'SRV-7212.10',
+    hsOrServiceCode: '6209',
     vatRate: 16,
     partyNormalized: true,
     itemNormalized: true
@@ -235,7 +236,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
       description: 'Consulting / Tech Service',
       quantity: 1,
       unitPrice: 50000,
-      hsOrServiceCode: 'SRV-7212.10',
+      hsOrServiceCode: '6209',
       vatRate: 16,
       partyNormalized: false,
       itemNormalized: false
@@ -403,7 +404,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
         description: get(r, 'description','Description','ItemDescription','Item Description') || 'Uploaded Product Line Item',
         quantity: Number(get(r, 'quantity','Quantity','Qty') ?? 1),
         unitPrice: Number(get(r, 'unitPrice','UnitPrice','Price','price') ?? 0),
-        hsOrServiceCode: get(r, 'hsOrServiceCode','HsOrServiceCode','HsorServiceCode','HSCode','HS Code') || 'HS-8471.30',
+        hsOrServiceCode: get(r, 'hsOrServiceCode','HsOrServiceCode','HsorServiceCode','HSCode','HS Code') || 'UNMAPPED',
         vatRate: Number(get(r, 'vatRate','VatRate','VAT Rate') ?? 16),
         lineNum, unitCode, taxCategoryId: taxCat, discountAmount: discount,
         taxableAmount: taxable !== undefined ? Number(taxable) : undefined,
@@ -483,7 +484,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           if (!code) continue;
           const exists = itemMappings.find(m => m.clientSku === String(code).trim());
           if (!exists) {
-            const hs = r.HsorServiceCode || r['HsorServiceCode'] || r['HSorServiceCode'] || 'HS-8471.30';
+            const hs = r.HsorServiceCode || r['HsorServiceCode'] || r['HSorServiceCode'] || 'UNMAPPED';
             const price = Number(r.price || r.Price || 0);
             const taxCat = r.TaxCategory || r['TaxCategory'] || 'STANDARD_VAT';
             await addItemMapping({
@@ -493,7 +494,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
               unitCode: String(r.UnitCode || r['UnitCode'] || 'EA').trim(),
               hsOrServiceCode: String(hs).trim(),
               category: 'General Goods',
-              codeType: String(hs).startsWith('HS') ? 'HS_CODE' : 'SERVICE_CODE',
+              codeType: getCittaCodeType(String(hs)) || 'HS_CODE',
               codeDescription: String(r.ItemDescription || r['ItemDescription'] || '').trim(),
               defaultVatRate: taxCat === 'EXEMPT' ? 0 : (activeTenant?.defaultVatRate || 7.5),
               status: 'MAPPED'
@@ -529,9 +530,9 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             name: row.description,
             description: row.description,
             unitCode: (row as any).unitCode || 'EA',
-            hsOrServiceCode: row.hsOrServiceCode || 'HS-8471.30',
+            hsOrServiceCode: row.hsOrServiceCode || 'UNMAPPED',
             category: 'General Goods',
-            codeType: (row.hsOrServiceCode || '').startsWith('HS') ? 'HS_CODE' : 'SERVICE_CODE',
+            codeType: getCittaCodeType(row.hsOrServiceCode) || 'HS_CODE',
             codeDescription: row.description,
             defaultVatRate: row.vatRate || activeTenant?.defaultVatRate || 7.5,
             status: 'MAPPED'
