@@ -205,6 +205,8 @@ export async function processInvoiceJob(
 export async function runWorkerBatch(): Promise<ProcessingResult[]> {
   // Recover orphans that lost queue entry after restart
   await invoiceQueue.recoverOrphans().catch(()=>{});
+  // Reclaim jobs abandoned mid-PROCESSING by a dead/restarted worker
+  await invoiceQueue.recoverStaleProcessingJobs().catch(()=>{});
   const pendingJobs = invoiceQueue.getPendingJobs();
   const results: ProcessingResult[] = [];
 

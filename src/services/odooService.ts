@@ -451,7 +451,7 @@ export async function ingestOdooInvoice(
     const qty = Number(li.quantity || 1);
     const price = Number(li.unitPrice || 0);
     const taxable = li.taxableAmount !== undefined ? Number(li.taxableAmount) : qty * price;
-    const vatRate = li.vatRate !== undefined ? Number(li.vatRate) : Number(mapping?.defaultVatRate || 16);
+    const vatRate = li.vatRate !== undefined ? Number(li.vatRate) : Number(mapping?.defaultVatRate || 7.5); // Nigeria STANDARD_VAT is 7.5%, not 16%
     const vatAmount = li.vatAmount !== undefined ? Number(li.vatAmount) : (taxable * vatRate) / 100;
     const totalAmount = taxable + vatAmount;
 

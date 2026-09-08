@@ -339,7 +339,7 @@ export class CsvAdapter implements ConnectorAdapter {
         quantity: Number(get(rawPayload,'Qty','Quantity','quantity') ?? 1),
         unitPrice: Number(get(rawPayload,'Price','Unit Price','price','UnitPrice') ?? 100),
         hsOrServiceCode: get(rawPayload,'HS Code','Service Code','HsorServiceCode','HSCode') || 'SERV-DEFAULT',
-        vatRate: Number(get(rawPayload,'VAT Rate','VatRate','vatRate') ?? 16),
+        vatRate: Number(get(rawPayload,'VAT Rate','VatRate','vatRate') ?? 7.5), // Nigeria STANDARD_VAT is 7.5%, not 16%
         lineNum: lineNum ? Number(lineNum) : undefined,
         unitCode, taxCategoryId: taxCat, discountAmount: lineDisc,
         taxableAmount: taxable !== undefined ? Number(taxable) : undefined,
