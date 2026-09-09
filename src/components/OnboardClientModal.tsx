@@ -68,7 +68,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
   // Step 1 fields — pre-filled from resumeTenant so "Previous" from step 2 shows real data
   const [companyName, setCompanyName] = useState(resumeTenant?.companyName || resumeTenant?.name || '');
   const [tin, setTin] = useState(resumeTenant?.tin || '');
-  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Excel & CSV Import' | 'Odoo ERP'>(resumeTenant?.platformType || 'QuickBooks Online');
+  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Odoo ERP'>(resumeTenant?.platformType === 'Excel & CSV Import' ? 'QuickBooks Online' : (resumeTenant?.platformType as any) || 'QuickBooks Online');
   const [marketTier, setMarketTier] = useState(resumeTenant?.marketTier || 'Enterprise');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({ companyName: false, tin: false });
@@ -459,7 +459,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3 bg-white rounded-xl border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
+                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"
@@ -581,7 +581,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3 bg-white rounded-xl border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
+                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"
@@ -692,7 +692,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3 bg-white rounded-xl border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
+                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"

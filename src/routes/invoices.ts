@@ -173,6 +173,8 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
     const _cf = (req.body as any).customFields ?? customFields;
     const _md = (req.body as any).metadata ?? metadata;
 
+    // ERP-sourced only — Excel/manual not allowed (hub listens, not center of edits)
+    if (sourceErp && !["qbo","odoo"].includes(String(sourceErp).toLowerCase())) return res.status(403).json({ success: false, error: "Invoices are ERP-sourced (qbo/odoo) — Excel/manual not allowed; hub listens via ERP sync/webhook" });
     const targetTenantId = tenantId || (req as any).user?.tenantId || "tenant_qbo_smb";
     if ((req as any).user && (req as any).user.role !== "ADMIN" && targetTenantId !== (req as any).user.tenantId) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation — cannot send to another tenant" });
     const tenant = await prisma.tenant.findUnique({
@@ -508,6 +510,7 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
     const seenInBatch = new Set<string>();
     for (const payload of bulkInvoices) { try {
       const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, invoiceTypeCode, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn, billingReferenceIrns, sourceErp, erpId, headerCharges, headerDiscount, currency, customFields, metadata } = payload || {};
+      if (sourceErp && !["qbo","odoo"].includes(String(sourceErp).toLowerCase())) { results.push({ clientInvoiceNumber, success:false, errors:["Invoices are ERP-sourced (qbo/odoo) — Excel/manual not allowed"]}); continue; }
       const _hc_b = (payload as any).HeaderCharges ?? (payload as any).headerCharges ?? headerCharges;
       const _hd_b = (payload as any).HeaderDiscount ?? (payload as any).headerDiscount ?? headerDiscount;
       const _itc_b = (payload as any).InvoiceTypeCode ?? (payload as any).invoiceTypeCode ?? invoiceTypeCode;
