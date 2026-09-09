@@ -7,7 +7,7 @@ import {
 import { QuickBooksAdapter } from "../adapters/connectorAdapters";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, isValidCittaCode, getCittaCodeType } from "../data/referenceData";
+import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, isValidCittaCode, getCittaCodeType, normalizeCittaCode } from "../data/referenceData";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -691,34 +691,29 @@ export async function ingestQboInvoice(
   const tenantItems = await prisma.item.findMany({ where: { tenantId } });
   const inferServiceCode = (sku: string, desc: string) => {
     const text = `${sku} ${desc}`.toLowerCase();
-    // Real CittaEFS/NRS codes (from CITTA_HS_CODES_REFERENCE / CITTA_SERVICE_CODES_REFERENCE)
-    // — bare numeric, no "HS-"/"SRV-" prefix. Only the few keyword matches we can
-    // be confident about get auto-classified; everything else is UNMAPPED.
-    if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+    // Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix. Service detection expanded to cover landscape/lawn services.
+    if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
     if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
     if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
-    // No confident keyword match — flag UNMAPPED rather than guessing a real-but-
-    // wrong code (e.g. an office chair or mouse pad classified as a laptop).
-    // A syntactically valid but semantically wrong code passes our own local
-    // validSet check yet gets rejected downstream by the compliance gateway as
-    // an "Invalid Product Code" mismatch — UNMAPPED instead fails locally with
-    // a clear message and routes to the Item Dictionary for a real mapping.
     return "UNMAPPED";
   };
   const processedLineItems = transformed.lineItems.map(
     (li: any, idx: number) => {
       let mapping = tenantItems.find((m) => m.clientSku === li.clientSku);
       const inferredDefault = inferServiceCode(li.clientSku || "", li.description || "");
-      const rawHs = li.hsOrServiceCode;
-      // Inference takes precedence over generic/mis-mapped tenantItems; only use mapping if it's a real, currently-valid code
-      const mappingCode = mapping?.hsOrServiceCode;
-      const mappingIsGeneric = !mappingCode || !isValidCittaCode(mappingCode);
-      const hsOrServiceCode =
-        (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT" && isValidCittaCode(rawHs)
+      const rawHs = li.hsOrServiceCode ? normalizeCittaCode(li.hsOrServiceCode) : "";
+      const mappingCode = mapping?.hsOrServiceCode ? normalizeCittaCode(mapping.hsOrServiceCode) : "";
+      // Service inference takes precedence over HS laptop codes mis-mapped to services — prevents 8471.30 for Gardening/Pest Control etc.
+      const inferredIsService = inferredDefault !== "UNMAPPED" && getCittaCodeType(inferredDefault) === "SERVICE_CODE";
+      const mappingIsServiceMismatch = mappingCode && getCittaCodeType(mappingCode) === "HS_CODE" && inferredIsService;
+      const mappingIsGeneric = !mappingCode || !isValidCittaCode(mappingCode) || mappingIsServiceMismatch;
+      let hsOrServiceCode =
+        (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT" && isValidCittaCode(rawHs) && !mappingIsServiceMismatch
           ? rawHs
           : mappingIsGeneric
             ? inferredDefault
             : mappingCode) || inferredDefault;
+      hsOrServiceCode = normalizeCittaCode(hsOrServiceCode);
       const qty = Number(li.quantity || 1);
       const price = Number(li.unitPrice || 0);
       const discount = Number(li.discountAmount || 0);

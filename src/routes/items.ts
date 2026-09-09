@@ -6,12 +6,10 @@ import {
 } from "../lib/serverHelpers";
 import { isValidCittaCode, getCittaCodeType } from "../data/referenceData";
 
-// Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix. Only the few
-// keyword matches we can be confident about get auto-classified; everything
-// else is left UNMAPPED rather than silently guessing a wrong-but-valid code.
+// Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix.
 function inferCittaCode(sku: string, desc: string): string {
   const text = `${sku} ${desc}`.toLowerCase();
-  if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+  if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
   if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
   if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
   return "UNMAPPED";

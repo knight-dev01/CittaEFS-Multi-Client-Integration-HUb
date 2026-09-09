@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDatabaseUrl } from '../config/dbConfig';
 import { invoiceQueue, QueueJob, QueueablePayload } from '../queues/invoiceQueue';
 import { cittaEfsClient, CittaEfsResponse } from '../services/cittaEfsClient';
-import { isValidCittaCode } from '../data/referenceData';
+import { isValidCittaCode, normalizeCittaCode, getCittaCodeType } from '../data/referenceData';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
@@ -34,20 +34,26 @@ export async function processInvoiceJob(
       const items = await prisma.item.findMany({ where: { tenantId: job.data.tenantId } });
       const inferServiceCode = (sku: string, desc: string) => {
         const text = `${sku} ${desc}`.toLowerCase();
-        // Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix. Only the
-        // few keyword matches we can be confident about get auto-classified.
-        if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+        if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
         if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
         if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
         return "UNMAPPED";
       };
       for (const li of (job.data.lineItems as any[])) {
+        li.hsOrServiceCode = normalizeCittaCode(li.hsOrServiceCode);
         const mapping = items.find(m => m.clientSku === li.itemCode);
-        if (mapping && isValidCittaCode(mapping.hsOrServiceCode)) {
-          li.hsOrServiceCode = mapping.hsOrServiceCode;
-        } else if (!isValidCittaCode(li.hsOrServiceCode)) {
-          const inferred = inferServiceCode(li.itemCode || "", li.description || "");
-          if (isValidCittaCode(inferred)) li.hsOrServiceCode = inferred;
+        const mappingCode = mapping?.hsOrServiceCode ? normalizeCittaCode(mapping.hsOrServiceCode) : "";
+        const inferred = inferServiceCode(li.itemCode || "", li.description || "");
+        const inferredIsService = inferred !== "UNMAPPED" && getCittaCodeType(inferred) === "SERVICE_CODE";
+        const mappingIsServiceMismatch = mappingCode && getCittaCodeType(mappingCode) === "HS_CODE" && inferredIsService;
+        if (inferredIsService && mappingIsServiceMismatch) {
+          li.hsOrServiceCode = inferred;
+        } else if (mappingCode && isValidCittaCode(mappingCode) && !mappingIsServiceMismatch) {
+          li.hsOrServiceCode = normalizeCittaCode(mappingCode);
+        } else if (!isValidCittaCode(li.hsOrServiceCode) && isValidCittaCode(inferred)) {
+          li.hsOrServiceCode = inferred;
+        } else {
+          li.hsOrServiceCode = normalizeCittaCode(li.hsOrServiceCode);
         }
       }
       // Strict check — if still invalid, don't retry 5x, go straight to DLQ as validation (Option A)

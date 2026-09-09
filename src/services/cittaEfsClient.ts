@@ -247,6 +247,7 @@ export class CittaEfsClient {
     const customFields = (payload as any).customFields || {};
     const metadata = (payload as any).metadata || {};
 
+    const { normalizeCittaCode } = await import("../data/referenceData");
     const dtoArray = payload.lineItems.map((item, index) => ({
       invoiceNumber,
       issueDate,
@@ -257,7 +258,7 @@ export class CittaEfsClient {
       unitPrice: item.unitPrice,
       taxAmount: item.vatAmount,
       taxableAmount: item.taxableAmount,
-      hsOrServiceCode: item.hsOrServiceCode || "SERV-DEFAULT",
+      hsOrServiceCode: normalizeCittaCode(item.hsOrServiceCode || "SERV-DEFAULT"),
       lineNum: String((item as any).lineNum ?? index + 1),
       unitCode: (item as any).unitCode || "EA",
       taxCategoryId: (item as any).taxCategoryId || "STANDARD_VAT",
