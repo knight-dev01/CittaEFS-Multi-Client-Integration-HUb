@@ -17,7 +17,10 @@ import { AdminTenantsTab } from '../AdminTenantsTab';
 interface Props {
   activeTab: string;
   setActiveTab: (t: string) => void;
-  onOpenOnboard: () => void;
+  // Optionally pass an existing tenant to resume its step-2 connect flow
+  // (e.g. a tenant whose channel was never authenticated) instead of
+  // starting fresh onboarding.
+  onOpenOnboard: (resumeTenant?: any) => void;
 }
 
 export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) {
@@ -87,7 +90,7 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
       {activeTab === 'staging' && <StagingTab onNavigate={setActiveTab} />}
       {activeTab === 'validation' && <ValidationErrorsTab onNavigate={setActiveTab} />}
       {activeTab === 'successful' && <SuccessfulTab />}
-      {activeTab === 'connectors' && <ConnectorsTab />}
+      {activeTab === 'connectors' && <ConnectorsTab onResumeConnect={() => onOpenOnboard(activeTenant)} />}
       {activeTab === 'mapping' && <ErpMappingTab />}
       {activeTab === 'gateway' && <CittaGatewayTab />}
       {activeTab === 'companies' && <AdminTenantsTab />}

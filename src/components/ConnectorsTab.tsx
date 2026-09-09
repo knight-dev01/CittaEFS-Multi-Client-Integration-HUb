@@ -30,7 +30,7 @@ function formatWhen(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
-export function ConnectorsTab() {
+export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => void } = {}) {
   const { activeTenant } = useHub();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -310,22 +310,34 @@ export function ConnectorsTab() {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
-              <button
-                onClick={handleSyncQbo}
-                disabled={syncingQbo}
-                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-lg border border-indigo-200 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
-              >
-                <RefreshCw className={`w-3 h-3 ${syncingQbo ? 'animate-spin' : ''}`} />
-                <span>{syncingQbo ? 'Syncing...' : 'Sync Now'}</span>
-              </button>
-              <button
-                onClick={handleTestQbo}
-                disabled={testingQbo}
-                className="font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 text-indigo-600 hover:text-indigo-700"
-              >
-                <RefreshCw className={`w-3 h-3 ${testingQbo ? 'animate-spin' : ''}`} />
-                <span>{testingQbo ? 'Testing...' : 'Test (Live)'}</span>
-              </button>
+              {status?.qbo.connected ? (
+                <>
+                  <button
+                    onClick={handleSyncQbo}
+                    disabled={syncingQbo}
+                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-lg border border-indigo-200 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${syncingQbo ? 'animate-spin' : ''}`} />
+                    <span>{syncingQbo ? 'Syncing...' : 'Sync Now'}</span>
+                  </button>
+                  <button
+                    onClick={handleTestQbo}
+                    disabled={testingQbo}
+                    className="font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 text-indigo-600 hover:text-indigo-700"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${testingQbo ? 'animate-spin' : ''}`} />
+                    <span>{testingQbo ? 'Testing...' : 'Test (Live)'}</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => onResumeConnect?.()}
+                  className="w-full px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Connect QuickBooks Online</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -359,22 +371,34 @@ export function ConnectorsTab() {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
-              <button
-                onClick={handleSyncOdoo}
-                disabled={syncingOdoo}
-                className="px-2.5 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold text-xs rounded-lg border border-violet-200 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
-              >
-                <RefreshCw className={`w-3 h-3 ${syncingOdoo ? 'animate-spin' : ''}`} />
-                <span>{syncingOdoo ? 'Syncing...' : 'Sync Now'}</span>
-              </button>
-              <button
-                onClick={handleTestOdoo}
-                disabled={testingOdoo}
-                className="font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 text-violet-600 hover:text-violet-700"
-              >
-                <RefreshCw className={`w-3 h-3 ${testingOdoo ? 'animate-spin' : ''}`} />
-                <span>{testingOdoo ? 'Testing...' : 'Test (Live)'}</span>
-              </button>
+              {status?.odoo.connected ? (
+                <>
+                  <button
+                    onClick={handleSyncOdoo}
+                    disabled={syncingOdoo}
+                    className="px-2.5 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold text-xs rounded-lg border border-violet-200 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${syncingOdoo ? 'animate-spin' : ''}`} />
+                    <span>{syncingOdoo ? 'Syncing...' : 'Sync Now'}</span>
+                  </button>
+                  <button
+                    onClick={handleTestOdoo}
+                    disabled={testingOdoo}
+                    className="font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 text-violet-600 hover:text-violet-700"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${testingOdoo ? 'animate-spin' : ''}`} />
+                    <span>{testingOdoo ? 'Testing...' : 'Test (Live)'}</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => onResumeConnect?.()}
+                  className="w-full px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Layers className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Connect Odoo ERP</span>
+                </button>
+              )}
             </div>
           </div>
 
