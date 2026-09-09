@@ -616,6 +616,13 @@ export class CittaEfsClient {
         `[Writeback Error] Failed to execute QBO writeback for invoice ${clientInvoiceNumber}:`,
         err,
       );
+      // Set FAILED so hub can surface writeback failure and throw back to ERP via error queue; ERP can open hub to retry
+      try {
+        await prisma.invoice.updateMany({
+          where: { tenantId, clientInvoiceId: clientInvoiceNumber },
+          data: { ledgerWritebackStatus: "FAILED" },
+        });
+      } catch {}
     }
 
     // Odoo ERP ledger writeback (chatter message_post) when target is HUB or BOTH
@@ -655,6 +662,12 @@ export class CittaEfsClient {
         `[Writeback Error] Failed to execute Odoo writeback for invoice ${clientInvoiceNumber}:`,
         err,
       );
+      try {
+        await prisma.invoice.updateMany({
+          where: { tenantId, clientInvoiceId: clientInvoiceNumber },
+          data: { ledgerWritebackStatus: "FAILED" },
+        });
+      } catch {}
     }
 
     return {

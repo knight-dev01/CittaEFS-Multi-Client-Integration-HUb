@@ -77,6 +77,9 @@ router.get("/api/invoices/:id", async (req, res) => {
 });
 
 router.put("/api/invoices/:id", async (req: any, res) => {
+  // Immutable hub: invoices are ERP-sourced and read-only; edit in ERP (QBO/Odoo) — hub listens via webhook/sync
+  return res.status(403).json({ success: false, error: "Invoices are ERP-sourced and immutable in hub — edit in ERP (QBO/Odoo) and sync will re-ingest" });
+  // original edit logic archived at archive/v2.29-feature-freeze; only ValidationError resolve may patch hsOrServiceCode via POST /api/validation-errors/resolve
   try {
     const role = req.user?.role;
     if (req.user && !["ADMIN","OPERATOR","INTEGRATION_MANAGER"].includes(role)) return res.status(403).json({ success: false, error: "Forbidden" });
@@ -814,6 +817,7 @@ router.get("/api/queue/stats", async (req:any,res)=>{
 });
 
 router.delete("/api/invoices/:id", async (req:any,res)=>{
+  return res.status(403).json({ success:false, error:"Invoices are ERP-sourced and immutable in hub — delete in ERP (QBO/Odoo) and sync will reflect" });
   try {
     const inv = await prisma.invoice.findUnique({ where:{id:req.params.id}});
     if(!inv) return res.status(404).json({ success:false, error:"Invoice not found"});

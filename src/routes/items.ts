@@ -50,6 +50,7 @@ router.get("/api/items/mappings", async (req: any, res) => {
 });
 
 router.post("/api/items/mappings", async (req, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable in hub — edit in ERP (QBO/Odoo) and sync will re-ingest (only ValidationError resolve may patch hsOrServiceCode)" });
   try {
     const {
       tenantId,
@@ -116,6 +117,7 @@ router.post("/api/items/mappings", async (req, res) => {
 });
 
 router.post("/api/items/mappings/auto-map", async (req, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable — fix in ERP or via ValidationError resolve" });
   try {
     const { tenantId } = req.body;
     let mappedCount = 0;
@@ -150,6 +152,7 @@ router.post("/api/items/mappings/auto-map", async (req, res) => {
 });
 
 router.put("/api/items/mappings/:id", async (req: any, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable in hub — edit in ERP (QBO/Odoo)" });
   try {
     const { id } = req.params;
     const { name, description, unitCode, hsOrServiceCode, defaultVatRate, categoryType } = req.body;
@@ -173,6 +176,7 @@ router.put("/api/items/mappings/:id", async (req: any, res) => {
 });
 
 router.delete("/api/items/mappings/:id", async (req: any, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable in hub — delete in ERP" });
   try {
     await prisma.item.delete({ where: { id: req.params.id } });
     res.json({ success: true });
