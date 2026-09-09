@@ -18,6 +18,11 @@ import {
 
 interface OnboardClientModalProps {
   onClose: () => void;
+  // An existing tenant whose ingestion channel was never authenticated
+  // (e.g. they closed the OAuth popup, or clicked "Finish Later" during
+  // onboarding) — jumps straight to step 2's connect flow for it instead of
+  // starting a fresh onboarding at step 1.
+  resumeTenant?: any;
 }
 
 type QboConnectState = 'idle' | 'connecting' | 'connected' | 'syncing' | 'synced' | 'error';
@@ -54,21 +59,22 @@ function validateTin(value: string): string | null {
   return null;
 }
 
-export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
+export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModalProps) {
   const { onboardTenant, updateTenant, refreshAll, addTenantErp } = useHub() as any;
+  const isResuming = !!resumeTenant;
 
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2>(isResuming ? 2 : 1);
 
-  // Step 1 fields
-  const [companyName, setCompanyName] = useState('');
-  const [tin, setTin] = useState('');
-  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Excel & CSV Import' | 'Odoo ERP'>('QuickBooks Online');
-  const [marketTier, setMarketTier] = useState('Enterprise');
+  // Step 1 fields — pre-filled from resumeTenant so "Previous" from step 2 shows real data
+  const [companyName, setCompanyName] = useState(resumeTenant?.companyName || resumeTenant?.name || '');
+  const [tin, setTin] = useState(resumeTenant?.tin || '');
+  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Excel & CSV Import' | 'Odoo ERP'>(resumeTenant?.platformType || 'QuickBooks Online');
+  const [marketTier, setMarketTier] = useState(resumeTenant?.marketTier || 'Enterprise');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({ companyName: false, tin: false });
 
-  // Result of step 1
-  const [tenant, setTenant] = useState<any | null>(null);
+  // Result of step 1 — pre-populated with the existing tenant when resuming
+  const [tenant, setTenant] = useState<any | null>(resumeTenant || null);
 
   // Step 2: QuickBooks OAuth + initial sync state
   const [qboState, setQboState] = useState<QboConnectState>('idle');
@@ -313,15 +319,19 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-indigo-600" />
-              {step === 1 ? 'Onboard Active Client Entity' : `Connect ${platformType}`}
+              {step === 1 ? 'Onboard Active Client Entity' : isResuming ? `Reconnect ${platformType}` : `Connect ${platformType}`}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               {step === 1
                 ? 'Register a client organization and choose how their invoice data reaches CittaEFS.'
                 : isQbo
-                  ? 'Authorize QuickBooks Online and pull the initial historical invoice sync.'
+                  ? isResuming
+                    ? 'This tenant was never authorized. Complete QuickBooks Online authorization to start syncing invoices.'
+                    : 'Authorize QuickBooks Online and pull the initial historical invoice sync.'
                   : isOdoo
-                    ? 'Enter Odoo instance credentials and pull the initial historical invoice sync.'
+                    ? isResuming
+                      ? 'This tenant was never connected. Enter Odoo instance credentials to start syncing invoices.'
+                      : 'Enter Odoo instance credentials and pull the initial historical invoice sync.'
                     : 'Upload a spreadsheet and normalize it against Master Data to complete onboarding.'}
             </p>
           </div>

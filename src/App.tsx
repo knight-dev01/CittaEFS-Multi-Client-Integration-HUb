@@ -25,6 +25,7 @@ function HubMainContent() {
   const [activeTab, setActiveTabState] = useState<string>('clients');
   const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
+  const [onboardResumeTenant, setOnboardResumeTenant] = useState<any | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return typeof window !== 'undefined' && localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
   });
@@ -66,6 +67,18 @@ function HubMainContent() {
     };
   }, []);
 
+  // Opens the onboarding modal — with no args for a brand-new client, or with
+  // an existing tenant to jump straight to its step-2 connect flow (e.g. a
+  // tenant whose channel was never authenticated during initial onboarding).
+  const openOnboardModal = (resumeTenant?: any) => {
+    setOnboardResumeTenant(resumeTenant || null);
+    setIsOnboardModalOpen(true);
+  };
+  const closeOnboardModal = () => {
+    setIsOnboardModalOpen(false);
+    setOnboardResumeTenant(null);
+  };
+
   const setActiveTab = (tab: string) => {
     setActiveTabState(tab);
     if (typeof window !== 'undefined') {
@@ -86,7 +99,7 @@ function HubMainContent() {
       params?.get('connect') === 'qbo';
 
     if (isInitialized && !hasTenant && currentUser && !hasQboRedirect) {
-      setIsOnboardModalOpen(true);
+      openOnboardModal();
     }
   }, [isInitialized, hasTenant, currentUser]);
 
@@ -135,7 +148,7 @@ function HubMainContent() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenNewInvoiceModal={() => setIsNewInvoiceModalOpen(true)}
-        onOpenOnboardModal={() => setIsOnboardModalOpen(true)}
+        onOpenOnboardModal={() => openOnboardModal()}
       />
 
       {/* Main Content Area next to Sidebar — ERP-isolated, collapsible purple theme */}
@@ -147,7 +160,7 @@ function HubMainContent() {
             {!activeTenant ? (
               <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>
             ) : (
-              <ErpWorkspace activeTab={activeTab} setActiveTab={setActiveTab} onOpenOnboard={() => setIsOnboardModalOpen(true)} />
+              <ErpWorkspace activeTab={activeTab} setActiveTab={setActiveTab} onOpenOnboard={openOnboardModal} />
             )}
           </div>
 
@@ -175,7 +188,7 @@ function HubMainContent() {
 
       {/* Modals */}
       {isOnboardModalOpen && (
-        <OnboardClientModal onClose={() => setIsOnboardModalOpen(false)} />
+        <OnboardClientModal onClose={closeOnboardModal} resumeTenant={onboardResumeTenant} />
       )}
 
       <NewInvoiceModal
