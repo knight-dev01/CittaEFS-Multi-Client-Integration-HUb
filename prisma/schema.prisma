@@ -45,9 +45,8 @@ model TenantErp {
   tenantId     String   @map("tenant_id")
   platformType String   @map("platform_type") // e.g. "QuickBooks Online", "Odoo ERP"
   erpId        String   @map("erp_id") // e.g. qbo, odoo
-  companyId    String?  @map("company_id") // realmId (QBO) or database (Odoo) — allows 5 per tenant per ERP, displayName editable
-  displayName  String?  @map("display_name") // editable label per connection (QBO company name, Odoo DB label)
-  config       String?  @map("config") // JSON per-ERP config (realmId, odooUrl, etc.)
+  displayName  String?  @map("display_name")
+  config       String?  @map("config") // JSON per-ERP config (realmId, sheetName, etc.)
   autoEnqueueQbo Boolean @default(true) @map("auto_enqueue_qbo") // when true sync auto-enqueues to CittaEFS; gateway default true (was false)
   status       String   @default("ACTIVE") @map("status") // ACTIVE | INACTIVE | NEEDS_REAUTH
   lastSyncAt   DateTime? @map("last_sync_at")
@@ -56,9 +55,8 @@ model TenantErp {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, erpId, companyId])
+  @@unique([tenantId, platformType])
   @@index([tenantId])
-  @@index([companyId])
   @@map("tenant_erps")
 }
 
@@ -114,10 +112,8 @@ model Item {
 
 model Invoice {
   id                    String    @id @default(uuid())
-  tenantId              String    @map("tenant_id") // implicit citta tenant (single hub) for citta_efs_key; ERP focus — tenantId = citta hub
-  sourceErp             String?   @map("source_erp") // e.g. qbo, odoo — ERP that created invoice
-  tenantErpId           String?   @map("tenant_erp_id") // FK to TenantErp connection (allows 5 per ERP)
-  companyId             String?   @map("company_id") // realmId (QBO) or database (Odoo) for per-connection tracking
+  tenantId              String    @map("tenant_id")
+  sourceErp             String?   @map("source_erp") // e.g. qbo, odoo
   qboInvoiceId          String?   @map("qbo_invoice_id") // immutable QBO Id when sourceErp=qbo; business key remains clientInvoiceId=DocNumber
   odooInvoiceId         String?   @map("odoo_invoice_id") // immutable Odoo account.move id when sourceErp=odoo; business key remains clientInvoiceId=name
   clientInvoiceId       String    @map("client_invoice_id")
@@ -136,13 +132,13 @@ model Invoice {
   headerDiscount        Float     @default(0) @map("header_discount")
   headerCharges         Float     @default(0) @map("header_charges")
   callbackUrl           String?   @map("callback_url") // async signed callback when NRS completes (NRS MBS pattern)
-  status                String    @default("PENDING_NRS_STAMP") // PENDING_NRS_STAMP until Citta verifies → APPROVED|SIGNED|REJECTED|CANCELLED
+  status                String    @default("PENDING_NRS_STAMP")
   irn                   String?   @unique
   csid                  String?
   qrCodeUrl             String?   @map("qr_code_url")
   pdfSignedUrl          String?   @map("pdf_signed_url")
   rawPayloadHash        String?   @map("raw_payload_hash")
-  ledgerWritebackStatus String    @default("PENDING") @map("ledger_writeback_status") // PENDING → SYNCED|FAILED (FAILED after 5 writeback retries)
+  ledgerWritebackStatus String    @default("PENDING") @map("ledger_writeback_status")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
@@ -151,8 +147,6 @@ model Invoice {
 
   @@unique([tenantId, clientInvoiceId])
   @@index([tenantId])
-  @@index([companyId])
-  @@index([tenantErpId])
   @@index([status])
   @@map("invoices")
 }
@@ -232,10 +226,10 @@ model User {
 model Integration {
   id                   String    @id @default(uuid())
   tenantId             String    @map("tenant_id")
-  sourceSystem         String    @map("source_system") // e.g. "QUICKBOOKS_ONLINE", "ODOO"
+  sourceSystem         String    @map("source_system") // e.g. "QUICKBOOKS_ONLINE"
   accessToken          String    @map("access_token")
   refreshToken         String    @map("refresh_token")
-  companyId            String    @map("company_id") // realmId (QBO) or database (Odoo) — allows 5 per tenant per ERP
+  companyId            String    @map("company_id") // realmId
   accessTokenExpiresAt DateTime  @map("access_token_expires_at")
   status               String    @default("CONNECTED") // "CONNECTED", "NEEDS_REAUTH", "DISCONNECTED"
   lastSyncAt           DateTime? @map("last_sync_at")
@@ -244,9 +238,8 @@ model Integration {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, sourceSystem, companyId])
+  @@unique([tenantId, sourceSystem])
   @@index([tenantId])
-  @@index([companyId])
   @@map("integrations")
 }
 
