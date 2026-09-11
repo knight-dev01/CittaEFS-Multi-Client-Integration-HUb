@@ -348,10 +348,10 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
           <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
             {step > 1 ? <CheckCircle2 className="w-3.5 h-3.5" /> : '1'}
           </span>
-          <span className={step >= 1 ? 'text-indigo-600' : 'text-slate-400'}>Client & Channel</span>
+          <span className={step >= 1 ? 'text-indigo-600' : 'text-slate-400'}>ERP & Channel</span>
           <div className="flex-1 h-px bg-slate-200" />
           <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
-          <span className={step >= 2 ? 'text-indigo-600' : 'text-slate-400'}>{isQbo ? 'Connect QuickBooks' : isOdoo ? 'Connect Odoo' : 'Upload & Normalize'}</span>
+          <span className={step >= 2 ? 'text-indigo-600' : 'text-slate-400'}>Connect ERP</span>
         </div>
 
         {step === 1 ? (
@@ -359,7 +359,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Client Entity Name *</label>
+                <label className="block font-medium text-slate-700 mb-1">ERP Entity Name *</label>
                 <input
                   type="text"
                   value={companyName}
@@ -492,14 +492,14 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               <div className="p-5 bg-white rounded-xl border border-slate-200/80 text-center space-y-3">
                 <Zap className="w-8 h-8 text-amber-500 mx-auto" />
                 <p className="text-slate-600 text-xs leading-relaxed max-w-sm mx-auto">
-                  Click below to open QuickBooks Online in a secure popup and authorize CittaEFS to read invoices, customers, and items.
+                  Click below to open the ERP in a secure popup and authorize CittaEFS to read invoices, customers, and items.
                 </p>
                 <button
                   onClick={handleConnectQuickBooks}
                   className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center gap-2 transition-colors"
                 >
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Connect QuickBooks Online</span>
+                  <span>Connect ERP</span>
                 </button>
               </div>
             )}

@@ -284,22 +284,45 @@ router.post("/api/tenants/:id/erps", async (req: any, res) => {
     const { platformType, displayName, config } = req.body;
     if (!platformType) return res.status(400).json({ success: false, error: "platformType required" });
     const erp = getErpForTenant(platformType);
-    // Independent integrations: check by erpId + companyId (realmId/database) not just platformType — allows multiple same ERP with different companyId
+    // Independent integrations: check by erpId + companyId (realmId/database) — tolerant until migration 20260910000000_erp_independent applied
     let cfgCompanyId: string | null = null;
     try { const cfg = typeof config === "string" ? JSON.parse(config) : config; cfgCompanyId = cfg?.realmId || cfg?.companyId || cfg?.database || null; } catch {}
-    const existing = await prisma.tenantErp.findFirst({ where: { tenantId: req.params.id, erpId: erp.id, companyId: cfgCompanyId } });
+    let existing: any = null;
+    try {
+      existing = await prisma.tenantErp.findFirst({ where: { tenantId: req.params.id, erpId: erp.id, companyId: cfgCompanyId } as any });
+    } catch (e:any) {
+      if (String(e.message).includes('company_id') && String(e.message).includes('does not exist')) {
+        existing = await prisma.tenantErp.findFirst({ where: { tenantId: req.params.id, platformType } });
+      } else throw e;
+    }
     if (existing) return res.status(409).json({ success: false, error: `ERP ${platformType} with same companyId already connected` });
-    const created = await prisma.tenantErp.create({
-      data: {
-        tenantId: req.params.id,
-        platformType,
-        erpId: erp.id,
-        companyId: cfgCompanyId,
-        displayName: displayName || platformType,
-        config: config ? (typeof config === "string" ? config : JSON.stringify(config)) : null,
-        status: "ACTIVE",
-      },
-    });
+    let created: any;
+    try {
+      created = await prisma.tenantErp.create({
+        data: {
+          tenantId: req.params.id,
+          platformType,
+          erpId: erp.id,
+          companyId: cfgCompanyId,
+          displayName: displayName || platformType,
+          config: config ? (typeof config === "string" ? config : JSON.stringify(config)) : null,
+          status: "ACTIVE",
+        } as any,
+      });
+    } catch (e:any) {
+      if (String(e.message).includes('company_id') && String(e.message).includes('does not exist')) {
+        created = await prisma.tenantErp.create({
+          data: {
+            tenantId: req.params.id,
+            platformType,
+            erpId: erp.id,
+            displayName: displayName || platformType,
+            config: config ? (typeof config === "string" ? config : JSON.stringify(config)) : null,
+            status: "ACTIVE",
+          },
+        });
+      } else throw e;
+    }
     await safeAuditLogCreate(prisma, { tenantId: req.params.id, action: "ERP_CONNECTED", entityType: "TENANT_ERP", entityRef: platformType, details: `Connected ERP ${platformType} to tenant ${req.params.id}`, sha256PayloadHash: generateSha256(platformType), performedBy: req.user?.email || "Admin" });
     res.status(201).json(created);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
