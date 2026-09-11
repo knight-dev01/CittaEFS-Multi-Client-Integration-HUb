@@ -118,7 +118,7 @@ export async function connectOdoo(
   const encryptedRefreshMarker = packEncryptedString(INERT_REFRESH_TOKEN_MARKER);
 
   await prisma.integration.upsert({
-    where: { tenantId_sourceSystem_companyId: { tenantId, sourceSystem: SOURCE_SYSTEM, companyId: odooDatabase } },
+    where: { tenantId_sourceSystem: { tenantId, sourceSystem: SOURCE_SYSTEM } },
     create: {
       tenantId,
       sourceSystem: SOURCE_SYSTEM,

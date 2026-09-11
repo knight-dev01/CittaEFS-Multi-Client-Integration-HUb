@@ -177,10 +177,9 @@ router.get("/api/integrations/qbo/callback", async (req, res) => {
 
     await prisma.integration.upsert({
       where: {
-        tenantId_sourceSystem_companyId: {
+        tenantId_sourceSystem: {
           tenantId,
           sourceSystem: "QUICKBOOKS_ONLINE",
-          companyId: (realmId as string) || "UNKNOWN_REALM",
         },
       },
       create: {
