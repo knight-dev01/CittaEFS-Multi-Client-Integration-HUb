@@ -294,20 +294,8 @@ router.post("/api/tenants/:id/erps", async (req: any, res) => {
         displayName: displayName || platformType,
         config: config ? (typeof config === "string" ? config : JSON.stringify(config)) : null,
         status: "ACTIVE",
-        } as any,
-      });
-    } catch (e:any) {
-      if (String(e.message).includes('company_id') && String(e.message).includes('does not exist')) {
-        created = await prisma.tenantErp.create({
-          data: {
-            tenantId: req.params.id,
-            platformType,
-            erpId: erp.id,
-            displayName: displayName || platformType,
-            config: config ? (typeof config === "string" ? config : JSON.stringify(config)) : null,
-            status: "ACTIVE",
-          },
-        });
+      },
+    });
     await safeAuditLogCreate(prisma, { tenantId: req.params.id, action: "ERP_CONNECTED", entityType: "TENANT_ERP", entityRef: platformType, details: `Connected ERP ${platformType} to tenant ${req.params.id}`, sha256PayloadHash: generateSha256(platformType), performedBy: req.user?.email || "Admin" });
     res.status(201).json(created);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
