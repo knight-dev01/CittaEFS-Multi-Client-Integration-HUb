@@ -71,7 +71,7 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
         </div>
         <div className="flex items-center gap-2">
           {canOnboard && (
-            <button onClick={onOpenOnboardModal} className="px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg cursor-pointer">+ Onboard Client</button>
+            <button onClick={onOpenOnboardModal} className="px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg cursor-pointer">+ Onboard ERP</button>
           )}
           {canPurge && (
             <button onClick={handlePurge} className="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Clear Staging</button>

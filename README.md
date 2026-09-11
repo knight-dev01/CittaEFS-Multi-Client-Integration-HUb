@@ -1,4 +1,4 @@
-# CittaEFS Multi-Tenant Integration Hub & NRS E-Invoicing Gateway
+# CittaEFS ERP Gateway — QBO & Odoo to NRS E-Invoicing
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React_19-20232A?style=flat&logo=react&logoColor=61DAFB)
@@ -8,191 +8,166 @@
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
 ![WebSockets](https://img.shields.io/badge/WebSockets-Live_Telemetry-brightgreen)
 
-A high-performance enterprise integration platform and middleware built for multi-tenant ERP connectivity, automated fiscal normalization, and national tax authority (**FIRS NRS — Nigeria**) e-invoicing compliance.
+**ERP Gateway, not Client Hub.** CittaEFS is the NRS extension — the hub holds one implicit tenant for `citta_efs_key` (`Tenant.cittaApiKey` `prisma/schema.prisma:10`) and onboarded **ERPs** (QBO, Odoo), not clients. Every narrative, onboarding, processing and message is ERP-scoped from onset: the options you see are exactly the ERPs you onboarded.
 
-CittaEFS normalizes heterogeneous ERP data—from live REST APIs and database staging views to native Excel/CSV spreadsheet drops—into a standardized fiscal matrix for real-time validation, cryptographic Internal Reference Number (IRN) generation, QR code generation, and direct tax authority submission.
-
----
-
-## 🌟 Key Architecture & Enterprise Highlights
-
-### 1. ERP-Isolated Multi-Tenant Workspace (Per-ERP Dedicated UI)
-* **Tenant-Aware Sidebar**: Tenants grouped by ERP in `Navbar` (`src/config/erpRegistry.ts`) — each `platformType` (`QuickBooks Online`, `Excel & CSV Import`, `SAP S/4HANA`…) renders as an isolated workspace with its own short label (`QBO`, `Excel`, `SAP`) and mode banner. Switching workspace preserves state; bloom removed wrapper `ExcelSpreadsheetEditor.tsx` and 214 lines frozen adapters.
-* **Per-ERP Dedicated UI & Tabs**: `src/components/erp/ErpWorkspace.tsx` routes `Overview / Invoices / Import / Customers / Items / Validation / Connectors / Field Mapping / CittaEFS Gateway` per ERP (`erp.tabs`). QBO tenants show OAuth2 connect/sync, Excel tenants show drag-drop grid + normalization, future ERPs (SAP/NetSuite/Odoo/SQL) render `comingSoon` config + mapping skeleton — add one entry to `ERP_REGISTRY` to onboard a new ERP.
-* **Tenant-Scoped Config**: `Tenant.erpConfig` (JSON) stores per-ERP connection fields and `Field Mapping` rules (`source ↔ target`) via `PATCH /api/tenants/:id/erp-config`; `Tenant.cittaGatewayUrl / cittaWritebackTarget` stores CittaEFS-provided credentials per tenant (see below).
-
-### 2. Multi-Tenant ERP Connector Architecture
-* **QuickBooks Online (QBO) [ACTIVE & LIVE]**: Native REST API integration featuring OAuth2 token exchange, automatic token refresh, webhook CDC ingestion, sparse writeback of IRN/QR to QBO custom fields, and per-tenant `realmId` config (`src/adapters/connectorAdapters.ts` — only `QuickBooksAdapter` + `CsvAdapter` active, frozen adapters removed).
-* **Excel & CSV [ACTIVE]**: SheetJS drag-drop, multi-item grouping, preview before gateway (see below), sheet-name warning for `Customer/Item/Invoice Template`.
-* **Extensible Enterprise Adapters** (registry `comingSoon`): `SAP S/4HANA` (OData `API_INVOICE_SRV` + CSRF), `NetSuite SuiteTalk` (TBA HMAC-SHA256), `Odoo` (JSON-RPC), `Custom SQL` (`vw_pending_invoices`). Enable by adding to `ERP_REGISTRY`.
-
-### 3. Intelligent Spreadsheet Ingestion Engine (.xlsx / .xls / .csv) + Mandatory Preview
-* **Preview Before Gateway**: `src/components/InvoicePreview.tsx` renders normalized totals (`taxable/VAT/grandTotal`), HS badges (`UNMAPPED` warning, `B2C TIN stripped`), expected IRN/QR, and raw JSON. `NewInvoiceModal` and `ExcelDocumentViewer` group by `clientInvoiceNumber` and show a modal of all invoices — nothing hits `POST /api/integration/gen/invoices` or `POST /api/hub/v1/invoices` until confirmed.
-* **SheetJS + Grouping + Normalization**: Preview includes auto-filled HS, 7.5% default VAT, and validation warnings.
-
-### 4. Role-Based Access Control (RBAC) System
-Pre-middleware authentication gate providing isolated interfaces and permissions across four enterprise user roles:
-* 👑 **Administrator (`ADMIN`)**: Full access across all multi-tenant configurations, client onboarding, security policies, and system purges.
-* ⚙️ **Integration Manager (`INTEGRATION_MANAGER`)**: Manages connector API keys, OAuth credentials, field mapping rules, and webhook streams.
-* 📋 **Ingestion Operator (`OPERATOR`)**: Oversees day-to-day invoice creation, batch spreadsheet uploads, and customer directory management.
-* 🔍 **Compliance Auditor (`AUDITOR`)**: Read-only access to cryptographic audit logs, FIRS NRS submission statuses, and tax reconciliation metrics.
-
-### 5. CittaEFS Gateway Credentials & Writeback (Per-Tenant)
-* **CittaEFS-Provided Credentials**: `CittaGatewayTab` (`src/components/erp/CittaGatewayTab.tsx`) lets CittaEFS (or ADMIN) paste per-tenant `cittaGatewayUrl` and `cittaApiKey` (AES-256-GCM `encryptedSecret`); stored in `Tenant.cittaGatewayUrl / cittaApiKey / cittaWritebackTarget`. Test button `POST /api/tenants/:id/citta-config/test` hits `/api/einvoice/archive` with Bearer key.
-* **Writeback to CittaEFS and/or Hub**: `PATCH /api/tenants/:id/citta-config` sets `cittaWritebackTarget = HUB | CITTAEFS | BOTH`. `src/services/cittaEfsClient.ts` reads per-tenant `gatewayUrl` via `getCittaEfsConfig()` for every `signAndStampInvoice`/`getArchive` etc, then `executeClientLedgerWriteback` posts IRN/QR to `cittaGatewayUrl` when `CITTAEFS/BOTH` and to QBO sparse-update when `HUB/BOTH`. External CittaEFS systems integrate via `POST /api/hub/v1/invoices` with `X-Hub-Api-Key: <cittaApiKey>`.
-
-### 6. 4-Stage Fiscal Data Normalization Pipeline
-1. **Stage 01 — Source Extraction**: Ingestion via live Webhook, API pull, SQL staging poller, or Excel drop — per-ERP UI.
-2. **Stage 02 — EFS Excel Matrix**: Normalization of source fields into standardized schema columns (`clientInvoiceNumber`, `customerTin`, `hsCode`, `vatRate`, `currency`) using per-tenant `erpConfig` rules.
-3. **Stage 03 — Taxonomy & Rule Verification**: Real-time validation against FIRS/NRS Nigeria rules, including B2B TIN lookup, 8-digit HS code verification, and 7.5% VAT auto-calculation (Nigeria NRS standard, per-tenant `defaultVatRate`).
-4. **Stage 04 — NRS Gateway Transmission**: Per-tenant gateway URL submission with SHA-256 hashing (`crypto.createHash`), IRN assignment, and QR generation.
-
-### 7. Asynchronous Queue & Live Telemetry Engine
-* **Database-Backed Job Queue**: `prisma QueueJob` (`src/queues/invoiceQueue.ts`) with hydrate + `recoverOrphans()` for `PENDING_NRS_STAMP` after restart, exponential backoff `5s/30s/2m/10m/30m`, DLQ → `REJECTED`. `src/workers/invoiceWorker.ts` and `src/crons/reconciliation.ts` share recovery.
-* **Reconciliation**: `runQbReconciliationCron` polls QBO CDC per connected `Integration`; `runNrsReconciliationCron` polls per-tenant `cittaGatewayUrl /api/einvoice/archive` and reconciles stuck IRNs. `WebSockets Live Telemetry` fans `type:"update"` to WS primary, SSE after 2 WS fails, 30s hidden-aware backup poll (`src/lib/store.tsx`).
+Invoices remain the fiscal unit pushed to EFS/NRS — `clientInvoiceNumber` (`DocNumber` QBO / `name` Odoo), `issueDate`, `customerCode|Name|Tin 10-14`, `lineItems {itemCode, hsOrServiceCode bare 8130|8471.30, vatRate 7.5, quantity, unitPrice}`, `invoiceTypeCode 388`, `headerCharges|Discount` — normalized per-ERP via `QuickBooksAdapter|OdooAdapter` `src/adapters/connectorAdapters.ts:23`.
 
 ---
 
-## 🗺️ System Architecture & Data Flow
+## 🌟 Key Architecture — Gateway-Tailored
+
+### 1. ERP-Centric Onboarding (Not Client)
+* **Onboard ERP, not Client:** `OnboardClientModal` → **Onboard ERP** (`src/components/OnboardClientModal.tsx`) offers `QuickBooks Online` (OAuth2) and `Odoo ERP` (JSON-RPC API key) only — Excel removed, `CsvAdapter` deleted. Pick ERP → `POST /api/tenants/onboard` creates implicit `Tenant` + `TenantErp {erpId qbo|odoo, companyId realmId|database, displayName editable, status ACTIVE, autoEnqueue true}` `prisma/schema.prisma:43` (`@@unique[tenantId,erpId,companyId]` independent, no 5 cap).
+* **Immediate ERP Scope:** From creation, `Navbar` groups by ERP `src/config/erpRegistry.ts` (`QBO`, `Odoo`), `ErpWorkspace` renders only ERP's tabs, processing queues and messages are filtered `?sourceErp=qbo|odoo` + `companyId`. No client abstraction.
+* **Implicit Citta Tenant:** Single hub tenant holds `cittaApiKey` / `cittaGatewayUrl` / `cittaWritebackTarget BOTH` (`HUB|CITTAEFS|BOTH`); per-ERP `Integration {tenantId, sourceSystem, companyId, accessToken AES-GCM, status CONNECTED}` `prisma/schema.prisma:226` (`@@unique[tenantId,sourceSystem,companyId]` independent).
+
+### 2. Independent ERP Connections
+* **QBO:** OAuth2 `GET /api/integrations/qbo/connect` `state JWT tenantId` → `callback` `POST oauth.platform.intuit.com/oauth2/v1/tokens/bearer` `packEncryptedString` `companyId=realmId` `src/routes/qbo.ts:178` `tenantId_sourceSystem_companyId`. `GET /api/integrations/qbo/status`, `POST /api/integrations/qbo/sync` `fetchAllQboPaginated 1000` `STARTPOSITION` `src/services/qboService.ts:400`, webhook `POST /api/webhooks/qbo` `intuit-signature HMAC` `src/routes/webhooks.ts:92` set in **Intuit Developer Portal** `https://<hub>/api/webhooks/qbo` `QBO_WEBHOOK_VERIFIER`.
+* **Odoo:** `POST /api/integrations/odoo/connect {odooUrl,database,username,apiKey}` `src/routes/odoo.ts:16` `callOdoo jsonrpc common.authenticate` `companyId=database` `STATIC_KEY_SENTINEL 2099`, `GET /status`, `POST /sync` `fetchAllPaginated 100 offset` / `fetchOdooInvoicesSince write_date` `src/services/odooService.ts:279`. No webhook — `60s` poll.
+* **Independent:** Same `tenantId` can have `qbo realm 123 + 456` and `odoo db prod_us|prod_eu` — each `companyId` distinct, `displayName` editable, `lastSyncAt` per connection, `Open in QBO txnId` / `Odoo web#id=` deep link.
+
+### 3. Gateway Listens — ERP Owns Edits
+* **Read-Only Hub Buffer:** `Customer` `prisma/schema.prisma:63` `clientSystemCustId`, `Item` `:92` `clientSku hsOrServiceCode bare`, `Invoice` `:113` `sourceErp qbo|odoo qboInvoiceId|odooInvoiceId` — hub stores after `upsertQboMasterData :580` / `upsertOdooMasterData :354` but `PUT /api/invoices/:id :79` `PUT /customers :106` `PUT /items :152` `POST /customers|items` → `403` “ERP-sourced immutable — edit in ERP, hub re-ingests via sync/webhook”. Only `POST /api/validation-errors/resolve :40` patches `hsOrServiceCode` → `8130` `normalizeCittaCode` `src/data/referenceData.ts:22` for `Invalid Product Code`.
+* **Excel Removed:** `CsvAdapter` `src/adapters/connectorAdapters.ts:359`, `ImportTab`, `ExcelDocumentViewer` deleted; `POST /api/integration/gen/invoices` restricted `sourceErp ∈ {qbo,odoo}` `403` `src/routes/invoices.ts:145`.
+
+### 4. CittaEFS = Hub Extension
+* **Not a Client:** `CittaGateway = hub` `https://ei-api.azurewebsites.net` `src/services/cittaEfsClient.ts:32` `POST gen/invoices dtoArray hSorServiceCode bare` `:276` `GET archive :364` `GET errors/validation|sign|transmit :392` `Bearer sk_live citta_efs_key` via `getCittaEfsConfig()`. `CittaGatewayTab` per-ERP is gone — global `cittaApiKey` implicit.
+* **Pending Until Verified:** `PENDING_NRS_STAMP` `prisma Invoice.status` after `invoiceQueue.add signInvoice idempotency tenant:DocNumber` `src/queues/invoiceQueue.ts:426` `5s runWorkerBatch` `src/workers/invoiceWorker.ts:30` `5 retries [5s,30s,2m,10m,30m]` `DLQ → REJECTED` `ValidationError OPEN` until `runNrsReconciliationCron :98` `GET archive 200 pending` `60s` `src/crons/reconciliation.ts` → `APPROVED irn|csid|qrCodeUrl ledgerWriteback PENDING→SYNCED|FAILED :141` `60s QBO LastUpdatedTime` `60s Odoo write_date` `300s NRS` `server.ts:140`.
+
+### 5. Writeback + Throw Errors Back + Open ERP
+* **Success:** `executeClientLedgerWriteback :548` `writebackToQbo :889` `POST /v3/company/{realm}/invoice?minorversion=65 sparse CustomField IRN|QR_CODE_URL` verify `GET invoice`, `writebackToOdoo :579` `message_post IRN QR` chatter dedup `5x` `FAILED` surfaces. `GET /api/metrics byErp` `src/routes/validation.ts:154` `byErp[{qbo,odoo total|approved|pending|rejected}]` `timeseries 30d daily` `erpHealth lag`.
+* **Errors Back to ERP:** `Citta Gateway error 400 hSorServiceCode HS-` / `Invalid Product Code` → `ValidationError MISSING_HS_CODE` → `erp-error-queue` memo `QBO memo` / `Odoo chatter` “Citta Rejected [category] — fix in ERP → resync” + hub `Open in ERP` deep link per `qboInvoiceId`/`odooInvoiceId`. `GET /api/validation-errors?sourceErp=qbo` + `GET /api/integrations/{qbo,odoo}/status?companyId` per connection.
+
+### 6. Normalization & Validation (Remains)
+* **4-Stage:** `1 Webhook|poll` → `2 Normalize clientInvoiceNumber|customerTin|hsCode|vatRate|currency` → `3 Validate B2B TIN 10-14, hs bare 8130, INVOICE_NUMBER_PATTERN ^[A-Z0-9]+$, INVOICE_TYPE_REQUIRES_IRN 380|384|393, 7.5%` → `4 NRS Gateway SHA-256 IRN/QR`.
+* **Queue:** `prisma QueueJob` `hydrate+recoverOrphans PENDING after restart` `recoverStale 2m`, `BullMQ optional REDIS_URL` else DB-memory, `WebSockets Live Telemetry` `type:update` WS primary SSE fallback 30s `src/lib/store.tsx`.
+
+---
+
+## 🗺️ System Architecture — ERP Gateway
 
 ```
 +-----------------------------------------------------------------------------------+
-|                                 SOURCE ERP DATA                                   |
-|   +-------------------+   +--------------------+   +--------------------------+   |
-|   | QuickBooks REST   |   | Custom SQL Staging |   | Excel / CSV Drops (.xlsx)|   |
-|   +---------+---------+   +---------+----------+   +------------+-------------+   |
-+-------------|-----------------------|---------------------------|-----------------+
-              |                       |                           |
-              v                       v                           v
+|                          SOURCE ERPs (Onboarded)                                  |
+|   +-------------------+   +-------------------+                                     |
+|   | QuickBooks Online |   | Odoo ERP (JSON-RPC)|                                    |
+|   | OAuth2 + Webhook |   | API key + Poll     |                                    |
+|   +---------+---------+   +---------+----------+                                    |
++-------------|-----------------------|-------------------+
+              |                       |
+              v                       v  (hub listens — 60s QBO/60s Odoo poll + QBO webhook)
 +-----------------------------------------------------------------------------------+
-|                        CITTAEFS INTEGRATION HUB (SERVER)                          |
+|                        CITTAEFS ERP GATEWAY (SERVER)                              |
 |  +-----------------------------------------------------------------------------+  |
-|  | Express REST API & WebSockets Telemetry Server                              |  |
-|  | - Authentication Gate & JWT RBAC Validation                                 |  |
-|  | - Zod Schema Ingestion Validation (`invoiceIngestionSchema`)                |  |
+|  | Express + WS + Vite (prod static dist) | JWT | rate-limit 300/min CORS      |  |
 |  +-------------------------------------+---------------------------------------+  |
 |                                        |                                          |
 |  +-------------------------------------v---------------------------------------+  |
-|  | 4-Stage Fiscal Engine & Queue Worker Pool (`invoiceQueue`)                  |  |
-|  | - Tax Rules & 16% VAT Calculation Engine                                    |  |
-|  | - Cryptographic SHA-256 Hashes & IRN Generator                               |  |
-|  | - Encrypted Credential Manager (`packEncryptedString`)                       |  |
+|  | Normalize per-ERP (QBO DocNumber→clientInvoiceNumber, Odoo product_id       |  |
+|  | "[REF] Name"→sku) → Immutable snapshot Invoice|Item|Customer (read-only)    |  |
+|  | Validate TIN 10-14, hs bare 8130, 7.5% VAT → Queue PENDING_NRS_STAMP        |  |
+|  | queueJob DB + BullMQ 5s worker 5 retries → cittaEfsClient dtoArray          |  |
 |  +-------------------------------------+---------------------------------------+  |
 |                                        |                                          |
 |  +-------------------------------------v---------------------------------------+  |
-|  | Prisma ORM Persistence Layer (SQLite / PostgreSQL)                          |  |
+|  | Prisma PostgreSQL (Neon) Tenant(implicit citta) + TenantErp(companyId)     |  |
+|  | + Integration(companyId) + Invoice(companyId,tenantErpId) + QueueJob       |  |
+|  | + ValidationError + AuditLog + User                                          |  |
 |  +-----------------------------------------------------------------------------+  |
++----------------------------------------|------------------------------------------+
+                                         |
+                                         v  (POST gen/invoices bare, GET archive/errors)
++-----------------------------------------------------------------------------------+
+|              CITTAEFS GATEWAY EXTENSION — https://ei-api.azurewebsites.net        |
+|         (hub's NRS extension, Bearer citta_efs_key, single implicit tenant)       |
 +----------------------------------------|------------------------------------------+
                                          |
                                          v
 +-----------------------------------------------------------------------------------+
-|                         FIRS NRS TAX AUTHORITY PORTAL (NIGERIA)                    |
-|      (Cryptographic Stamp Verification, IRN Validation & Tax Certification)       |
+|                         FIRS NRS TAX AUTHORITY PORTAL (NIGERIA)                   |
+|      (Stamp IRN|csid|qrCodeUrl, archive 200 pending, errors validation)           |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         v  (SYNCED|FAILED writeback)
++-----------------------------------------------------------------------------------+
+|                 ERP LEDGER WRITEBACK (Open in ERP)                                |
+|   QBO sparse CustomField IRN|QR — Odoo chatter message_post IRN QR — memo errors   |
 +-----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 🖥️ Dashboard View Modules (ERP-Isolated)
+## 🖥️ Dashboard Modules — ERP-Scoped From Onset
 
-The frontend provides a tenant-aware, per-ERP isolated interface. `Navbar` groups workspaces by ERP (`All ERPs` → `QBO`, `Excel`, …) and `ErpWorkspace` renders only the tabs for the active tenant's `platformType` (`getErpForTenant`):
+Onboarding an ERP immediately creates its workspace, queue and messages — no client selection:
 
 | Tab Module | Key Capabilities | ERP Scope |
 | :--- | :--- | :--- |
-| 📊 **System Overview** | Health dashboard, invoice throughput, submission success rate, workspace banner (`QBO`/`Excel` mode). | All |
-| 🔌 **ERP Connectors** | QBO OAuth2 connect/sync + test-live; Excel import grid. Locked with `Switch workspace` hint when tenant ERP mismatches. | QBO / Excel (per-tenant) |
-| 📥 **Batch Ingestion** | SheetJS drag-drop, grouped preview (`InvoicePreview`) before `POST /api/integration/gen/invoices` or `POST /api/hub/v1/invoices`. | QBO / Excel |
-| 🗺️ **Field Mapping** (`mapping`) | Per-tenant matching rules stored in `Tenant.erpConfig` JSON (`source ↔ target`), resolved during normalization. | Per-ERP |
-| 🔑 **CittaEFS Gateway** (`gateway`) | CittaEFS-provided `cittaGatewayUrl` + `cittaApiKey` (encrypted), `Test` against `/api/einvoice/archive`, `Writeback Target` (`HUB | CITTAEFS | BOTH`). Endpoints `PATCH /api/tenants/:id/citta-config` / `POST .../citta-config/test` / `PATCH .../erp-config` (ADMIN). | Per-tenant |
-| 📄 **Fiscal Invoices** | Registry with pagination (`?page&limit`), status filter, IRN/QR (`PENDING_NRS_STAMP → APPROVED`), preview totals. | All |
-| 📑 **Item Dictionary** | HS/Service code, UOM, per-tenant `defaultVatRate` (7.5% NRS standard). | All |
-| 👥 **Customer Directory** | B2B TIN 10-14 alphanum + `postcode` required for B2B, `ccEmail` semicolon list, `cittaCustomerId` is null until real registration. | All |
-| ⚠️ **Validation Errors** | Taxonomy inspector with auto-fix; backed by `ValidationError` table, paginated. | All |
-| ⚙️ **Settings** | Tenant VAT, retry policy (`BullMQ 5 retries: 5s/30s/2m/10m/30m`), gateway (global view of per-tenant overrides). | ADMIN |
+| 📊 **Overview** | Health, `byErp[qbo,odoo]` `total|approved|pending|rejected` `successRate` `timeseries 30d`, `erpHealth lastSyncAt lag`, `cittaGatewayStatus` | Per ERP `companyId` |
+| 🔌 **Integrations** | QBO OAuth connect/sync + test-live, Odoo form + test-live, per-connection `displayName` editable, `status CONNECTED` `lastSyncAt`, `Open ERP Dashboard` | QBO / Odoo per `companyId` |
+| 📄 **Invoices** | `PENDING_NRS_STAMP → APPROVED|SIGNED|REJECTED` `irn|qrCodeUrl`, `ledgerWriteback SYNCED|FAILED`, `Open in QBO txnId` `Odoo web#id=` | All ERPs filter `sourceErp` |
+| 👥 **Customers** | Read-only directory from ERP `qbo CustomerRef` `odoo res.partner vat` `B2B TIN` — `403` on hub edit | All |
+| 📑 **Items** | Read-only HS/Service `bare 8130` `UOM EA` `defaultVatRate 7.5` — `403` except `Validation resolve` | All |
+| ⚠️ **Validation** | `MISSING_HS_CODE 8130` `INVALID_TIN` `GATEWAY_REJECTED` `TRANSMIT_FAILED` `OPEN→RESOLVED` `Fix|Bulk Fix` → `PENDING` → thrown back `memo` | Per ERP `sourceErp` |
+| ⚙️ **Settings** | Global `VAT 7.5` `retry 5s|30s|2m|10m|30m` `cittaApiKey` implicit | ADMIN |
+| 🔍 **Audit Log** | `PAYLOAD_GENERATED|CODE_MAPPED|CONNECTOR_AUTHENTICATED|QBO_SYNC|ODOO_SYNC|WEBHOOK_RECEIVED` | Per ERP |
+| 🌐 **Citta Gateway (implicit)** | Global `cittaApiKey` `cittaGatewayUrl` `cittaWritebackTarget BOTH` — no per-tenant tab | — |
 
 ---
 
-## 🛠️ Tech Stack & Key Libraries
+## 🛠️ Tech Stack
 
-### Core Architecture
-* **Frontend**: React 19, TypeScript, Vite 6, Tailwind CSS v4, Motion (Framer Motion), Lucide React Icons
-* **Backend**: Express 4, TypeScript (`tsx`), Prisma ORM 5, WebSockets (`ws`), Zod Schema Validation
-* **Spreadsheet Processing**: SheetJS (`xlsx`)
-* **Visualizations & Charts**: Recharts
-* **Integration Services**: Custom zero-dependency fetch-backed QuickBooks Online OAuth2 client, `@google/genai`
+* **Frontend**: React 19, TypeScript, Vite 6, Tailwind CSS v4, Motion, Lucide React
+* **Backend**: Express 4, TypeScript (`tsx`), Prisma 5 PostgreSQL Neon, `ws` WS+SSe, Zod `invoiceIngestionSchema`, `httpsRequest` to Citta
+* **ERP**: QBO fetch OAuth2 `qboService.ts` + Odoo JSON-RPC `odooService.ts`, independent `companyId` uniques, `60s` polls + QBO webhook, `300s` NRS poll
+* **Queue**: `prisma QueueJob` `recoverOrphans` `recoverStale 2m` + `BullMQ ioredis` optional `REDIS_URL`
+* **Security**: AES-256-GCM `packEncryptedString` `Integration companyId`, `JWT 8h/7d` `cookie`, `HMAC intuit-signature|CF35DF20 citta` `CORS * .vercel.app` `rate-limit 300/min`
 
 ---
 
-## 🚀 Local Development & Getting Started
+## 🚀 Getting Started
 
 ### 1. Prerequisites
-* **Node.js**: v18.0.0 or higher
-* **npm**: v9.0.0 or higher
+* Node.js v18+ , npm v9+
 
-### 2. Installation & Setup
-
+### 2. Install
 ```bash
-# 1. Clone the repository
-git clone https://github.com/cittaefs/citta-efs-hub.git
-cd citta-efs-hub
-
-# 2. Install dependencies
+git clone https://github.com/knight-dev01/CittaEFS-Multi-Client-Integration-HUb.git
+cd CittaEFS-Multi-Client-Integration-HUb
 npm install
-
-# 3. Configure environment variables (.env)
 cp .env.example .env
+# set DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY, CITTAEFS_API_KEY, CITTAEFS_GATEWAY_URL=https://ei-api.azurewebsites.net, QBO_CLIENT_ID|SECRET, QBO_WEBHOOK_VERIFIER
 ```
 
-### 3. Database Initialization & Seeding
-
+### 3. DB & Seed
 ```bash
-# Generate Prisma Client & Push Database Schema
 npx prisma generate
-npx prisma db push
-
-# Seed default multi-tenant sample data and RBAC users
-npm run seed
+npx prisma migrate deploy # applies 20260910000000_erp_independent companyId uniques
+npm run seed # ADMIN + implicit citta tenant + demo QBO|Odoo TenantErp if demo
 ```
 
-### 4. Run Development Server
-
+### 4. Dev
 ```bash
-# Starts Express backend and Vite development server on port 3000
-npm run dev
+npm run dev # Express + Vite :3000, WS /api/ws-events, SSE /api/events
+# http://localhost:3000 → Login ADMIN → Onboard ERP → QBO OAuth / Odoo API key → auto sync fetchAll 1000|100 → PENDING → 5s worker → Citta
 ```
 
-Navigate to `http://localhost:3000` in your web browser.
-
-### 5. Run Verification & Test Suite
-
+### 5. Verify
 ```bash
-# Runs code verification checks and automated integration tests
-npm run test
+node scripts/checkNoFallbacks.js
+npm run test # verifyAll.ts POST gen/invoices 388 bare 8130
+curl -H "Authorization: Bearer <CITTAEFS_API_KEY>" https://ei-api.azurewebsites.net/api/einvoice/archive?fromDate=2026-01-01
 ```
 
 ---
 
-## ☁️ Production Build & Deployment
+## ☁️ Production Build (Render)
 
-### Build Scripts
-This application uses `esbuild` to compile `server.ts` into a self-contained CommonJS bundle in `dist/server.cjs` while maintaining Vite static asset builds:
-
-```bash
-# Production Build Command
-npm run build
-
-# Start Production Server
-npm run start
-```
-
-### Deployment Configuration (Render.com / Cloud Run)
-When deploying to cloud platforms such as **Render.com** or **Cloud Run**:
-
-1. **Environment Variables**: Set `NODE_ENV=production`, `PORT=3000`, `DATABASE_URL`, `JWT_SECRET`, and `ENCRYPTION_KEY`.
-2. **Package Manager**: Use `npm install` for dependency resolution. Ensure no lingering `bun.lock` exists in the repo root so cloud builders execute standard `npm install` from `package.json` (installing all dependencies like `intuit-oauth`, `express`, `prisma`, `ws`).
-3. **Build Command**: `npm install && npm run build`
-4. **Start Command**: `npm run start` (Executes `node start.cjs` which loads `dist/server.cjs`).
-5. **Bundling & External Resolution**: The server build bundles `server.ts` into CommonJS format using `esbuild` with `--packages=external`, deferring external package resolution to standard `node_modules`.
+* **Build:** `(npm run db:migrate || echo advisory lock) && node scripts/checkNoFallbacks.js && prisma generate && vite build && esbuild server.ts --bundle --packages=external`
+* **Start:** `node start.cjs` loads `dist/server.cjs` `PORT 10000`
+* **Env:** `NODE_ENV=production DATABASE_URL JWT_SECRET ENCRYPTION_KEY CITTAEFS_API_KEY CITTAEFS_GATEWAY_URL QBO_CLIENT_ID QBO_CLIENT_SECRET QBO_WEBHOOK_VERIFIER REDIS_URL?`
+* **Intuit Portal:** Webhooks `https://<hub>.onrender.com/api/webhooks/qbo` `intuit-signature` `QBO_WEBHOOK_VERIFIER`
+* **Citta Webhook:** `POST /api/einvoice/webhook` `https://<hub>/api/webhooks/cittaefs|/pay2/einvoicehookweb` `CF35DF20`
 
 ---
 
@@ -201,74 +176,36 @@ When deploying to cloud platforms such as **Render.com** or **Cloud Run**:
 ```
 .
 ├── prisma/
-│   ├── schema.prisma               # Multi-tenant DB (Tenant.cittaGatewayUrl, cittaWritebackTarget, erpConfig, QueueJob, Customer.postcode/ccEmail)
-│   └── seed.ts                     # Seed ADMIN + tenants
-├── scripts/
-│   └── checkNoFallbacks.js          # Guardrail: forbids fallback/placeholder/demo data in prod code
+│   ├── schema.prisma               # Tenant(implicit citta) + TenantErp(companyId erpId displayName autoEnqueue) + Integration(companyId) + Invoice(companyId tenantErpId) + QueueJob + Validation + Audit
+│   ├── migrations/20260910000000_erp_independent/migration.sql
+│   └── seed.ts
+├── scripts/checkNoFallbacks.js
 ├── src/
-│   ├── adapters/
-│   │   └── connectorAdapters.ts    # Only QuickBooksAdapter + CsvAdapter (frozen adapters removed)
-│   ├── components/
-│   │   ├── erp/
-│   │   │   ├── ErpWorkspace.tsx    # Per-ERP isolated workspace router (qbo/excel/generic comingSoon)
-│   │   │   ├── ErpMappingTab.tsx   # Per-tenant field mapping (tenant.erpConfig JSON)
-│   │   │   └── CittaGatewayTab.tsx # CittaEFS credentials (cittaGatewayUrl/cittaApiKey/writebackTarget) + Test
-│   │   ├── InvoicePreview.tsx      # Shared preview (totals, HS badges, IRN/QR expectation, raw JSON) — mandatory before gateway
-│   │   ├── ConnectorsTab.tsx       # QBO connect/sync (per-ERP)
-│   │   ├── ImportTab.tsx           # Tenant-aware QBO/Excel toggle (locked when ERP mismatches)
-│   │   ├── ExcelDocumentViewer.tsx # SheetJS grid + grouped preview modal (Preview & Submit)
-│   │   ├── InvoicesTab.tsx         # Registry with pagination + IRN/QR + credit note
-│   │   ├── CustomerSyncTab.tsx     # With postcode/ccEmail
-│   │   ├── ItemDictionaryTab.tsx
-│   │   ├── Navbar.tsx              # Grouped by ERP (groupTenantsByErp), per-ERP tabs (erp.tabs), CittaEFS Gateway + Mapping
-│   │   ├── OverviewTab.tsx
-│   │   ├── ValidationErrorsTab.tsx
-│   │   ├── SettingsTab.tsx         # Global VAT/retry + link to per-tenant Gateway tabs
-│   │   ├── NewInvoiceModal.tsx     # Preview → Confirm & Send (2-step)
-│   │   ├── OnboardClientModal.tsx  # Creates tenant with platformType → enrolls in ERP workspace
-│   │   └── LoginScreen.tsx
-│   ├── config/
-│   │   ├── erpRegistry.ts          # ERP_REGISTRY (qbo, excel, sap, netsuite, odoo, custom_sql) + getErpForTenant()
-│   │   ├── encryption.ts           # AES-256-GCM (ENCRYPTION_KEY hex or scrypt)
-│   │   └── dbConfig.ts
-│   ├── crons/reconciliation.ts     # Real QBO CDC + per-tenant gateway archive polling
-│   ├── queues/invoiceQueue.ts      # DB-backed QueueJob + recoverOrphans
-│   ├── workers/invoiceWorker.ts    # Calls cittaEfsClient + writeback with writebackTarget
-│   ├── services/
-│   │   ├── cittaEfsClient.ts       # Per-tenant gatewayUrl/apiKey via getCittaEfsConfig(), writeback HUB/CITTAEFS/BOTH
-│   │   └── qboService.ts           # QBO OAuth + fetch + ingest + sparse writeback
-│   ├── schemas/invoice.schema.ts   # headerDiscount/headerCharges, 7.5% VAT, B2G, B2C TIN strip
-│   ├── types/                      # Tenant extended with cittaGatewayUrl, cittaWritebackTarget, erpConfig
-│   ├── App.tsx                     # Now renders ErpWorkspace
-│   └── index.css
-├── server.ts                       # Express + WS, rate-limit/CORS, JWT, pagination, tenant/erp/citta endpoints, hub external API
-├── start.cjs
-├── vite.config.ts
-├── package.json
+│   ├── adapters/connectorAdapters.ts    # QuickBooksAdapter + OdooAdapter (CsvAdapter frozen)
+│   ├── components/erp/ErpWorkspace.tsx # ERP-scoped router (Overview|Invoices|Customers|Items|Validation|Connectors)
+│   ├── components/OnboardClientModal.tsx # Onboard ERP (QBO|Odoo) not Client
+│   ├── config/erpRegistry.ts         # ERP_REGISTRY qbo|odoo active
+│   ├── crons/reconciliation.ts       # runQbReconciliationCron runNrsReconciliationCron recoverOrphans/Stale
+│   ├── queues/invoiceQueue.ts        # DB + BullMQ 5 retries
+│   ├── workers/invoiceWorker.ts      # normalize 8130 bare → cittaEfsClient
+│   ├── services/cittaEfsClient.ts    # POST gen/invoices dtoArray bare, GET archive/errors, writeback SYNCED|FAILED
+│   ├── services/qboService.ts        # OAuth + fetch + ingest + sparse IRN|QR writeback
+│   ├── services/odooService.ts       # JSON-RPC + message_post
+│   ├── routes/tenants.ts             # ERP create tenantId,erpId,companyId independent
+│   ├── routes/qbo.ts|odoo.ts|webhooks.ts|invoices.ts|validation.ts|system.ts
+│   └── data/referenceData.ts         # HS 5600+ Service 400+ bare + normalizeCittaCode
+├── server.ts                       # Express + WS + 5s worker + 60s QBO|Odoo + 300s NRS intervals
 └── README.md
 ```
 
-### Hub External API (for an existing CittaEFS system)
-
-Existing CittaEFS instances push normalized or raw invoices through the hub without a browser session:
-
-* **Auth**: `X-Hub-Api-Key: <Tenant.cittaApiKey>` (per-tenant, `X-Api-Key` or `Authorization: Bearer <key>` also accepted) + optional `tenantId` override for dev.
-* `GET /api/hub/v1/health` — liveness.
-* `POST /api/hub/v1/invoices` — body `{ invoiceNumber|clientInvoiceNumber, issueDate, customerName/Tin, items|lineItems[] {sku|itemCode, desc, qty, price|unitPrice, hsCode, vatRate}, invoiceKind/Type }` → validates via `invoiceIngestionSchema`, duplicate 409, creates `PENDING_NRS_STAMP` invoice, enqueues `signInvoice` job, `202 { status: "PENDING_NRS_STAMP", invoice }`. Poll `GET /api/hub/v1/tenants/:tenantId/invoices/:clientInvoiceNumber` for `irn/qrCodeUrl` when `APPROVED`.
-* `GET /api/hub/v1/tenants/:tenantId/invoices?page&limit&status` — paginated list.
-* Internal `POST /api/integration/gen/invoices` remains for dashboard; hub external reuses same `invoiceQueue` + worker.
-
-After stamping, hub persists `irn/csid/qrCodeUrl` (`APPROVED`, `ledgerWritebackStatus=SYNCED`) and writes back per `cittaWritebackTarget`: `HUB` (hub ledger only), `CITTAEFS` (POST to `cittaGatewayUrl`/`cittaWritebackUrl` with Bearer key), `BOTH` (both).
-
-
 ---
 
-## 🔒 Security & Compliance Standards
+## 🔒 Security & Compliance
 
-* **Credential Encryption**: Per-tenant `cittaApiKey` and `cittaGatewayUrl` are encrypted with AES-256-GCM (`ENCRYPTION_KEY` hex or `ENCRYPTION_SECRET` scrypt) before storage; `Tenant.erpConfig` JSON is tenant-isolated. No defaults in production (`JWT_SECRET`/`ENCRYPTION_KEY` fail-closed).
-* **FIRS/NRS Nigeria Tax Standard Alignment**: Per-tenant `defaultVatRate` (7.5% NRS standard, Nigeria), mandatory B2B TIN 10-14 alphanum + `postcode` for B2B, 8-digit HS validation, `headerDiscount/Charges`, and real `SHA-256` (`crypto.createHash`) IRN/QR with writeback per `cittaWritebackTarget`.
-* **Tenant Data Boundary Isolation**: Multi-tenant schema enforces `where: { tenantId }` isolation; ERP workspaces are UI- and data-isolated (QBO vs Excel vs future ERPs via `ERP_REGISTRY`).
-* **Network**: `CORS` allowlist (`ALLOWED_ORIGINS`/`APP_URL` + `*.vercel.app`), security headers (`X-Content-Type-Options`, `X-Frame-Options`, `HSTS`), rate-limit 120/min (15/min auth), health `GET /api/health`.
+* **Citta Key:** Single `CITTAEFS_API_KEY` `Tenant.cittaApiKey` implicit — no per-tenant key fan-out.
+* **ERP Secrets:** `Integration companyId realmId|database` `accessToken AES-256-GCM` `packEncryptedString` `ENCRYPTION_KEY`.
+* **FIRS/NRS:** `defaultVatRate 7.5` `B2B TIN 10-14` `hs bare` `headerDiscount|Charges` `SHA-256` `X-Hub-Api-Key` hub external `POST /api/hub/v1/invoices` `X-Hub-Api-Key` + `tenantId` override.
+* **Isolation:** ERP-scoped `sourceErp|companyId|tenantErpId` not `tenantId` client; `getScopedTenantWhere` now ERP `companyId` where needed.
 
 ---
 

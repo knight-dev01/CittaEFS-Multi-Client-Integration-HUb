@@ -242,7 +242,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             >
               {tenants.length === 0 ? (
                 <option value="" className="bg-slate-900 text-indigo-400 font-medium">
-                  + Onboard Client Entity
+                  + Onboard ERP
                 </option>
               ) : (
                 Object.entries(grouped).map(([groupLabel, groupTenants]: any) => (
@@ -341,7 +341,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             className="flex items-center justify-center space-x-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg cursor-pointer shadow-sm transition-all"
           >
             <Plus className="w-4 h-4 text-white" />
-            <span>Onboard Client</span>
+            <span>Onboard ERP</span>
           </button>
         )}
         {canIngest && (

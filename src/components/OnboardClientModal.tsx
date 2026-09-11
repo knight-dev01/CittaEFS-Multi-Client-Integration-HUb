@@ -319,11 +319,11 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-indigo-600" />
-              {step === 1 ? 'Onboard Active Client Entity' : isResuming ? `Reconnect ${platformType}` : `Connect ${platformType}`}
+              {step === 1 ? 'Onboard ERP Connection' : isResuming ? `Reconnect ${platformType}` : `Connect ${platformType}`}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               {step === 1
-                ? 'Register a client organization and choose how their invoice data reaches CittaEFS.'
+                ? 'Register an ERP connection — choose QBO or Odoo. Gateway will normalize and push invoices to CittaEFS.'
                 : isQbo
                   ? isResuming
                     ? 'This tenant was never authorized. Complete QuickBooks Online authorization to start syncing invoices.'
@@ -415,7 +415,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-1">
               <div className="flex items-center gap-1.5 font-semibold text-slate-900">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Client Onboarding Protocol:</span>
+                <span>ERP Onboarding Protocol:</span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
                 1. Dedicated Row-Level Security (RLS) tenant isolated.<br />
@@ -438,7 +438,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
-                <span>{isSubmitting ? (tenant ? 'Saving Changes...' : 'Onboarding Client...') : 'Continue'}</span>
+                <span>{isSubmitting ? (tenant ? 'Saving Changes...' : 'Onboarding ERP...') : 'Continue'}</span>
                 {!isSubmitting && <ArrowRight className="w-3.5 h-3.5 text-indigo-200" />}
               </button>
             </div>
