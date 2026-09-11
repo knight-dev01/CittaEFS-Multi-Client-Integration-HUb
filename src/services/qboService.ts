@@ -233,14 +233,7 @@ function getQboBaseUrl(): string {
 export async function getValidQboAccessToken(
   tenantId: string,
 ): Promise<string> {
-  const integration = await prisma.integration.findUnique({
-    where: {
-      tenantId_sourceSystem: {
-        tenantId,
-        sourceSystem: "QUICKBOOKS_ONLINE",
-      },
-    },
-  });
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
 
   if (!integration) {
     throw new Error(
@@ -356,14 +349,7 @@ export async function getValidQboAccessToken(
  */
 export async function fetchQboCompanyInfo(tenantId: string): Promise<any> {
   const accessToken = await getValidQboAccessToken(tenantId);
-  const integration = await prisma.integration.findUnique({
-    where: {
-      tenantId_sourceSystem: {
-        tenantId,
-        sourceSystem: "QUICKBOOKS_ONLINE",
-      },
-    },
-  });
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
 
   if (!integration) {
     throw new Error(`Integration details not found for tenant ${tenantId}`);
@@ -398,14 +384,7 @@ export async function fetchQboInvoices(
   options?: { lastSyncAt?: Date },
 ): Promise<any[]> {
   const accessToken = await getValidQboAccessToken(tenantId);
-  const integration = await prisma.integration.findUnique({
-    where: {
-      tenantId_sourceSystem: {
-        tenantId,
-        sourceSystem: "QUICKBOOKS_ONLINE",
-      },
-    },
-  });
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
 
   if (!integration) {
     throw new Error(`Integration details not found for tenant ${tenantId}`);
@@ -462,14 +441,7 @@ export async function fetchAllQboInvoicesPaginated(
   tenantId: string,
 ): Promise<any[]> {
   const accessToken = await getValidQboAccessToken(tenantId);
-  const integration = await prisma.integration.findUnique({
-    where: {
-      tenantId_sourceSystem: {
-        tenantId,
-        sourceSystem: "QUICKBOOKS_ONLINE",
-      },
-    },
-  });
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
 
   if (!integration) {
     throw new Error(`Integration details not found for tenant ${tenantId}`);
@@ -536,14 +508,7 @@ export async function fetchSingleQboInvoice(
   qboInvoiceId: string,
 ): Promise<any> {
   const accessToken = await getValidQboAccessToken(tenantId);
-  const integration = await prisma.integration.findUnique({
-    where: {
-      tenantId_sourceSystem: {
-        tenantId,
-        sourceSystem: "QUICKBOOKS_ONLINE",
-      },
-    },
-  });
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
 
   if (!integration) {
     throw new Error(`Integration details not found for tenant ${tenantId}`);
@@ -892,14 +857,7 @@ export async function writebackToQbo(
   );
 
   const accessToken = await getValidQboAccessToken(tenantId);
-  const integration = await prisma.integration.findUnique({
-    where: {
-      tenantId_sourceSystem: {
-        tenantId,
-        sourceSystem: "QUICKBOOKS_ONLINE",
-      },
-    },
-  });
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
 
   if (!integration) {
     throw new Error(`Integration details not found for tenant ${tenantId}`);

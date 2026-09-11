@@ -582,12 +582,10 @@ export class CittaEfsClient {
     }
     // Hub writeback (and QBO ERP writeback) when target is HUB or BOTH
     try {
-      const integration = await prisma.integration.findUnique({
+      const integration = await prisma.integration.findFirst({
         where: {
-          tenantId_sourceSystem: {
-            tenantId,
-            sourceSystem: "QUICKBOOKS_ONLINE",
-          },
+          tenantId,
+          sourceSystem: "QUICKBOOKS_ONLINE",
         },
       });
 
@@ -628,12 +626,10 @@ export class CittaEfsClient {
 
     // Odoo ERP ledger writeback (chatter message_post) when target is HUB or BOTH
     try {
-      const odooIntegration = await prisma.integration.findUnique({
+      const odooIntegration = await prisma.integration.findFirst({
         where: {
-          tenantId_sourceSystem: {
-            tenantId,
-            sourceSystem: "ODOO",
-          },
+          tenantId,
+          sourceSystem: "ODOO",
         },
       });
 

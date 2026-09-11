@@ -284,13 +284,17 @@ router.post("/api/tenants/:id/erps", async (req: any, res) => {
     const { platformType, displayName, config } = req.body;
     if (!platformType) return res.status(400).json({ success: false, error: "platformType required" });
     const erp = getErpForTenant(platformType);
-    const existing = await prisma.tenantErp.findUnique({ where: { tenantId_platformType: { tenantId: req.params.id, platformType } } });
-    if (existing) return res.status(409).json({ success: false, error: `ERP ${platformType} already connected to this tenant` });
+    // Independent integrations: check by erpId + companyId (realmId/database) not just platformType — allows multiple same ERP with different companyId
+    let cfgCompanyId: string | null = null;
+    try { const cfg = typeof config === "string" ? JSON.parse(config) : config; cfgCompanyId = cfg?.realmId || cfg?.companyId || cfg?.database || null; } catch {}
+    const existing = await prisma.tenantErp.findFirst({ where: { tenantId: req.params.id, erpId: erp.id, companyId: cfgCompanyId } });
+    if (existing) return res.status(409).json({ success: false, error: `ERP ${platformType} with same companyId already connected` });
     const created = await prisma.tenantErp.create({
       data: {
         tenantId: req.params.id,
         platformType,
         erpId: erp.id,
+        companyId: cfgCompanyId,
         displayName: displayName || platformType,
         config: config ? (typeof config === "string" ? config : JSON.stringify(config)) : null,
         status: "ACTIVE",

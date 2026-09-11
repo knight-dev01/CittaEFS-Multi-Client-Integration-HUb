@@ -177,9 +177,10 @@ router.get("/api/integrations/qbo/callback", async (req, res) => {
 
     await prisma.integration.upsert({
       where: {
-        tenantId_sourceSystem: {
+        tenantId_sourceSystem_companyId: {
           tenantId,
           sourceSystem: "QUICKBOOKS_ONLINE",
+          companyId: (realmId as string) || "UNKNOWN_REALM",
         },
       },
       create: {
@@ -240,12 +241,10 @@ router.get("/api/integrations/qbo/status", async (req: any, res) => {
       (req.query.tenantId as string) ||
       req.user?.tenantId ||
       "tenant_qbo_smb";
-    const integration = await prisma.integration.findUnique({
+    const integration = await prisma.integration.findFirst({
       where: {
-        tenantId_sourceSystem: {
-          tenantId,
-          sourceSystem: "QUICKBOOKS_ONLINE",
-        },
+        tenantId,
+        sourceSystem: "QUICKBOOKS_ONLINE",
       },
     });
 
@@ -416,11 +415,11 @@ router.get("/api/connectors/status", async (req: any, res) => {
     const tenantId = (req.query.tenantId as string) || req.user?.tenantId || "tenant_qbo_smb";
 
     const [integration, odooIntegration, totalInvoices, lastInvoice, totalStamped, totalPending, totalRejected] = await Promise.all([
-      prisma.integration.findUnique({
-        where: { tenantId_sourceSystem: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } },
+      prisma.integration.findFirst({
+        where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" },
       }),
-      prisma.integration.findUnique({
-        where: { tenantId_sourceSystem: { tenantId, sourceSystem: "ODOO" } },
+      prisma.integration.findFirst({
+        where: { tenantId, sourceSystem: "ODOO" },
       }),
       prisma.invoice.count({ where: { tenantId } }),
       prisma.invoice.findFirst({ where: { tenantId }, orderBy: { createdAt: "desc" } }),
