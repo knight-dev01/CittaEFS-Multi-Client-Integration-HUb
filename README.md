@@ -1,5 +1,6 @@
 # CittaEFS ERP Gateway — QBO & Odoo to NRS E-Invoicing
 
+![CI](https://github.com/knight-dev01/CittaEFS-Multi-Client-Integration-HUb/actions/workflows/ci.yml/badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React_19-20232A?style=flat&logo=react&logoColor=61DAFB)
 ![Express](https://img.shields.io/badge/Express.js-000000?style=flat&logo=express&logoColor=white)
@@ -121,6 +122,22 @@ Onboarding an ERP immediately creates its workspace, queue and messages — no c
 * **Backend**: Express 4, TypeScript (`tsx`), Prisma 5 PostgreSQL Neon, `ws` WS+SSe, Zod `invoiceIngestionSchema`, `httpsRequest` to Citta
 * **ERP**: QBO fetch OAuth2 `qboService.ts` + Odoo JSON-RPC `odooService.ts`, independent `companyId` uniques, `60s` polls + QBO webhook, `300s` NRS poll
 * **Queue**: `prisma QueueJob` `recoverOrphans` `recoverStale 2m` + `BullMQ ioredis` optional `REDIS_URL`
+* **Tests**: Vitest 3 `jsdom` + `nock` + `coverage-v8` (`src/test/unit/*`, `gateway.test.ts`) + `src/test/verifyAll.ts` full audit
+
+## ✅ Tests & CI — Beyond Audit Logs
+
+Audit logs show *what happened*; tests + CI show *what and what fails and when*:
+
+| Suite | File | What it Guards | When it Fails |
+| :--- | :--- | :--- | :--- |
+| **HS bare** `unit/referenceData.test.ts` | `isValidCittaCode HS-8471.30 → bare`, `normalizeCittaCode`, `getCittaCodeType` | `HS-` prefix regress → `Citta 400 Invalid Product Code` | PR or local `npm run test:unit` |
+| **Invoice schema** `invoiceSchema.test.ts` | `B2B→B2C TIN strip`, `^[A-Z0-9]+$`, `8130` | B2B misclass → NRS reject | CI `unit` |
+| **Adapters** `adapters.test.ts` | `QBO Gardening/Pest →8130`, `Odoo Trimming→8130`, `Laptop→8471.30` | Infer regression → `messages.txt HS-8471.30` | CI `unit` |
+| **Immutability** `immutable.test.ts` | `PUT 403 invoices|customers|items`, `POST qbo|odoo only` | Hub edit regress → ERP drift | CI `unit` |
+| **Gateway** `gateway.test.ts` | `normalize before POST`, `60s|300s intervals`, `byErp metrics`, `companyId uniques`, `HS-` vs `8130` mock `nock` `400→200` | Writeback `FAILED` not handled, intervals missing | CI `verify-all` |
+| **Full audit** `verifyAll.ts` | `invoiceQueue 5 retries`, `QBO OAuth decrypt`, `reconciliation orphans`, `cittaEfsClient 15s` | Queue DLQ, token refresh, NRS `archive 200 pending` | CI `verify-all` + `test:all` |
+
+**GitHub Actions** `.github/workflows/ci.yml` (push `main`/`PR`): `lint → checkNoFallbacks → tsc → vitest unit --coverage → postgres:16 verifyAll + gateway.test → build → deploy-gate` (Render auto-deploy). On-demand `.github/workflows/test.yml` `workflow_dispatch` `all|unit|verifyAll|gateway`. Coverage `coverage/` artifact + badge `CI` above.
 * **Security**: AES-256-GCM `packEncryptedString` `Integration companyId`, `JWT 8h/7d` `cookie`, `HMAC intuit-signature|CF35DF20 citta` `CORS * .vercel.app` `rate-limit 300/min`
 
 ---

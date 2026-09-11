@@ -1,0 +1,110 @@
+name: CI — Gateway Tests & Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run lint --if-present
+        continue-on-error: false
+      - run: node scripts/checkNoFallbacks.js
+      - run: npx tsc --noEmit
+
+  unit:
+    runs-on: ubuntu-latest
+    needs: lint-and-guardrails
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - name: Unit tests (HS bare, normalize, invoice schema, adapters)
+        run: npx vitest run --coverage --reporter=verbose
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-unit
+          path: coverage/
+
+  verify-all:
+    runs-on: ubuntu-latest
+    needs: unit
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: citta
+          POSTGRES_PASSWORD: citta
+          POSTGRES_DB: citta_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U citta"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://citta:citta@localhost:5432/citta_test
+      JWT_SECRET: ci_jwt_secret_for_tests_only_32_chars
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CITTAEFS_API_KEY: sk_live_ci_test_key
+      CITTAEFS_GATEWAY_URL: https://ei-api.azurewebsites.net
+      QBO_CLIENT_ID: ci_qbo_id
+      QBO_CLIENT_SECRET: ci_qbo_secret
+      QBO_REDIRECT_URI: http://localhost:3000/api/integrations/qbo/callback
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - name: Full gateway audit (verifyAll — audit beyond logs)
+        run: npx tsx src/test/verifyAll.ts
+      - name: Gateway regression (vitest integration)
+        run: npx vitest run src/test/gateway.test.ts --reporter=verbose
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint-and-guardrails, unit, verify-all]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  deploy-gate:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - run: echo "CI passed — Render will auto-deploy main via db:migrate"
