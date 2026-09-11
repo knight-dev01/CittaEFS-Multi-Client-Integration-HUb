@@ -45,7 +45,7 @@ export function CittaGatewayTab() {
       const res = await fetchWithAuth(`/api/tenants/${activeTenant.id}/citta-config/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cittaGatewayUrl, cittaApiKey: apiKey }),
+        body: JSON.stringify({ cittaGatewayUrl: gatewayUrl, cittaApiKey: apiKey }),
       });
       const data = await parseJsonResponse(res);
       setMsg({ type: data.success ? 'success' : 'error', text: data.message || (data.success ? 'Gateway reachable (HTTP 200). Writeback will succeed.' : 'Gateway test failed.') });
@@ -107,7 +107,7 @@ export function CittaGatewayTab() {
           </div>
           <div>
             <label className="block font-medium text-slate-700 mb-1">Writeback Target — where to write IRN/QR after NRS stamp (per tenant, but gateway is shared)</label>
-            <select value={writebackTarget} onChange={e => setWritebackTarget(e.target.value)} className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white text-xs cursor-pointer">
+            <select value={writebackTarget} onChange={e => setWritebackTarget(e.target.value as "HUB" | "CITTAEFS" | "BOTH")} className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white text-xs cursor-pointer">
               <option value="HUB">Hub only (ledgerWritebackStatus = SYNCED in hub DB) — default</option>
               <option value="CITTAEFS">CittaEFS only (POST IRN/QR to CittaEFS writeback URL)</option>
               <option value="BOTH">Both — Hub + CittaEFS (recommended)</option>

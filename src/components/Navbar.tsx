@@ -457,7 +457,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         <div className="flex flex-col w-full h-full relative">
           {/* Single collapse toggle — top-right */}
           <button
-            onClick={toggleCollapsed}
+            onClick={() => toggleCollapsed()}
             title={isCollapsed ? 'Expand sidebar (also hover to expand)' : 'Collapse sidebar'}
             className="absolute -right-3 top-5 z-40 w-6 h-6 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center text-slate-600 hover:text-violet-600 hover:border-violet-300 cursor-pointer"
           >

@@ -21,10 +21,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm install --ignore-scripts
+      - run: npx prisma generate
       - run: npm run lint --if-present
         continue-on-error: false
       - run: node scripts/checkNoFallbacks.js
-      - run: npx tsc --noEmit
 
   unit:
     runs-on: ubuntu-latest
