@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - if: inputs.suite == 'all' || inputs.suite == 'unit'

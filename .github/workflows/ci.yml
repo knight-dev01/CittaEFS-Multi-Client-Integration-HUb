@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: npm run lint --if-present
         continue-on-error: false
       - run: node scripts/checkNoFallbacks.js
@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: npx prisma generate
       - name: Unit tests (HS bare, normalize, invoice schema, adapters)
         run: npx vitest run --coverage --reporter=verbose
@@ -77,7 +77,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - name: Full gateway audit (verifyAll — audit beyond logs)
@@ -94,7 +94,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: npx prisma generate
       - run: npm run build
       - uses: actions/upload-artifact@v4
