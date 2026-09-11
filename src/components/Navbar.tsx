@@ -191,7 +191,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     return true;
   });
 
-  const grouped = useMemo(() => groupTenantsByErp(tenants as any), [tenants]);
+  const filteredTenantsForSidebar = useMemo(() => (tenants as any[]).filter((t:any) => t.platformType !== 'Excel & CSV Import'), [tenants]);
+  const grouped = useMemo(() => groupTenantsByErp(filteredTenantsForSidebar as any), [filteredTenantsForSidebar]);
 
   const canOnboard = userRole === 'ADMIN';
   const canIngest = userRole === 'ADMIN' || userRole === 'OPERATOR';
@@ -223,8 +224,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       {/* Tenant Selector — grouped by ERP */}
       <div className="p-4 border-b border-slate-800/80 shrink-0 bg-slate-950/30">
         <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider flex items-center justify-between">
-          <span>Active Workspace Client:</span>
-          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${erp.id==='qbo'?'bg-amber-500/20 text-amber-300 border-amber-500/30': erp.id==='excel'?'bg-indigo-500/20 text-indigo-300 border-indigo-500/30':'bg-slate-700 text-slate-300 border-slate-600'}`}>{erp.shortLabel} MODE</span>
+          <span>Active Workspace ERP:</span>
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${erp.id==='qbo'?'bg-amber-500/20 text-amber-300 border-amber-500/30': erp.id==='odoo'?'bg-violet-500/20 text-violet-300 border-violet-500/30':'bg-slate-700 text-slate-300 border-slate-600'}`}>{erp.shortLabel} MODE</span>
         </label>
         <div className="relative flex items-center gap-2">
           <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 flex-1 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
