@@ -23,6 +23,7 @@ import qboRouter from "./src/routes/qbo";
 import odooRouter from "./src/routes/odoo";
 import webhooksRouter from "./src/routes/webhooks";
 import systemRouter from "./src/routes/system";
+import entityMappingsRouter from "./src/routes/entityMappings";
 
 const { JWT_SECRET } = getAuthConfig();
 
@@ -124,6 +125,7 @@ async function startServer() {
   app.use(odooRouter);
   app.use(webhooksRouter);
   app.use(systemRouter);
+  app.use(entityMappingsRouter);
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server:{ middlewareMode:true}, appType:"custom"});
