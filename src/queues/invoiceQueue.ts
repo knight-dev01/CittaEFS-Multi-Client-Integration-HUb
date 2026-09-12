@@ -262,6 +262,23 @@ class InvoiceQueueManager {
     } catch {}
   }
 
+  // Distinct from removeJob (COMPLETED = success) and moveToDLQ (permanent
+  // failure needing manual replay of the same job). This job stops here not
+  // because it failed, but because a prerequisite (CittaEFS customer
+  // registration) is missing — retrying won't help. Phase 3's "Confirm
+  // Registered" action re-enqueues a fresh job once EntityMapping is MAPPED.
+  public async removeForRegistration(jobId: string, reason: string) {
+    this.queue = this.queue.filter(j => j.id !== jobId);
+    try {
+      const prisma = getPrisma();
+      await prisma.queueJob.update({
+        where: { id: jobId },
+        data: { status: 'NEEDS_REGISTRATION', lastError: reason, updatedAt: new Date() }
+      }).catch(()=>{});
+      await prisma.$disconnect().catch(()=>{});
+    } catch {}
+  }
+
   public async updateJob(job: QueueJob<QueueablePayload>) {
     try {
       const prisma = getPrisma();

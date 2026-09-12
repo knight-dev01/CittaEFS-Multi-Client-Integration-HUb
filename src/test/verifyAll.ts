@@ -906,6 +906,7 @@ async function runAllTests() {
     const workerPayload = invoiceIngestionSchema.parse({
       tenantId: "tenant_qbo",
       clientInvoiceNumber: `INVWORKER${Date.now()}`,
+      customerCode: "CUST-WORKER-TEST",
       issueDate: "2026-07-29",
       dueDate: "2026-08-29",
       currency: "NGN",
@@ -921,6 +922,29 @@ async function runAllTests() {
           hsOrServiceCode: "8471.50",
         },
       ],
+    });
+
+    // Registration gate (Phase 2, thin-hub pivot): a B2B invoice's customer must
+    // already be MAPPED in CittaEFS, or the worker routes it to
+    // NEEDS_EFS_REGISTRATION instead of the gateway. Pre-register the test
+    // customer so this test exercises the successful pipeline, not the gate.
+    await prisma.entityMapping.upsert({
+      where: {
+        tenantId_entityType_sourceErpId: {
+          tenantId: "tenant_qbo",
+          entityType: "CUSTOMER",
+          sourceErpId: "CUST-WORKER-TEST",
+        },
+      },
+      update: { status: "MAPPED" },
+      create: {
+        tenantId: "tenant_qbo",
+        entityType: "CUSTOMER",
+        sourceErp: "qbo",
+        sourceErpId: "CUST-WORKER-TEST",
+        displayName: "Worker Customer Corp",
+        status: "MAPPED",
+      },
     });
 
     const jobToProcess = await invoiceQueue.add("signInvoice", {
@@ -950,6 +974,10 @@ async function runAllTests() {
     const workerResult = await processInvoiceJob(jobToProcess);
 
     nock.cleanAll();
+
+    await prisma.entityMapping.deleteMany({
+      where: { tenantId: "tenant_qbo", entityType: "CUSTOMER", sourceErpId: "CUST-WORKER-TEST" },
+    });
 
     assert(
       "Worker Processor",
