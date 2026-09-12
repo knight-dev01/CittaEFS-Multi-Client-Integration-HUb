@@ -36,6 +36,7 @@ model Tenant {
   integrations     Integration[]
   queueJobs        QueueJob[]
   tenantErps       TenantErp[]
+  entityMappings   EntityMapping[]
 
   @@map("tenants")
 }
@@ -60,6 +61,13 @@ model TenantErp {
   @@map("tenant_erps")
 }
 
+/// DEPRECATED (thin-hub pivot, see docs/CittaHub_Revision_Plan.md Phase 1).
+/// CittaEFS is the source of truth for registered customers — there is no
+/// registration API, only its own Excel bulk-upload templates. This table
+/// is kept only so existing rows/reads don't break during the transition;
+/// new code should read/write EntityMapping (entityType: CUSTOMER) instead.
+/// Do not add new writers to this model. Slated for removal once
+/// EntityMapping is fully rolled out (Phase 6).
 model Customer {
   id                 String   @id @default(uuid())
   tenantId           String   @map("tenant_id")
@@ -87,6 +95,9 @@ model Customer {
   @@map("customers")
 }
 
+/// DEPRECATED (thin-hub pivot, see docs/CittaHub_Revision_Plan.md Phase 1).
+/// Same status as Customer above — CittaEFS owns item registration.
+/// New code should read/write EntityMapping (entityType: ITEM) instead.
 model Item {
   id              String   @id @default(uuid())
   tenantId        String   @map("tenant_id")
@@ -110,6 +121,40 @@ model Item {
   @@map("items")
 }
 
+/// Tracks whether a customer or item the Hub has seen from a client ERP has
+/// been registered with CittaEFS. CittaEFS has no registration API (per
+/// docs/CittaHub_Section_E_Spec-5.xlsx Interface sheet) — registration
+/// happens only through its own Excel bulk-upload templates, in the EFS
+/// product itself. The Hub's job is only to track a reference, not to own
+/// a business-data catalog: see docs/CittaHub_Revision_Plan.md Phase 1-3.
+model EntityMapping {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  entityType         String   @map("entity_type") // CUSTOMER | ITEM
+  sourceErp          String   @map("source_erp") // e.g. qbo, odoo, excel — which client ERP this entity came from
+  sourceErpId        String   @map("source_erp_id") // the code/ID as it exists in the client's ERP (customer code / item SKU)
+  displayName        String?  @map("display_name") // human label for the registration queue UI — not a business record
+  tin                String?  @map("tin") // customer TIN, if present; null for items
+  detailsJson        String?  @map("details_json") // minimal snapshot captured at detection time, just enough to fill the EFS registration export (see Phase 3)
+  cittaReferenceCode String?  @map("citta_reference_code") // CittaEFS_Customer_ID or EFS item code, once registered
+  status             String   @default("PENDING_REGISTRATION") @map("status") // PENDING_REGISTRATION | MAPPED
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, entityType, sourceErpId])
+  @@index([tenantId, status])
+  @@map("entity_mappings")
+}
+
+/// Internal submission/audit record, not a client-facing invoice book.
+/// The Hub is a pass-through to CittaEFS/NRS (see docs/CittaHub_Revision_Plan.md);
+/// this table exists so the Hub's own team can answer "did we submit this,
+/// what happened" for retry, audit, and reconciliation — it is not a
+/// business ledger a client would ever see or edit. No functional change
+/// from the thin-hub pivot; this is a documentation-only clarification of
+/// intent so future contributors don't reintroduce client-facing framing.
 model Invoice {
   id                    String    @id @default(uuid())
   tenantId              String    @map("tenant_id")
