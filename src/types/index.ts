@@ -132,6 +132,23 @@ export interface ItemCodeMapping {
   updatedAt: string;
 }
 
+// Thin-hub pivot (docs/CittaHub_Revision_Plan.md): tracks whether a customer
+// or item seen from a client ERP has been registered with CittaEFS — CittaEFS
+// owns the actual record, the Hub only tracks a reference.
+export interface EntityMapping {
+  id: string;
+  tenantId: TenantId;
+  entityType: 'CUSTOMER' | 'ITEM';
+  sourceErp: string;
+  sourceErpId: string;
+  displayName: string | null;
+  tin: string | null;
+  cittaReferenceCode: string | null;
+  status: 'PENDING_REGISTRATION' | 'MAPPED';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ValidationErrorItem {
   id: string;
   tenantId: TenantId;

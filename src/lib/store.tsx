@@ -2,16 +2,17 @@ import { useState, useEffect, useMemo, createContext, useContext, ReactNode } fr
 import { fetchWithAuth, parseJsonResponse, safeFetchJson, getApiBaseUrl } from './api';
 import { toastGlobal } from '../components/ui/Toast';
 import { 
-  Tenant, 
+  Tenant,
   TenantErp,
-  Invoice, 
-  CustomerProfile, 
-  ItemCodeMapping, 
-  ValidationErrorItem, 
-  AuditLog, 
+  Invoice,
+  CustomerProfile,
+  ItemCodeMapping,
+  EntityMapping,
+  ValidationErrorItem,
+  AuditLog,
   SystemMetrics,
   TenantId,
-  UserSession 
+  UserSession
 } from '../types';
 
 interface HubContextType {
@@ -25,6 +26,7 @@ interface HubContextType {
   invoices: Invoice[];
   customers: CustomerProfile[];
   itemMappings: ItemCodeMapping[];
+  entityMappings: EntityMapping[];
   validationErrors: ValidationErrorItem[];
   auditLogs: AuditLog[];
   metrics: SystemMetrics;
@@ -54,6 +56,8 @@ interface HubContextType {
   deleteInvoice: (invoiceId: string) => Promise<any>;
   deleteCustomer: (customerId: string) => Promise<any>;
   deleteItem: (itemId: string) => Promise<any>;
+  exportEntityRegistrations: (entityType: 'CUSTOMER' | 'ITEM', tenantIdOverride?: TenantId) => Promise<void>;
+  confirmEntityRegistration: (mappingId: string, cittaReferenceCode: string) => Promise<any>;
   purgeDemoData: () => Promise<any>;
   retryInvoice: (invoiceId: string) => Promise<any>;
   retryBulkInvoices: (tenantId?: string, invoiceIds?: string[]) => Promise<any>;
@@ -152,6 +156,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
   const [itemMappings, setItemMappings] = useState<ItemCodeMapping[]>([]);
+  const [entityMappings, setEntityMappings] = useState<EntityMapping[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationErrorItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [metrics, setMetrics] = useState<SystemMetrics>({ totalInvoicesProcessed: 0, nrsStampSuccessRate: 0, averageLatencyMs: 0, activeTenantsCount: 0, pendingValidationCount: 0, reconciliationCronStatus: 'IDLE' as any, cittaGatewayStatus: 'UNKNOWN' as any });
@@ -192,11 +197,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
       try {
         const fetchOrNull = (url: string) => safeFetchJson(url).catch(() => null);
 
-        const [tenRes, invRes, custRes, itemRes, errRes, auditRes, metRes] = await Promise.all([
+        const [tenRes, invRes, custRes, itemRes, entityMapRes, errRes, auditRes, metRes] = await Promise.all([
           fetchOrNull('/api/tenants'),
           fetchOrNull('/api/invoices'),
           fetchOrNull('/api/customers'),
           fetchOrNull('/api/items/mappings'),
+          fetchOrNull('/api/entity-mappings'),
           fetchOrNull('/api/validation-errors'),
           fetchOrNull('/api/audit-logs'),
           fetchOrNull('/api/metrics')
@@ -233,6 +239,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         const invArr = unwrap(invRes); if (invArr) setInvoices(prev => (isSameIds(prev as any, invArr as any) ? prev : invArr));
         const custArr = unwrap(custRes); if (custArr) setCustomers(prev => (isSameIds(prev as any, custArr as any) ? prev : custArr));
         const itemArr = unwrap(itemRes); if (itemArr) setItemMappings(prev => (isSameIds(prev as any, itemArr as any) ? prev : itemArr));
+        const entityMapArr = unwrap(entityMapRes); if (entityMapArr) setEntityMappings(prev => (isSameIds(prev as any, entityMapArr as any) ? prev : entityMapArr));
         const errArr = unwrap(errRes); if (errArr) setValidationErrors(prev => (isSameIds(prev as any, errArr as any) ? prev : errArr));
         const auditArr = unwrap(auditRes); if (auditArr) setAuditLogs(prev => (isSameIds(prev as any, auditArr as any) ? prev : auditArr));
         if (metRes && typeof metRes === 'object') setMetrics(prev => JSON.stringify(prev) === JSON.stringify(metRes) ? prev : metRes);
@@ -753,6 +760,50 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const exportEntityRegistrations = async (entityType: 'CUSTOMER' | 'ITEM', tenantIdOverride?: TenantId) => {
+    return withLoading(async () => {
+      try {
+        const targetTenantId = tenantIdOverride || activeTenantId;
+        const res = await fetchWithAuth(`/api/entity-mappings/${targetTenantId}/export?entityType=${entityType}`);
+        if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CittaEFS_${entityType}_Registration_${targetTenantId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toastGlobal('success', 'Registration file downloaded', `Upload this through EFS's own portal, then return here to confirm.`);
+      } catch (e: any) {
+        console.error('Export entity registrations error:', e);
+        toastGlobal('error', 'Failed to export registration file', e.message || String(e));
+        throw e;
+      }
+    });
+  };
+
+  const confirmEntityRegistration = async (mappingId: string, cittaReferenceCode: string) => {
+    return withLoading(async () => {
+      try {
+        const res = await fetchWithAuth(`/api/entity-mappings/${mappingId}/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cittaReferenceCode })
+        });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', 'Registration confirmed', data.requeued ? `${data.requeued} invoice(s) resubmitted.` : '');
+        return data;
+      } catch (e: any) {
+        console.error('Confirm entity registration error:', e);
+        toastGlobal('error', 'Failed to confirm registration', e.message || String(e));
+        throw e;
+      }
+    });
+  };
+
   const purgeDemoData = async () => {
     return withLoading(async () => {
       try {
@@ -820,6 +871,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         invoices,
         customers,
         itemMappings,
+        entityMappings,
         validationErrors,
         auditLogs,
         metrics,
@@ -847,6 +899,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
         deleteInvoice,
         deleteCustomer,
         deleteItem,
+        exportEntityRegistrations,
+        confirmEntityRegistration,
         purgeDemoData,
         retryInvoice,
         retryBulkInvoices,
