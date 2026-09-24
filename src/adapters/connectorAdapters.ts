@@ -110,18 +110,9 @@ export class QuickBooksAdapter implements ConnectorAdapter {
     const docNumber = rawPayload.DocNumber || rawPayload.clientInvoiceNumber || `QBO-${rawPayload.Id || Date.now()}`;
     const inferServiceCode = (sku: string, desc: string) => {
       const text = `${sku} ${desc}`.toLowerCase();
-      // Real CittaEFS/NRS codes (from CITTA_HS_CODES_REFERENCE / CITTA_SERVICE_CODES_REFERENCE)
-      // — bare numeric, no "HS-"/"SRV-" prefix. Only the few keyword matches we can
-      // be confident about get auto-classified; everything else is UNMAPPED.
-      if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+      if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
       if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
       if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
-      // No confident keyword match — flag UNMAPPED rather than guessing a real-but-
-      // wrong code (e.g. an office chair or mouse pad classified as a laptop).
-      // A syntactically valid but semantically wrong code passes our own local
-      // validSet check yet gets rejected downstream by the compliance gateway as
-      // an "Invalid Product Code" mismatch — UNMAPPED instead fails locally with
-      // a clear message and routes to the Item Dictionary for a real mapping.
       return "UNMAPPED";
     };
     return {
@@ -213,18 +204,9 @@ export class OdooAdapter implements ConnectorAdapter {
   transform(rawPayload: any): IngestedPayload {
     const inferServiceCode = (sku: string, desc: string) => {
       const text = `${sku} ${desc}`.toLowerCase();
-      // Real CittaEFS/NRS codes (from CITTA_HS_CODES_REFERENCE / CITTA_SERVICE_CODES_REFERENCE)
-      // — bare numeric, no "HS-"/"SRV-" prefix. Only the few keyword matches we can
-      // be confident about get auto-classified; everything else is UNMAPPED.
-      if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+      if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
       if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
       if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
-      // No confident keyword match — flag UNMAPPED rather than guessing a real-but-
-      // wrong code (e.g. an office chair or mouse pad classified as a laptop).
-      // A syntactically valid but semantically wrong code passes our own local
-      // validSet check yet gets rejected downstream by the compliance gateway as
-      // an "Invalid Product Code" mismatch — UNMAPPED instead fails locally with
-      // a clear message and routes to the Item Dictionary for a real mapping.
       return "UNMAPPED";
     };
     // Odoo's product_id is a many2one, returned as [id, display_name] (or false

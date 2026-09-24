@@ -245,6 +245,7 @@ export class CittaEfsClient {
     const customFields = (payload as any).customFields || {};
     const metadata = (payload as any).metadata || {};
 
+    const { normalizeCittaCode } = await import("../data/referenceData");
     const dtoArray = payload.lineItems.map((item, index) => ({
       invoiceNumber,
       issueDate,
@@ -255,7 +256,7 @@ export class CittaEfsClient {
       unitPrice: item.unitPrice,
       taxAmount: item.vatAmount,
       taxableAmount: item.taxableAmount,
-      hsOrServiceCode: item.hsOrServiceCode || "SERV-DEFAULT",
+      hsOrServiceCode: normalizeCittaCode(item.hsOrServiceCode || "SERV-DEFAULT"),
       lineNum: String((item as any).lineNum ?? index + 1),
       unitCode: (item as any).unitCode || "EA",
       taxCategoryId: (item as any).taxCategoryId || "STANDARD_VAT",
@@ -579,12 +580,10 @@ export class CittaEfsClient {
     }
     // Hub writeback (and QBO ERP writeback) when target is HUB or BOTH
     try {
-      const integration = await prisma.integration.findUnique({
+      const integration = await prisma.integration.findFirst({
         where: {
-          tenantId_sourceSystem: {
-            tenantId,
-            sourceSystem: "QUICKBOOKS_ONLINE",
-          },
+          tenantId,
+          sourceSystem: "QUICKBOOKS_ONLINE",
         },
       });
 
@@ -614,16 +613,21 @@ export class CittaEfsClient {
         `[Writeback Error] Failed to execute QBO writeback for invoice ${clientInvoiceNumber}:`,
         err,
       );
+      // Set FAILED so hub can surface writeback failure and throw back to ERP via error queue; ERP can open hub to retry
+      try {
+        await prisma.invoice.updateMany({
+          where: { tenantId, clientInvoiceId: clientInvoiceNumber },
+          data: { ledgerWritebackStatus: "FAILED" },
+        });
+      } catch {}
     }
 
     // Odoo ERP ledger writeback (chatter message_post) when target is HUB or BOTH
     try {
-      const odooIntegration = await prisma.integration.findUnique({
+      const odooIntegration = await prisma.integration.findFirst({
         where: {
-          tenantId_sourceSystem: {
-            tenantId,
-            sourceSystem: "ODOO",
-          },
+          tenantId,
+          sourceSystem: "ODOO",
         },
       });
 
@@ -653,6 +657,12 @@ export class CittaEfsClient {
         `[Writeback Error] Failed to execute Odoo writeback for invoice ${clientInvoiceNumber}:`,
         err,
       );
+      try {
+        await prisma.invoice.updateMany({
+          where: { tenantId, clientInvoiceId: clientInvoiceNumber },
+          data: { ledgerWritebackStatus: "FAILED" },
+        });
+      } catch {}
     }
 
     return {

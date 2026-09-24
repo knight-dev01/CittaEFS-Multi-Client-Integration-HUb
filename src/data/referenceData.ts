@@ -18,10 +18,18 @@ export const CITTA_SERVICE_CODES_REFERENCE: { code: string; name: string; type: 
 const HS_CODE_SET = new Set(CITTA_HS_CODES_REFERENCE.map((c) => c.code));
 const SERVICE_CODE_SET = new Set(CITTA_SERVICE_CODES_REFERENCE.map((c) => c.code));
 
-/** Whether a code exists in the official CittaEFS HS or Service catalog. */
+/** Whether a code exists in the official CittaEFS HS or Service catalog. Handles legacy prefixed codes HS-8471.30 / SRV-6920 by stripping prefix before lookup. */
 export function isValidCittaCode(code: string | null | undefined): boolean {
   if (!code) return false;
-  return HS_CODE_SET.has(code) || SERVICE_CODE_SET.has(code);
+  const bare = code.trim().replace(/^(HS|SRV)[-_]?/i, "");
+  return HS_CODE_SET.has(code) || SERVICE_CODE_SET.has(code) || HS_CODE_SET.has(bare) || SERVICE_CODE_SET.has(bare);
+}
+export function normalizeCittaCode(code: string | null | undefined): string {
+  if (!code) return "UNMAPPED";
+  const bare = code.trim().replace(/^(HS|SRV)[-_]?/i, "");
+  if (HS_CODE_SET.has(bare) || SERVICE_CODE_SET.has(bare)) return bare;
+  if (HS_CODE_SET.has(code) || SERVICE_CODE_SET.has(code)) return code;
+  return bare;
 }
 
 /**
@@ -32,8 +40,9 @@ export function isValidCittaCode(code: string | null | undefined): boolean {
  */
 export function getCittaCodeType(code: string | null | undefined): 'HS_CODE' | 'SERVICE_CODE' | null {
   if (!code) return null;
-  if (HS_CODE_SET.has(code)) return 'HS_CODE';
-  if (SERVICE_CODE_SET.has(code)) return 'SERVICE_CODE';
+  const bare = code.trim().replace(/^(HS|SRV)[-_]?/i, "");
+  if (HS_CODE_SET.has(code) || HS_CODE_SET.has(bare)) return 'HS_CODE';
+  if (SERVICE_CODE_SET.has(code) || SERVICE_CODE_SET.has(bare)) return 'SERVICE_CODE';
   return null;
 }
 

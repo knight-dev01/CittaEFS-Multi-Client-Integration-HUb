@@ -284,7 +284,9 @@ router.post("/api/tenants/:id/erps", async (req: any, res) => {
     const { platformType, displayName, config } = req.body;
     if (!platformType) return res.status(400).json({ success: false, error: "platformType required" });
     const erp = getErpForTenant(platformType);
-    const existing = await prisma.tenantErp.findUnique({ where: { tenantId_platformType: { tenantId: req.params.id, platformType } } });
+    // Schema is now @@unique([tenantId, erpId, companyId]); old key tenantId_platformType no longer exists.
+    // Use findFirst for backward-compat tolerant check (platformType + tenantId) until companyId is populated.
+    const existing = await prisma.tenantErp.findFirst({ where: { tenantId: req.params.id, platformType } });
     if (existing) return res.status(409).json({ success: false, error: `ERP ${platformType} already connected to this tenant` });
     const created = await prisma.tenantErp.create({
       data: {

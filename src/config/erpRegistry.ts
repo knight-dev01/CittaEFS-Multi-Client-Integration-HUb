@@ -43,13 +43,11 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
     shortLabel: 'Excel',
     icon: FileSpreadsheet,
     color: 'indigo',
-    description: 'Drag-drop .xlsx/.csv, grouped by clientInvoiceNumber, HS/VAT normalisation, manual Master Data mapping.',
-    tabs: ['overview', 'invoices', 'import', 'customers', 'items', 'validation', 'mapping', 'gateway'],
-    configFields: [
-      { key: 'sheetName', label: 'Expected Sheet Name', type: 'text', hint: 'Invoice Template' },
-      { key: 'csvDelimiter', label: 'CSV Delimiter', type: 'select', options: [',', ';', '\\t'] },
-    ],
-    matching: ['Invoice Number ↔ clientInvoiceNumber (grouped rows)', 'Customer Name/TIN ↔ Customer directory', 'SKU/HS ↔ Item dictionary', 'Preview before gateway send'],
+    description: 'Legacy drag-drop .xlsx/.csv — removed in ERP gateway (QBO | Odoo only).',
+    comingSoon: true,
+    tabs: ['overview'],
+    configFields: [],
+    matching: [],
   },
   'SAP S/4HANA': {
     id: 'sap',
@@ -121,7 +119,7 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
 export const ALL_ERPS = Object.values(ERP_REGISTRY);
 
 export function getErpForTenant(platformType?: string): ErpDefinition {
-  if (!platformType) return ERP_REGISTRY['Excel & CSV Import'];
+  if (!platformType) return ERP_REGISTRY['QuickBooks Online'];
   return ERP_REGISTRY[platformType] || {
     id: 'generic' as ErpId,
     platformType: platformType,

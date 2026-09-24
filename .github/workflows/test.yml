@@ -1,0 +1,48 @@
+name: Tests — On-Demand Gateway Suite
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite
+        type: choice
+        default: all
+        options: [all, unit, verifyAll, gateway]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: citta
+          POSTGRES_PASSWORD: citta
+          POSTGRES_DB: citta_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U citta"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://citta:citta@localhost:5432/citta_test
+      JWT_SECRET: ci_jwt_secret_for_tests_only_32_chars
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CITTAEFS_API_KEY: sk_live_ci_test_key
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install --ignore-scripts
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - if: inputs.suite == 'all' || inputs.suite == 'unit'
+        run: npx vitest run --reporter=verbose
+      - if: inputs.suite == 'all' || inputs.suite == 'verifyAll'
+        run: npx tsx src/test/verifyAll.ts
+      - if: inputs.suite == 'all' || inputs.suite == 'gateway'
+        run: npx vitest run src/test/gateway.test.ts --reporter=verbose

@@ -25,6 +25,11 @@ const FORBIDDEN_SUBSTRINGS = [
 const ALLOWLIST = [
   // Test suite containing mock data generators, nock mocks, and test assertions
   'src/test/verifyAll.ts',
+  'src/test/gateway.test.ts',
+  'src/test/unit/referenceData.test.ts',
+  'src/test/unit/invoiceSchema.test.ts',
+  'src/test/unit/adapters.test.ts',
+  'src/test/unit/immutable.test.ts',
 
   // Static reference data constants used for reference UI components
   'src/data/referenceData.ts',

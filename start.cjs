@@ -31,6 +31,7 @@ async function bootstrap() {
   // 1. Apply pending migrations. Non-fatal: a database previously initialized
   //    via `prisma db push` (no _prisma_migrations history) would reject this,
   //    but the schema is already correct in that case, so we warn and continue.
+  //    Extra: auto-resolve P3009 failed migration 20260910000000_erp_independent (was DO $ syntax error, now fixed to DO $$) then retry.
   const prismaBin = path.join(__dirname, 'node_modules', '.bin', 'prisma');
   if (fs.existsSync(prismaBin)) {
     console.log('📦 Applying pending Prisma migrations (migrate deploy)...');
@@ -43,6 +44,24 @@ async function bootstrap() {
       console.log('✅ Migrations reconciled.');
     } catch (err) {
       console.warn('⚠️  prisma migrate deploy failed (schema may already be applied via db push). Continuing. Detail:', err.message);
+      // P3009: migrate found failed migrations — try to mark the known failed one as rolled back and retry once
+      try {
+        console.log('🔧 Attempting migrate resolve --rolled-back 20260910000000_erp_independent ...');
+        execFileSync(prismaBin, ['migrate', 'resolve', '--rolled-back', '20260910000000_erp_independent'], {
+          stdio: 'inherit',
+          env: process.env,
+          cwd: __dirname,
+        });
+        console.log('🔁 Retrying migrate deploy after resolve...');
+        execFileSync(prismaBin, ['migrate', 'deploy'], {
+          stdio: 'inherit',
+          env: process.env,
+          cwd: __dirname,
+        });
+        console.log('✅ Migrations reconciled after resolve.');
+      } catch (resolveErr) {
+        console.warn('⚠️  migrate resolve/retry also failed (will attempt idempotent DDL fallback in bootstrap):', resolveErr.message);
+      }
     }
   } else {
     console.warn('⚠️  prisma CLI not found at ' + prismaBin + '; skipping migrate deploy.');
@@ -71,6 +90,20 @@ async function bootstrap() {
   }
 
   const prisma = new PrismaClientCtor();
+  // Idempotent DDL fallback: ensure ERP-independent columns exist even if _prisma_migrations still marks migration as failed
+  // (prevents P2022 column invoices.tenant_erp_id does not exist → queue orphan recovery spam). Runs before any invoice query.
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "tenant_erps" ADD COLUMN IF NOT EXISTS "company_id" TEXT`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "tenant_erps_company_id_idx" ON "tenant_erps"("company_id")`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "tenant_erp_id" TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "company_id" TEXT`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "invoices_company_id_idx" ON "invoices"("company_id")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "invoices_tenant_erp_id_idx" ON "invoices"("tenant_erp_id")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "integrations_company_id_idx" ON "integrations"("company_id")`);
+    console.log('✅ Idempotent DDL ensure: tenant_erps.company_id / invoices.tenant_erp_id,company_id present');
+  } catch (ddlErr) {
+    console.warn('⚠️  Idempotent DDL ensure failed (non-fatal):', ddlErr.message);
+  }
   try {
     // The login route normalizes email to lowercase+trim before lookup, so store
     // the lowercased value to guarantee findUnique matches regardless of env casing.

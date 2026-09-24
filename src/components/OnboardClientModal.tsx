@@ -68,7 +68,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
   // Step 1 fields — pre-filled from resumeTenant so "Previous" from step 2 shows real data
   const [companyName, setCompanyName] = useState(resumeTenant?.companyName || resumeTenant?.name || '');
   const [tin, setTin] = useState(resumeTenant?.tin || '');
-  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Excel & CSV Import' | 'Odoo ERP'>(resumeTenant?.platformType || 'QuickBooks Online');
+  const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Odoo ERP'>(resumeTenant?.platformType === 'Excel & CSV Import' ? 'QuickBooks Online' : (resumeTenant?.platformType as any) || 'QuickBooks Online');
   const [marketTier, setMarketTier] = useState(resumeTenant?.marketTier || 'Enterprise');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({ companyName: false, tin: false });
@@ -319,11 +319,11 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-indigo-600" />
-              {step === 1 ? 'Onboard Active Client Entity' : isResuming ? `Reconnect ${platformType}` : `Connect ${platformType}`}
+              {step === 1 ? 'Onboard ERP Connection' : isResuming ? `Reconnect ${platformType}` : `Connect ${platformType}`}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               {step === 1
-                ? 'Register a client organization and choose how their invoice data reaches CittaEFS.'
+                ? 'Register an ERP connection — choose QBO or Odoo. Gateway will normalize and push invoices to CittaEFS.'
                 : isQbo
                   ? isResuming
                     ? 'This tenant was never authorized. Complete QuickBooks Online authorization to start syncing invoices.'
@@ -348,10 +348,10 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
           <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
             {step > 1 ? <CheckCircle2 className="w-3.5 h-3.5" /> : '1'}
           </span>
-          <span className={step >= 1 ? 'text-indigo-600' : 'text-slate-400'}>Client & Channel</span>
+          <span className={step >= 1 ? 'text-indigo-600' : 'text-slate-400'}>ERP & Channel</span>
           <div className="flex-1 h-px bg-slate-200" />
           <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
-          <span className={step >= 2 ? 'text-indigo-600' : 'text-slate-400'}>{isQbo ? 'Connect QuickBooks' : isOdoo ? 'Connect Odoo' : 'Upload & Normalize'}</span>
+          <span className={step >= 2 ? 'text-indigo-600' : 'text-slate-400'}>Connect ERP</span>
         </div>
 
         {step === 1 ? (
@@ -359,7 +359,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Client Entity Name *</label>
+                <label className="block font-medium text-slate-700 mb-1">ERP Entity Name *</label>
                 <input
                   type="text"
                   value={companyName}
@@ -415,7 +415,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-1">
               <div className="flex items-center gap-1.5 font-semibold text-slate-900">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Client Onboarding Protocol:</span>
+                <span>ERP Onboarding Protocol:</span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
                 1. Dedicated Row-Level Security (RLS) tenant isolated.<br />
@@ -438,7 +438,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
-                <span>{isSubmitting ? (tenant ? 'Saving Changes...' : 'Onboarding Client...') : 'Continue'}</span>
+                <span>{isSubmitting ? (tenant ? 'Saving Changes...' : 'Onboarding ERP...') : 'Continue'}</span>
                 {!isSubmitting && <ArrowRight className="w-3.5 h-3.5 text-indigo-200" />}
               </button>
             </div>
@@ -459,7 +459,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3 bg-white rounded-xl border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
+                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"
@@ -492,14 +492,14 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               <div className="p-5 bg-white rounded-xl border border-slate-200/80 text-center space-y-3">
                 <Zap className="w-8 h-8 text-amber-500 mx-auto" />
                 <p className="text-slate-600 text-xs leading-relaxed max-w-sm mx-auto">
-                  Click below to open QuickBooks Online in a secure popup and authorize CittaEFS to read invoices, customers, and items.
+                  Click below to open the ERP in a secure popup and authorize CittaEFS to read invoices, customers, and items.
                 </p>
                 <button
                   onClick={handleConnectQuickBooks}
                   className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center gap-2 transition-colors"
                 >
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Connect QuickBooks Online</span>
+                  <span>Connect ERP</span>
                 </button>
               </div>
             )}
@@ -581,7 +581,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3 bg-white rounded-xl border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
+                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"
@@ -692,7 +692,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             <div className="p-3 bg-white rounded-xl border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP','Excel & CSV Import'] as const).map(opt => (
+                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
                   <button
                     key={opt}
                     type="button"

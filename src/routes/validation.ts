@@ -288,20 +288,13 @@ router.get("/api/metrics", async (req: any, res) => {
     const scoped = getScopedTenantWhere(req, req.query.tenantId as string | undefined);
     const invWhere: any = scoped.tenantId ? { tenantId: scoped.tenantId } : {};
     const totalInvoices = await prisma.invoice.count({ where: Object.keys(invWhere).length ? invWhere : undefined });
-    const approvedInvoices = await prisma.invoice.count({
-      where: { ...invWhere, status: "APPROVED" },
-    });
+    // successRate includes SIGNED (NRS signed) as well as APPROVED — both are verified states
+    const approvedInvoices = await prisma.invoice.count({ where: { ...invWhere, status: { in: ["APPROVED", "SIGNED"] } } });
     const tenantsCount = await prisma.tenant.count({ where: req.user && req.user.role !== "ADMIN" ? { id: req.user.tenantId } : undefined });
-    const openErrors = await prisma.validationError.count({
-      where: { ...(scoped.tenantId ? { tenantId: scoped.tenantId } : {}), status: "OPEN" },
-    });
+    const openErrors = await prisma.validationError.count({ where: { ...(scoped.tenantId ? { tenantId: scoped.tenantId } : {}), status: "OPEN" } });
 
-    const successRate =
-      totalInvoices > 0
-        ? Number(((approvedInvoices / totalInvoices) * 100).toFixed(2))
-        : 99.85;
+    const successRate = totalInvoices > 0 ? Number(((approvedInvoices / totalInvoices) * 100).toFixed(2)) : 99.85;
 
-    // Real gateway latency: avg (updatedAt - createdAt) for recent COMPLETED queue jobs, default 138ms if none
     let averageLatencyMs = 138;
     let cittaGatewayStatus: string = "ONLINE";
     try {
@@ -315,6 +308,43 @@ router.get("/api/metrics", async (req: any, res) => {
       else if (!recentJobs.length) cittaGatewayStatus = "UNKNOWN";
     } catch {}
 
+    // Per-ERP breakdown (ERP-centric hub, independent integrations) + 30d timeseries
+    let byErp: any[] = [];
+    let timeseries: any[] = [];
+    try {
+      const erpGroups: any[] = await prisma.invoice.groupBy({ by: ["sourceErp"], where: Object.keys(invWhere).length ? invWhere : undefined, _count: { _all: true } });
+      for (const g of erpGroups) {
+        const erp = g.sourceErp || "unknown";
+        const [t, a, p, r] = await Promise.all([
+          prisma.invoice.count({ where: { ...invWhere, sourceErp: erp } }),
+          prisma.invoice.count({ where: { ...invWhere, sourceErp: erp, status: { in: ["APPROVED","SIGNED"] } } }),
+          prisma.invoice.count({ where: { ...invWhere, sourceErp: erp, status: "PENDING_NRS_STAMP" } }),
+          prisma.invoice.count({ where: { ...invWhere, sourceErp: erp, status: { in: ["REJECTED","FAILED"] } } }),
+        ]);
+        byErp.push({ sourceErp: erp, total: t, approved: a, pending: p, rejected: r, successRate: t ? Number(((a/t)*100).toFixed(1)) : 0 });
+      }
+      // 30d daily timeseries per ERP (approved per day)
+      const since = new Date(); since.setDate(since.getDate()-30);
+      const recentInvoices = await prisma.invoice.findMany({ where: { ...invWhere, createdAt: { gte: since } }, select: { sourceErp: true, status: true, createdAt: true } });
+      const dayMap = new Map<string, any>();
+      for (const inv of recentInvoices) {
+        const day = inv.createdAt.toISOString().slice(0,10);
+        if (!dayMap.has(day)) dayMap.set(day, { date: day, qbo: 0, odoo: 0, total: 0 });
+        const row = dayMap.get(day);
+        if (inv.status==="APPROVED"||inv.status==="SIGNED") {
+          row.total++; if (inv.sourceErp==="qbo") row.qbo++; else if (inv.sourceErp==="odoo") row.odoo++;
+        }
+      }
+      timeseries = Array.from(dayMap.values()).sort((a,b)=>a.date.localeCompare(b.date));
+    } catch {}
+
+    // ERP health per connection (lastSyncAt lag)
+    let erpHealth: any[] = [];
+    try {
+      const conns = await prisma.tenantErp.findMany({ where: scoped.tenantId ? { tenantId: scoped.tenantId } : undefined, select: { id: true, erpId: true, displayName: true, companyId: true, status: true, lastSyncAt: true } });
+      erpHealth = conns.map((c:any)=>({ id: c.id, erpId: c.erpId, displayName: c.displayName, companyId: c.companyId, status: c.status, lastSyncAt: c.lastSyncAt, lagSec: c.lastSyncAt ? Math.round((Date.now()-new Date(c.lastSyncAt).getTime())/1000) : null }));
+    } catch {}
+
     res.json({
       totalInvoicesProcessed: totalInvoices,
       nrsStampSuccessRate: successRate,
@@ -323,6 +353,9 @@ router.get("/api/metrics", async (req: any, res) => {
       pendingValidationCount: openErrors,
       reconciliationCronStatus: "HEALTHY",
       cittaGatewayStatus,
+      byErp,
+      timeseries,
+      erpHealth,
     });
   } catch (e: any) {
     console.error("[API Error] GET /api/metrics failed:", e);

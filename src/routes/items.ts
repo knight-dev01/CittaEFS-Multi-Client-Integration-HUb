@@ -6,12 +6,10 @@ import {
 } from "../lib/serverHelpers";
 import { isValidCittaCode, getCittaCodeType } from "../data/referenceData";
 
-// Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix. Only the few
-// keyword matches we can be confident about get auto-classified; everything
-// else is left UNMAPPED rather than silently guessing a wrong-but-valid code.
+// Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix.
 function inferCittaCode(sku: string, desc: string): string {
   const text = `${sku} ${desc}`.toLowerCase();
-  if (/gardening|sod|rocks|fountain|pump|sprinkler|landscap/.test(text)) return "8130"; // Landscape care and maintenance service activities
+  if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
   if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
   if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
   return "UNMAPPED";
@@ -50,6 +48,7 @@ router.get("/api/items/mappings", async (req: any, res) => {
 });
 
 router.post("/api/items/mappings", async (req, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable in hub — edit in ERP (QBO/Odoo) and sync will re-ingest (only ValidationError resolve may patch hsOrServiceCode)" });
   try {
     const {
       tenantId,
@@ -116,6 +115,7 @@ router.post("/api/items/mappings", async (req, res) => {
 });
 
 router.post("/api/items/mappings/auto-map", async (req, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable — fix in ERP or via ValidationError resolve" });
   try {
     const { tenantId } = req.body;
     let mappedCount = 0;
@@ -150,6 +150,7 @@ router.post("/api/items/mappings/auto-map", async (req, res) => {
 });
 
 router.put("/api/items/mappings/:id", async (req: any, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable in hub — edit in ERP (QBO/Odoo)" });
   try {
     const { id } = req.params;
     const { name, description, unitCode, hsOrServiceCode, defaultVatRate, categoryType } = req.body;
@@ -173,6 +174,7 @@ router.put("/api/items/mappings/:id", async (req: any, res) => {
 });
 
 router.delete("/api/items/mappings/:id", async (req: any, res) => {
+  return res.status(403).json({ success: false, error: "Items are ERP-sourced and immutable in hub — delete in ERP" });
   try {
     await prisma.item.delete({ where: { id: req.params.id } });
     res.json({ success: true });

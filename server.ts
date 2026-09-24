@@ -140,6 +140,34 @@ async function startServer() {
   }
 
   setInterval(()=>{ runWorkerBatch().then(results=>{ if(results.length>0) broadcastEvent({ type:"update", method:"WORKER", path:"/queue/drain"});}).catch(err=>console.error("[Worker] Queue drain error:",err));},5000);
+  // Continuous ERP sync + NRS archive verification (hub listens, not center of edits; pending until verified)
+  setInterval(async ()=>{
+    try {
+      const { runNrsReconciliationCron } = await import("./src/crons/reconciliation");
+      const res = await runNrsReconciliationCron();
+      if (res.recoveredCount>0 || res.orphansFixedCount>0) broadcastEvent({ type:"update", method:"CRON", path:"/nrs/reconcile"});
+    } catch(e:any){ console.warn("[Cron] NRS reconcile error:", e.message); }
+  }, 300000).unref(); // 5m NRS archive poll
+  setInterval(async ()=>{
+    try {
+      const { runQbReconciliationCron } = await import("./src/crons/reconciliation");
+      const res = await runQbReconciliationCron();
+      if (res.recoveredCount>0) broadcastEvent({ type:"update", method:"CRON", path:"/qbo/reconcile"});
+    } catch(e:any){ console.warn("[Cron] QBO reconcile error:", e.message); }
+  }, 60000).unref(); // 60s QBO continuous sync
+  setInterval(async ()=>{
+    try {
+      const { fetchOdooInvoicesSince } = await import("./src/services/odooService");
+      const prisma = (await import("./src/lib/prisma")).prisma;
+      const odooIntegrations = await prisma.integration.findMany({ where: { sourceSystem: "ODOO", status: "CONNECTED" } });
+      for (const ig of odooIntegrations) {
+        const { ingestOdooInvoice } = await import("./src/services/odooService");
+        const rows = await fetchOdooInvoicesSince(ig.tenantId, ig.lastSyncAt || undefined);
+        for (const r of rows) { try { await ingestOdooInvoice(ig.tenantId, r); } catch{} }
+        if (rows.length>0) broadcastEvent({ type:"update", method:"CRON", path:"/odoo/reconcile"});
+      }
+    } catch(e:any){ console.warn("[Cron] Odoo reconcile error:", e.message); }
+  }, 60000).unref(); // 60s Odoo continuous poll (no webhook)
 
   (async()=>{
     const redisUrl=process.env.REDIS_URL?.trim()||process.env.REDIS_HOST?.trim();

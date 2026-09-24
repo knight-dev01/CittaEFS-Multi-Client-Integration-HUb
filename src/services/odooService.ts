@@ -152,8 +152,8 @@ export async function connectOdoo(
  * needed (unlike QBO) since Odoo API keys are static.
  */
 export async function getValidOdooCredentials(tenantId: string): Promise<OdooCredentials> {
-  const integration = await prisma.integration.findUnique({
-    where: { tenantId_sourceSystem: { tenantId, sourceSystem: SOURCE_SYSTEM } },
+  const integration = await prisma.integration.findFirst({
+    where: { tenantId, sourceSystem: SOURCE_SYSTEM },
   });
   if (!integration) {
     throw new Error(`No Odoo integration found for tenant ${tenantId}`);
@@ -278,8 +278,8 @@ const INVOICE_FIELDS = ["id", "name", "invoice_date", "move_type", "partner_id",
  */
 export async function fetchAllOdooInvoicesPaginated(tenantId: string): Promise<any[]> {
   const creds = await getValidOdooCredentials(tenantId);
-  const integration = await prisma.integration.findUnique({
-    where: { tenantId_sourceSystem: { tenantId, sourceSystem: SOURCE_SYSTEM } },
+  const integration = await prisma.integration.findFirst({
+    where: { tenantId, sourceSystem: SOURCE_SYSTEM },
   });
   if (!integration) throw new Error(`Integration details not found for tenant ${tenantId}`);
 
@@ -318,8 +318,8 @@ export async function fetchAllOdooInvoicesPaginated(tenantId: string): Promise<a
  */
 export async function fetchOdooInvoicesSince(tenantId: string, lastSyncAt?: Date): Promise<any[]> {
   const creds = await getValidOdooCredentials(tenantId);
-  const integration = await prisma.integration.findUnique({
-    where: { tenantId_sourceSystem: { tenantId, sourceSystem: SOURCE_SYSTEM } },
+  const integration = await prisma.integration.findFirst({
+    where: { tenantId, sourceSystem: SOURCE_SYSTEM },
   });
   if (!integration) throw new Error(`Integration details not found for tenant ${tenantId}`);
 

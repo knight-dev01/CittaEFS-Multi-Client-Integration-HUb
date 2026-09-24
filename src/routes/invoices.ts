@@ -77,6 +77,9 @@ router.get("/api/invoices/:id", async (req, res) => {
 });
 
 router.put("/api/invoices/:id", async (req: any, res) => {
+  // Immutable hub: invoices are ERP-sourced and read-only; edit in ERP (QBO/Odoo) — hub listens via webhook/sync
+  return res.status(403).json({ success: false, error: "Invoices are ERP-sourced and immutable in hub — edit in ERP (QBO/Odoo) and sync will re-ingest" });
+  // original edit logic archived at archive/v2.29-feature-freeze; only ValidationError resolve may patch hsOrServiceCode via POST /api/validation-errors/resolve
   try {
     const role = req.user?.role;
     if (req.user && !["ADMIN","OPERATOR","INTEGRATION_MANAGER"].includes(role)) return res.status(403).json({ success: false, error: "Forbidden" });
@@ -170,6 +173,8 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
     const _cf = (req.body as any).customFields ?? customFields;
     const _md = (req.body as any).metadata ?? metadata;
 
+    // ERP-sourced only — Excel/manual not allowed (hub listens, not center of edits)
+    if (sourceErp && !["qbo","odoo"].includes(String(sourceErp).toLowerCase())) return res.status(403).json({ success: false, error: "Invoices are ERP-sourced (qbo/odoo) — Excel/manual not allowed; hub listens via ERP sync/webhook" });
     const targetTenantId = tenantId || (req as any).user?.tenantId || "tenant_qbo_smb";
     if ((req as any).user && (req as any).user.role !== "ADMIN" && targetTenantId !== (req as any).user.tenantId) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation — cannot send to another tenant" });
     const tenant = await prisma.tenant.findUnique({
@@ -506,6 +511,7 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
     const seenInBatch = new Set<string>();
     for (const payload of bulkInvoices) { try {
       const { clientInvoiceNumber, documentNumber, invoiceKind, invoiceType, invoiceTypeCode, lineItems, customerCode, customerName, customerTin, issueDate, originalIrn, billingReferenceIrns, sourceErp, erpId, headerCharges, headerDiscount, currency, customFields, metadata } = payload || {};
+      if (sourceErp && !["qbo","odoo"].includes(String(sourceErp).toLowerCase())) { results.push({ clientInvoiceNumber, success:false, errors:["Invoices are ERP-sourced (qbo/odoo) — Excel/manual not allowed"]}); continue; }
       const _hc_b = (payload as any).HeaderCharges ?? (payload as any).headerCharges ?? headerCharges;
       const _hd_b = (payload as any).HeaderDiscount ?? (payload as any).headerDiscount ?? headerDiscount;
       const _itc_b = (payload as any).InvoiceTypeCode ?? (payload as any).invoiceTypeCode ?? invoiceTypeCode;
@@ -815,6 +821,7 @@ router.get("/api/queue/stats", async (req:any,res)=>{
 });
 
 router.delete("/api/invoices/:id", async (req:any,res)=>{
+  return res.status(403).json({ success:false, error:"Invoices are ERP-sourced and immutable in hub — delete in ERP (QBO/Odoo) and sync will reflect" });
   try {
     const inv = await prisma.invoice.findUnique({ where:{id:req.params.id}});
     if(!inv) return res.status(404).json({ success:false, error:"Invoice not found"});

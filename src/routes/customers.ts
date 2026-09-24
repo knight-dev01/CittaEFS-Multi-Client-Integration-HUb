@@ -34,6 +34,8 @@ router.get("/api/customers", async (req: any, res) => {
 });
 
 router.post("/api/customers", async (req, res) => {
+  // Immutable hub: customers are ERP-sourced (QBO/Odoo) — edit in ERP; hub listens via webhook/sync (read-only buffer)
+  return res.status(403).json({ success: false, error: "Customers are ERP-sourced and immutable in hub — create/edit in ERP (QBO/Odoo) and sync will re-ingest" });
   try {
     const {
       tenantId,
@@ -104,6 +106,7 @@ router.post("/api/customers", async (req, res) => {
 });
 
 router.put("/api/customers/:id", async (req: any, res) => {
+  return res.status(403).json({ success: false, error: "Customers are ERP-sourced and immutable in hub — edit in ERP (QBO/Odoo)" });
   try {
     const { id } = req.params;
     const { name, tin, isB2B, street, city, country, email, ccEmail, postcode } = req.body;
@@ -136,6 +139,7 @@ router.put("/api/customers/:id", async (req: any, res) => {
 });
 
 router.delete("/api/customers/:id", async (req: any, res) => {
+  return res.status(403).json({ success: false, error: "Customers are ERP-sourced and immutable in hub — delete in ERP" });
   try {
     await prisma.customer.delete({ where: { id: req.params.id } });
     res.json({ success: true });

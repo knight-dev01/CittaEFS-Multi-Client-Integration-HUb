@@ -191,7 +191,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     return true;
   });
 
-  const grouped = useMemo(() => groupTenantsByErp(tenants as any), [tenants]);
+  const filteredTenantsForSidebar = useMemo(() => (tenants as any[]).filter((t:any) => t.platformType !== 'Excel & CSV Import'), [tenants]);
+  const grouped = useMemo(() => groupTenantsByErp(filteredTenantsForSidebar as any), [filteredTenantsForSidebar]);
 
   const canOnboard = userRole === 'ADMIN';
   const canIngest = userRole === 'ADMIN' || userRole === 'OPERATOR';
@@ -223,8 +224,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       {/* Tenant Selector — grouped by ERP */}
       <div className="p-4 border-b border-slate-800/80 shrink-0 bg-slate-950/30">
         <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider flex items-center justify-between">
-          <span>Active Workspace Client:</span>
-          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${erp.id==='qbo'?'bg-amber-500/20 text-amber-300 border-amber-500/30': erp.id==='excel'?'bg-indigo-500/20 text-indigo-300 border-indigo-500/30':'bg-slate-700 text-slate-300 border-slate-600'}`}>{erp.shortLabel} MODE</span>
+          <span>Active Workspace ERP:</span>
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${erp.id==='qbo'?'bg-amber-500/20 text-amber-300 border-amber-500/30': erp.id==='odoo'?'bg-violet-500/20 text-violet-300 border-violet-500/30':'bg-slate-700 text-slate-300 border-slate-600'}`}>{erp.shortLabel} MODE</span>
         </label>
         <div className="relative flex items-center gap-2">
           <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 flex-1 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
@@ -242,7 +243,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             >
               {tenants.length === 0 ? (
                 <option value="" className="bg-slate-900 text-indigo-400 font-medium">
-                  + Onboard Client Entity
+                  + Onboard ERP
                 </option>
               ) : (
                 Object.entries(grouped).map(([groupLabel, groupTenants]: any) => (
@@ -341,7 +342,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             className="flex items-center justify-center space-x-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg cursor-pointer shadow-sm transition-all"
           >
             <Plus className="w-4 h-4 text-white" />
-            <span>Onboard Client</span>
+            <span>Onboard ERP</span>
           </button>
         )}
         {canIngest && (
@@ -456,7 +457,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         <div className="flex flex-col w-full h-full relative">
           {/* Single collapse toggle — top-right */}
           <button
-            onClick={toggleCollapsed}
+            onClick={() => toggleCollapsed()}
             title={isCollapsed ? 'Expand sidebar (also hover to expand)' : 'Collapse sidebar'}
             className="absolute -right-3 top-5 z-40 w-6 h-6 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center text-slate-600 hover:text-violet-600 hover:border-violet-300 cursor-pointer"
           >

@@ -61,8 +61,8 @@ router.post("/api/integrations/odoo/connect", async (req: any, res) => {
 router.get("/api/integrations/odoo/status", async (req: any, res) => {
   try {
     const tenantId = (req.query.tenantId as string) || req.user?.tenantId || "tenant_qbo_smb";
-    const integration = await prisma.integration.findUnique({
-      where: { tenantId_sourceSystem: { tenantId, sourceSystem: "ODOO" } },
+    const integration = await prisma.integration.findFirst({
+      where: { tenantId, sourceSystem: "ODOO" },
     });
 
     if (!integration) {
@@ -93,8 +93,8 @@ router.post("/api/integrations/odoo/sync", async (req: any, res) => {
     }
 
     const tenantId = requestedTenantId;
-    const integration = await prisma.integration.findUnique({
-      where: { tenantId_sourceSystem: { tenantId, sourceSystem: "ODOO" } },
+    const integration = await prisma.integration.findFirst({
+      where: { tenantId, sourceSystem: "ODOO" },
     });
 
     const rawInvoices = integration?.lastSyncAt
