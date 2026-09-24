@@ -97,7 +97,7 @@ export function ItemDictionaryTab() {
               {activeTenant.name} Code Dictionary
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Maps internal client SKUs to official NRS Regulatory Codes (<strong className="text-slate-200 font-medium">hsOrServiceCode</strong>)
+              Maps internal client SKUs to official NRS Regulatory Codes (<strong className="text-slate-200 font-medium">hsOrServiceCode</strong>) for tax-code inference — a Hub-owned lookup, distinct from CittaEFS item registration
             </p>
           </div>
         </div>

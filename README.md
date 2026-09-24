@@ -229,3 +229,5 @@ curl -H "Authorization: Bearer <CITTAEFS_API_KEY>" https://ei-api.azurewebsites.
 ## 📄 License
 
 Proprietary Enterprise Software • All Rights Reserved CittaEFS Systems.
+
+claude --resume 75aa8ca1-be02-4844-bdc0-b28326e39e90

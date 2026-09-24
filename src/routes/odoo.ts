@@ -27,6 +27,16 @@ router.post("/api/integrations/odoo/connect", async (req: any, res) => {
       return res.status(400).json({ success: false, error: "odooUrl, odooDatabase, odooUsername, and odooApiKey are all required" });
     }
 
+    // Fail with a clear message instead of a raw FK-constraint crash when
+    // tenantId doesn't resolve to a real row — happens when the frontend is
+    // holding a stale tenant (e.g. cached from before a database switch), or
+    // when none of the candidates above (body, JWT, query, the last-resort
+    // default) resolve to a tenant that actually exists here.
+    const tenantExists = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    if (!tenantExists) {
+      return res.status(404).json({ success: false, error: `Tenant "${tenantId}" not found — refresh the page and re-select the client before connecting Odoo.` });
+    }
+
     const result = await connectOdoo(tenantId, { odooUrl, odooDatabase, odooUsername, odooApiKey });
 
     await safeAuditLogCreate(prisma, {

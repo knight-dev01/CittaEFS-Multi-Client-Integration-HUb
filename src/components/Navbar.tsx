@@ -170,7 +170,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: pendingStagingCount + failedInvoiceCount },
     { id: 'import', label: 'Import', icon: Download, category: 'erp', requiredRoles: ['ADMIN', 'OPERATOR'], erpOnly: true },
     { id: 'staging', label: 'Staging', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: pendingStagingCount }, // pre-transmission holding area
-    { id: 'customers', label: 'Customers', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
+    { id: 'customers', label: 'Customer Registrations', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'items', label: 'Items', icon: Tag, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'successful', label: 'Successful', icon: CheckCircle2, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: successfulInvoiceCount }, // APPROVED/SIGNED invoices

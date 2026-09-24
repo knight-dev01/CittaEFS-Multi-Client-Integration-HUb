@@ -231,13 +231,11 @@ export class CittaEfsClient {
     const originalIrn = payload.originalIrn;
     const invoiceTypeCode =
       (payload as any).invoiceTypeCode?.toString().trim() ||
-      (payload.invoiceType === "STANDARD"
-        ? "388"
-        : payload.invoiceType === "CREDIT_NOTE"
-          ? "381"
-          : payload.invoiceType === "DEBIT_NOTE"
-            ? "383"
-            : "388");
+      (payload.invoiceType === "CREDIT_NOTE"
+        ? "380"
+        : payload.invoiceType === "DEBIT_NOTE"
+          ? "384"
+          : "381");
     const headerDiscount = (payload as any).headerDiscount ?? 0;
     const headerCharges = (payload as any).headerCharges ?? 0;
     const useStateTax = (payload as any).useStateTax || false;

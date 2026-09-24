@@ -5,6 +5,47 @@ import {
   parsePagination,
 } from "../lib/serverHelpers";
 import { getCittaCodeType, isValidCittaCode } from "../data/referenceData";
+import { invoiceIngestionSchema } from "../schemas/invoice.schema";
+import { invoiceQueue } from "../queues/invoiceQueue";
+import { ingestOdooInvoice } from "../services/odooService";
+import { ingestQboInvoice } from "../services/qboService";
+import { OdooAdapter, QuickBooksAdapter } from "../adapters/connectorAdapters";
+
+// Reconstructs a signInvoice queue job from a persisted Invoice row and
+// enqueues it directly, instead of only resetting the DB status and hoping
+// the 5s orphan-recovery cron notices — used by /resolve so "fixed and
+// retried" is an immediate, confirmable action, not an implicit one.
+async function requeuePersistedInvoice(invoiceId: string): Promise<boolean> {
+  const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, include: { lineItems: true } });
+  if (!inv) return false;
+  const validated = invoiceIngestionSchema.parse({
+    tenantId: inv.tenantId,
+    clientInvoiceNumber: inv.clientInvoiceId,
+    documentNumber: inv.documentNumber || undefined,
+    invoiceType: inv.invoiceType as any,
+    invoiceKind: inv.invoiceKind as any,
+    issueDate: inv.issueDate.toISOString().substring(0, 10),
+    customerCode: inv.customerCode,
+    customerName: inv.customerName,
+    customerTin: inv.customerTin || undefined,
+    lineItems: inv.lineItems.map((li: any) => ({
+      itemCode: li.itemCode,
+      description: li.description,
+      quantity: li.quantity,
+      unitPrice: li.unitPrice,
+      discountAmount: 0,
+      hsOrServiceCode: li.hsOrServiceCode,
+      codeType: getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE",
+      vatRate: li.vatRate,
+    })),
+  });
+  await invoiceQueue.add(
+    "signInvoice",
+    { ...validated, dbInvoiceId: inv.id },
+    { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}:resolve:${Date.now()}` }
+  );
+  return true;
+}
 
 const router = Router();
 
@@ -44,7 +85,18 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
     if (!errRecord) return res.status(404).json({ success: false, error: "Validation error not found" });
     if (req.user && req.user.role !== "ADMIN" && errRecord.tenantId !== req.user.tenantId) return res.status(403).json({ success: false, error: "Forbidden" });
 
-    // Patch HS code or TIN onto the actual invoice + Item dictionary so retry propagates — robust across tenant mismatch (logs show PUT for km0u vs error for qbo_smb)
+    // Bug fix (2026-09-15): this used to only patch reference data and mark
+    // the error RESOLVED — for a validation error that fired at ingestion
+    // time (before any Invoice row existed, e.g. a bad HS code from a fresh
+    // Odoo/QBO pull), nothing was ever actually created or queued, so
+    // "resolving" silently did nothing observable. Now: when a real Invoice
+    // exists, it's patched AND directly re-queued (not left to the 5s
+    // orphan-recovery cron); when none exists yet, ingestion is re-run from
+    // the error's own stored raw payload now that the fix has been applied.
+    let invoiceCreated = false;
+    let requeued = 0;
+    let outcomeMessage = "";
+
     try {
       if (hsOrServiceCode && errRecord.errorCategory === "MISSING_HS_CODE") {
         const cleanHs = String(hsOrServiceCode).trim();
@@ -74,21 +126,101 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
             if (["REJECTED","FAILED","CANCELLED"].includes(inv.status)) {
               await prisma.invoice.update({ where: { id: inv.id }, data: { status: "PENDING_NRS_STAMP" } });
             }
+            try {
+              if (await requeuePersistedInvoice(inv.id)) requeued++;
+            } catch (rqErr: any) {
+              console.error(`[Resolve] Requeue failed for invoice ${inv.id}:`, rqErr.message);
+            }
           }
+          outcomeMessage = requeued
+            ? `HS code corrected on ${invoicesToPatch.length} invoice(s); ${requeued} re-queued for CittaEFS submission.`
+            : `HS code corrected on ${invoicesToPatch.length} invoice(s), but re-queue failed — check Queue Monitor.`;
         } else {
-          // No invoice yet — ensure Item dictionary has the code so future ingest works
-          let skuFromError: string | null = null;
-          try { const sample = typeof errRecord.rawPayloadSample === 'string' ? JSON.parse(errRecord.rawPayloadSample) : errRecord.rawPayloadSample; skuFromError = sample?.lineItems?.[0]?.itemCode || sample?.lineItems?.[0]?.clientSku || sample?.Line?.[0]?.SalesItemLineDetail?.ItemRef?.name || null; } catch {}
-          const sku = skuFromError || "SKU-GENERIC";
-          const existing = await prisma.item.findFirst({ where: { tenantId: errRecord.tenantId, clientSku: sku } });
-          if (existing) await prisma.item.update({ where: { id: existing.id }, data: { hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService } });
-          else await prisma.item.create({ data: { tenantId: errRecord.tenantId, clientSku: sku, description: "Mapped via validation fix", hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService, defaultVatRate: 7.5 } as any });
+          // No invoice was ever created for this error (validation failed at
+          // ingestion time). Patch the Item dictionary so the code is right,
+          // then actually re-run ingestion from the stored raw payload —
+          // don't just hope a future sync will pick it up.
+          let rawPayload: any = null;
+          try { rawPayload = typeof errRecord.rawPayloadSample === 'string' ? JSON.parse(errRecord.rawPayloadSample) : errRecord.rawPayloadSample; } catch {}
+
+          // Derive the real clientSku the same way ingestion itself does — a
+          // hand-rolled field-name guess here (e.g. rawPayload.lineItems[0])
+          // doesn't match Odoo's actual shape (_lines[].product_id, bracket-
+          // encoded), so the patch silently lands on the wrong SKU and
+          // re-ingestion fails again with the same "UNMAPPED" error.
+          let lines: any[] = [];
+          if (rawPayload && errRecord.sourceErp === "odoo") {
+            try { lines = new OdooAdapter().transform(rawPayload).lineItems; } catch {}
+          } else if (rawPayload && errRecord.sourceErp === "qbo") {
+            try { lines = new QuickBooksAdapter().transform(rawPayload).lineItems; } catch {}
+          }
+          const invalidLines = lines.filter((li: any) => !isValidCittaCode(li.hsOrServiceCode));
+          // The error message names the specific item that failed (e.g. "...
+          // found UNMAPPED for RGB Keyboard"). Narrow to just that one when
+          // we can match it — a multi-item invoice's other products almost
+          // certainly need a different code, so don't stamp the one code the
+          // user gave us onto all of them (a chair and a laptop aren't the
+          // same HS code). Only widen to every invalid line as a last resort.
+          const namedItem = errRecord.errorMessage.match(/for (.+?)\)/)?.[1]?.trim().toLowerCase();
+          const namedMatch = namedItem ? invalidLines.find((li: any) => (li.clientSku || '').toLowerCase() === namedItem) : undefined;
+          let skus: string[];
+          if (namedMatch) {
+            skus = [namedMatch.clientSku];
+          } else if (invalidLines.length) {
+            skus = invalidLines.map((li: any) => li.clientSku).filter(Boolean);
+          } else if (lines.length) {
+            skus = [lines[0].clientSku].filter(Boolean);
+          } else {
+            const bestGuessSku = rawPayload?.lineItems?.[0]?.itemCode || rawPayload?.lineItems?.[0]?.clientSku || rawPayload?.Line?.[0]?.SalesItemLineDetail?.ItemRef?.name || null;
+            skus = [bestGuessSku || "SKU-GENERIC"];
+          }
+          for (const sku of skus) {
+            const existing = await prisma.item.findFirst({ where: { tenantId: errRecord.tenantId, clientSku: sku } });
+            if (existing) await prisma.item.update({ where: { id: existing.id }, data: { hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService } });
+            else await prisma.item.create({ data: { tenantId: errRecord.tenantId, clientSku: sku, description: "Mapped via validation fix", hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService, defaultVatRate: 7.5 } as any });
+          }
+
+          if (rawPayload && (errRecord.sourceErp === "odoo" || errRecord.sourceErp === "qbo")) {
+            try {
+              const ingestFn = errRecord.sourceErp === "odoo" ? ingestOdooInvoice : ingestQboInvoice;
+              const created = await ingestFn(errRecord.tenantId, rawPayload);
+              invoiceCreated = true;
+              outcomeMessage = `Item code corrected and invoice "${created.clientInvoiceId}" created from the original ${errRecord.sourceErp.toUpperCase()} payload (status: ${created.status}).`;
+            } catch (reIngestErr: any) {
+              outcomeMessage = `Item code corrected, but re-ingestion still failed: ${reIngestErr.message}. See the new validation error this created.`;
+            }
+          } else {
+            outcomeMessage = `Item code corrected for future syncs, but no invoice exists yet for "${errRecord.clientInvoiceNumber}"${errRecord.sourceErp ? "" : " (source unknown — predates this fix)"} — nothing to resubmit automatically. Trigger a manual re-sync to create it.`;
+          }
         }
       }
       if (correctedTin && (errRecord.errorCategory === "INVALID_TIN_FORMAT" || errRecord.errorCategory === "MISSING_B2B_TIN")) {
         const cleanTin = String(correctedTin).trim().toUpperCase();
         const invoice = await prisma.invoice.findFirst({ where: { tenantId: errRecord.tenantId, clientInvoiceId: errRecord.clientInvoiceNumber } });
-        if (invoice) await prisma.invoice.update({ where: { id: invoice.id }, data: { customerTin: cleanTin } });
+        if (invoice) {
+          await prisma.invoice.update({ where: { id: invoice.id }, data: { customerTin: cleanTin, ...( ["REJECTED","FAILED","CANCELLED"].includes(invoice.status) ? { status: "PENDING_NRS_STAMP" } : {} ) } });
+          try {
+            if (await requeuePersistedInvoice(invoice.id)) requeued++;
+            outcomeMessage = `TIN corrected on invoice "${invoice.clientInvoiceId}" and re-queued for CittaEFS submission.`;
+          } catch (rqErr: any) {
+            outcomeMessage = `TIN corrected, but re-queue failed: ${rqErr.message}`;
+          }
+        } else {
+          let rawPayload: any = null;
+          try { rawPayload = typeof errRecord.rawPayloadSample === 'string' ? JSON.parse(errRecord.rawPayloadSample) : errRecord.rawPayloadSample; } catch {}
+          if (rawPayload && (errRecord.sourceErp === "odoo" || errRecord.sourceErp === "qbo")) {
+            try {
+              const ingestFn = errRecord.sourceErp === "odoo" ? ingestOdooInvoice : ingestQboInvoice;
+              const created = await ingestFn(errRecord.tenantId, rawPayload);
+              invoiceCreated = true;
+              outcomeMessage = `TIN corrected and invoice "${created.clientInvoiceId}" created from the original ${errRecord.sourceErp.toUpperCase()} payload (status: ${created.status}).`;
+            } catch (reIngestErr: any) {
+              outcomeMessage = `TIN noted, but re-ingestion still failed: ${reIngestErr.message}.`;
+            }
+          } else {
+            outcomeMessage = `No invoice exists yet for "${errRecord.clientInvoiceNumber}" — nothing to resubmit automatically. Trigger a manual re-sync to create it.`;
+          }
+        }
         // Also patch customer master if exists
         try {
           const cust = await prisma.customer.findFirst({ where: { tenantId: errRecord.tenantId, clientSystemCustId: invoice?.customerCode } });
@@ -97,14 +229,14 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
       }
     } catch (patchErr:any) {
       console.error("[Resolve] patch failed:", patchErr.message);
-      // still mark resolved but inform client of patch issue
+      outcomeMessage = outcomeMessage || `Marked resolved, but the fix could not be applied: ${patchErr.message}`;
     }
 
     await prisma.validationError.update({ where: { id: errorId }, data: { status: "RESOLVED" } });
     // Audit log
-    try { await prisma.auditLog.create({ data: { tenantId: errRecord.tenantId, action: "CODE_MAPPED", entityType: "ITEM_MAPPING", entityRef: errRecord.clientInvoiceNumber, details: `Validation fix applied: ${errRecord.errorCategory} → ${hsOrServiceCode || correctedTin} (via resolve)`, sha256PayloadHash: "resolve", performedBy: req.user?.email || "Operator" } }); } catch {}
+    try { await prisma.auditLog.create({ data: { tenantId: errRecord.tenantId, action: "CODE_MAPPED", entityType: "ITEM_MAPPING", entityRef: errRecord.clientInvoiceNumber, details: `Validation fix applied: ${errRecord.errorCategory} → ${hsOrServiceCode || correctedTin} (via resolve). ${outcomeMessage}`, sha256PayloadHash: "resolve", performedBy: req.user?.email || "Operator" } }); } catch {}
 
-    res.json({ success: true, message: "Validation error resolved and invoice patched for propagation." });
+    res.json({ success: true, invoiceCreated, requeued, message: outcomeMessage || "Validation error resolved." });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

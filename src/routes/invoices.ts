@@ -329,6 +329,7 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
               : "lineItems",
           errorMessage: errors.join(" | "),
           rawPayloadSample: JSON.stringify(req.body),
+          sourceErp: "manual",
           status: "OPEN",
         },
       });

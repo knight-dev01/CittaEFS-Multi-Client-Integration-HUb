@@ -1,135 +1,125 @@
 import { useState } from 'react';
 import { useHub } from '../lib/store';
-import { CustomerProfile } from '../types';
-import { 
-  Users, 
-  Search, 
-  Plus, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Building2, 
-  UserCheck, 
-  Mail, 
-  Phone, 
-  MapPin,
+import {
+  Users,
+  Search,
+  Download,
+  CheckCircle2,
+  Clock,
   ShieldCheck,
-  Trash2,
   ChevronDown
 } from 'lucide-react';
 
+// Thin-hub pivot (docs/CittaHub_Revision_Plan.md Phase 4): CittaEFS owns
+// customer registration — there is no API to create one, only its own Excel
+// bulk-upload templates. This tab is a queue to clear, not a directory the
+// Hub owns: it shows customers the Hub has seen from a client ERP and their
+// CittaEFS registration status, with a fast path from "unregistered" to
+// "registered and invoices resubmitted."
 export function CustomerSyncTab() {
-  const { customers, activeTenant, addCustomer, deleteCustomer } = useHub() as any;
+  const { entityMappings, activeTenant, exportEntityRegistrations, confirmEntityRegistration } = useHub() as any;
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
-  // Form
-  const [name, setName] = useState('');
-  const [tin, setTin] = useState('P019283746Z');
-  const [isB2B, setIsB2B] = useState(true);
-  const [clientCode, setClientCode] = useState('');
-  const [email, setEmail] = useState('');
-  const [street, setStreet] = useState('');
-  const [country, setCountry] = useState('NG');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [refCodeDraft, setRefCodeDraft] = useState('');
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [confirmError, setConfirmError] = useState('');
 
-  const tenantCustomers = customers.filter(c => c.tenantId === activeTenant.id);
+  const tenantCustomerMappings = entityMappings.filter(
+    (m: any) => m.tenantId === activeTenant.id && m.entityType === 'CUSTOMER'
+  );
 
-  const filteredCustomers = tenantCustomers.filter(c => {
-    const matchesSearch = 
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.tin.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.clientCustomerCode.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesType = 
-      typeFilter === 'ALL' || 
-      (typeFilter === 'B2B' && c.isB2B) || 
-      (typeFilter === 'B2C' && !c.isB2B);
-
-    return matchesSearch && matchesType;
+  const filtered = tenantCustomerMappings.filter((m: any) => {
+    const matchesSearch =
+      (m.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.sourceErpId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.tin || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'ALL' || m.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
-  const handleSaveCustomer = async () => {
-    if (!name) return;
+  const pendingCount = tenantCustomerMappings.filter((m: any) => m.status === 'PENDING_REGISTRATION').length;
 
-    setSaveError('');
-    setIsSaving(true);
+  const handleExport = async () => {
+    setIsExporting(true);
     try {
-      await addCustomer({
-        name,
-        tin: isB2B ? tin : 'N/A',
-        isB2B,
-        clientCustomerCode: clientCode || `CUST-${Math.floor(1000 + Math.random() * 9000)}`,
-        email: email || 'contact@client.com',
-        street: street || 'Nairobi Business District',
-        city: 'Nairobi',
-        country: country || 'NG',
-        phone: '+254700000000'
-      });
-
-      setIsAddModalOpen(false);
-      setName('');
-      setClientCode('');
-    } catch (err: any) {
-      setSaveError(err.message || 'Failed to save customer.');
+      await exportEntityRegistrations('CUSTOMER', activeTenant.id);
+    } catch {
+      // toast already shown by the store action
     } finally {
-      setIsSaving(false);
+      setIsExporting(false);
+    }
+  };
+
+  const handleConfirm = async (mappingId: string) => {
+    if (!refCodeDraft.trim()) {
+      setConfirmError('Enter the CittaEFS reference code returned after upload.');
+      return;
+    }
+    setConfirmError('');
+    setIsConfirming(true);
+    try {
+      await confirmEntityRegistration(mappingId, refCodeDraft.trim());
+      setExpandedId(null);
+      setRefCodeDraft('');
+    } catch (e: any) {
+      setConfirmError(e.message || 'Failed to confirm registration.');
+    } finally {
+      setIsConfirming(false);
     }
   };
 
   return (
     <div className="space-y-6 font-sans text-xs">
-      
+
       {/* Header Banner */}
       <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        
         <div className="flex items-center space-x-3">
           <div className="p-2.5 bg-indigo-500/20 rounded-lg text-indigo-400 border border-indigo-500/30">
             <Users className="w-5 h-5" />
           </div>
           <div>
             <h3 className="text-xl font-bold tracking-tight text-white">
-              {activeTenant.name} Customer Directory
+              {activeTenant.name} — Customer Registrations
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Automates B2B TIN Validation, <strong className="text-slate-200 font-medium">customerCode</strong> mapping & B2C profile rules
+              CittaEFS owns customer records. This is a queue to clear{pendingCount > 0 ? ` — ${pendingCount} awaiting registration` : ''}, not a directory to edit.
             </p>
           </div>
         </div>
 
         <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
+          onClick={handleExport}
+          disabled={isExporting || pendingCount === 0}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
         >
-          <Plus className="w-4 h-4 text-indigo-200" />
-          <span>Sync New Customer</span>
+          <Download className="w-4 h-4 text-indigo-200" />
+          <span>{isExporting ? 'Preparing…' : 'Download EFS Registration File'}</span>
         </button>
-
       </div>
 
-      {/* Rules — collapsed behind dropdown to reduce overload */}
+      {/* How this works — collapsed behind dropdown */}
       <details className="bg-white rounded-xl border border-slate-200/80 shadow-sm group">
         <summary className="list-none px-5 py-3 flex items-center justify-between cursor-pointer text-xs font-semibold text-slate-700">
-          <span className="flex items-center gap-2"><Building2 className="w-4 h-4 text-amber-500" /> B2B / B2C Protocol — click for details</span>
+          <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-amber-500" /> How registration works — click for details</span>
           <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition" />
         </summary>
-        <div className="px-5 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="bg-slate-50 rounded-lg p-3 border border-slate-100"><span className="font-semibold flex items-center gap-1"><Building2 className="w-3.5 h-3.5 text-amber-500" /> B2B</span><p className="text-slate-600 mt-1">Requires validated TIN, billing address, unique <code className="bg-white px-1 py-0.5 rounded border font-mono text-[11px]">customerCode</code>.</p></div>
-          <div className="bg-slate-50 rounded-lg p-3 border border-slate-100"><span className="font-semibold flex items-center gap-1"><UserCheck className="w-3.5 h-3.5 text-emerald-600" /> B2C</span><p className="text-slate-600 mt-1">Auto <code className="bg-white px-1 py-0.5 rounded border font-mono text-[11px]">invoiceKind="B2C"</code> + dynamic name strings.</p></div>
+        <div className="px-5 pb-4 text-xs text-slate-600 space-y-1.5">
+          <p>1. A new customer appears here as <strong>Pending</strong> the first time a B2B/B2G invoice references them.</p>
+          <p>2. Download the EFS registration file (pre-filled with everything the Hub knows) and upload it through CittaEFS's own portal — there is no registration API today.</p>
+          <p>3. Enter the CittaEFS reference code EFS returns, using <strong>Confirm Registered</strong> below. Any invoices held up waiting on this customer resubmit automatically.</p>
         </div>
       </details>
 
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm">
-        
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search Customer Name, Code, or TIN..."
+            placeholder="Search customer name, code, or TIN..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-900"
@@ -137,238 +127,97 @@ export function CustomerSyncTab() {
         </div>
 
         <div className="flex items-center space-x-2 text-xs text-slate-600">
-          <span className="font-medium">Profile Type:</span>
+          <span className="font-medium">Status:</span>
           <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
             className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
           >
-            <option value="ALL">All Profiles</option>
-            <option value="B2B">B2B Corporate Clients</option>
-            <option value="B2C">B2C Retail / Walk-in</option>
+            <option value="ALL">All</option>
+            <option value="PENDING_REGISTRATION">Pending Registration</option>
+            <option value="MAPPED">Registered</option>
           </select>
         </div>
-
       </div>
 
-      {/* Customer Directory — simplified: key cols visible, verbose behind row dropdown */}
+      {/* Registration Queue */}
       <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-          <span className="text-[11px] text-slate-500">Simplified view — core fields visible, verbose details hidden in dropdown per row</span>
-          <span className="text-[11px] font-semibold text-slate-600">{filteredCustomers.length} customer(s)</span>
+          <span className="text-[11px] text-slate-500">Sourced from client ERP activity — not editable here</span>
+          <span className="text-[11px] font-semibold text-slate-600">{filtered.length} customer(s)</span>
         </div>
-        {/* Mobile cards — hidden on lg */}
-        <div className="lg:hidden space-y-3 p-3">
-          {filteredCustomers.length===0 ? <div className="p-6 text-center text-slate-400 text-xs">No customers</div> : filteredCustomers.map((c:any)=>{
-            const isOpen = expandedId===c.id;
-            return (
-              <div key={`mc-${c.id}`} className="rounded-xl border border-slate-200 bg-white p-4 space-y-2 shadow-sm">
-                <div className="flex items-start justify-between gap-2"><div><div className="font-mono font-bold text-slate-900 text-sm">{c.clientCustomerCode}</div><div className="text-sm font-semibold text-slate-800">{c.name}</div></div><span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${c.isB2B?'bg-indigo-50 text-indigo-700 border-indigo-200':'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>{c.isB2B?'B2B':'B2C'}</span></div>
-                <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600"><span>TIN: {c.tin || '—'}</span><span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-semibold border ${c.tinValidationStatus==='VALIDATED'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-rose-50 text-rose-700 border-rose-200'}`}>{c.tinValidationStatus}</span></div>
-                <div className="flex gap-2 pt-1"><button onClick={()=>setExpandedId(isOpen?null:c.id)} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold min-h-[44px] flex items-center justify-center gap-1">Details <ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button><button onClick={async()=>{ if(!confirm(`Delete ${c.name}?`)) return; try{ await deleteCustomer(c.id);}catch(e:any){alert(e.message);}}} className="py-2.5 px-3 bg-white border border-slate-200 rounded-xl text-rose-600 min-h-[44px]"><Trash2 className="w-4 h-4" /></button></div>
-                {isOpen && <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px]"><div className="flex justify-between"><span className="text-slate-500">CittaEFS</span><span className="font-mono">{c.cittaCustomerCode || '—'}</span></div><div className="flex justify-between"><span className="text-slate-500">Street</span><span className="truncate max-w-[150px]">{c.street}</span></div><div className="flex justify-between"><span className="text-slate-500">Country</span><span>{c.country} • {c.lastSyncedAt}</span></div></div>}
-              </div>
-            );
-          })}
-        </div>
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs text-slate-700">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
-                <th className="py-3 px-3"></th>
-                <th className="py-3 px-4">Client Code</th>
-                <th className="py-3 px-4">Customer Name</th>
-                <th className="py-3 px-4">Kind</th>
-                <th className="py-3 px-4">TIN Validation</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredCustomers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
-                    No customers match your search query.
-                  </td>
-                </tr>
-              ) : (
-                filteredCustomers.map((c) => {
-                  const isOpen = expandedId===c.id;
-                  return (
-                    <>
-                      <tr key={c.id} className={`hover:bg-slate-50/80 transition-colors ${isOpen?'bg-indigo-50/30':''}`}>
-                        <td className="py-3 px-3"><button onClick={()=>setExpandedId(isOpen?null:c.id)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer"><ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button></td>
-                        <td className="py-3 px-4 font-mono font-semibold text-slate-900">{c.clientCustomerCode}</td>
-                        <td className="py-3 px-4 font-medium text-slate-900">{c.name}</td>
-                        <td className="py-3 px-4"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.isB2B ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{c.isB2B ? 'B2B' : 'B2C'}</span></td>
-                        <td className="py-3 px-4"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.tinValidationStatus === 'VALIDATED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>{c.tinValidationStatus === 'VALIDATED' ? <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" /> : <AlertTriangle className="w-3 h-3 mr-1 text-rose-600" />}{c.tinValidationStatus}</span></td>
-                        <td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-1"><button onClick={()=>setExpandedId(isOpen?null:c.id)} className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-violet-600 border border-slate-200 rounded-lg bg-white cursor-pointer">Details</button><button onClick={async()=>{ if(!confirm(`Delete customer ${c.name}?`)) return; try{ await deleteCustomer(c.id); }catch(e:any){ alert(e.message); } }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
-                      </tr>
-                      {isOpen && (
-                        <tr key={`${c.id}-details`} className="bg-slate-50/60">
-                          <td colSpan={6} className="px-6 py-3">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
-                              <div><span className="font-semibold text-slate-500">CittaEFS Code</span><div className="font-mono text-slate-700">{c.cittaCustomerCode || <span className="italic text-slate-400">Not yet registered</span>}</div></div>
-                              <div><span className="font-semibold text-slate-500">Tax ID (TIN)</span><div className="font-mono text-slate-700">{c.tin || '—'}</div></div>
-                              <div><span className="font-semibold text-slate-500">Street</span><div className="text-slate-600 truncate" title={c.street}>{c.street || '—'}</div></div>
-                              <div><span className="font-semibold text-slate-500">Country / Synced</span><div className="font-mono uppercase text-slate-600">{c.country || 'Unknown'} • {c.lastSyncedAt}</div></div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* ADD CUSTOMER MODAL */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 text-slate-900 space-y-5">
-            
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-600" />
-                Sync New Customer Profile
-              </h3>
-              <button
-                onClick={() => { setIsAddModalOpen(false); setSaveError(''); }}
-                className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer font-medium"
-              >
-                Cancel
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              
-              <div className="flex items-center space-x-4 bg-slate-50 p-3 rounded-xl border border-slate-200/80 font-medium">
-                <label className="flex items-center space-x-2 cursor-pointer text-slate-800">
-                  <input
-                    type="radio"
-                    name="custKind"
-                    checked={isB2B}
-                    onChange={() => setIsB2B(true)}
-                    className="accent-indigo-600"
-                  />
-                  <span>B2B Corporate</span>
-                </label>
-                <label className="flex items-center space-x-2 cursor-pointer text-slate-800">
-                  <input
-                    type="radio"
-                    name="custKind"
-                    checked={!isB2B}
-                    onChange={() => setIsB2B(false)}
-                    className="accent-indigo-600"
-                  />
-                  <span>B2C Retail Consumer</span>
-                </label>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Customer / Company Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Zenith Logistics Ltd"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-              </div>
-
-              {isB2B && (
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Tax Identification Number (TIN) *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. P051239841A"
-                    value={tin}
-                    onChange={(e) => setTin(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  />
-                  <span className="text-[11px] text-slate-500 font-medium block mt-1">
-                    10 to 14 alphanumeric characters, no spaces or hyphens
-                  </span>
-                </div>
-              )}
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Client System Code Reference
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. QBO-CUST-1092"
-                  value={clientCode}
-                  onChange={(e) => setClientCode(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Street *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Plot 42, Industrial Avenue"
-                  value={street}
-                  onChange={(e) => setStreet(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Country *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. NG"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
-                />
-                <span className="text-[11px] text-slate-500 font-medium block mt-1">
-                  Standard ISO country code, e.g. NG for Nigeria
-                </span>
-              </div>
-
-            </div>
-
-            {saveError && (
-              <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <span>{saveError}</span>
-              </div>
-            )}
-
-            <div className="pt-2 flex justify-end space-x-2">
-              <button
-                onClick={() => { setIsAddModalOpen(false); setSaveError(''); }}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg cursor-pointer transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveCustomer}
-                disabled={isSaving}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Saving...' : 'Save Customer Profile'}
-              </button>
-            </div>
-
+        {filtered.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 font-medium">
+            {tenantCustomerMappings.length === 0
+              ? 'No customers seen yet. They appear here once an invoice references them.'
+              : 'No customers match your search query.'}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {filtered.map((m: any) => {
+              const isOpen = expandedId === m.id;
+              const isMapped = m.status === 'MAPPED';
+              return (
+                <div key={m.id} className="p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`shrink-0 p-2 rounded-lg border ${isMapped ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>
+                        {isMapped ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-900 truncate">{m.displayName || m.sourceErpId}</div>
+                        <div className="text-[11px] font-mono text-slate-500 truncate">{m.sourceErpId} • TIN {m.tin || '—'} • via {m.sourceErp}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-full border ${isMapped ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                        {isMapped ? 'REGISTERED' : 'PENDING REGISTRATION'}
+                      </span>
+                      {!isMapped && (
+                        <button
+                          onClick={() => { setExpandedId(isOpen ? null : m.id); setConfirmError(''); setRefCodeDraft(''); }}
+                          className="px-3 py-1.5 text-[11px] font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg cursor-pointer"
+                        >
+                          Confirm Registered
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
+                  {isMapped && (
+                    <div className="mt-2 pl-11 text-[11px] text-slate-500">
+                      CittaEFS reference: <span className="font-mono text-slate-700">{m.cittaReferenceCode}</span>
+                    </div>
+                  )}
+
+                  {isOpen && !isMapped && (
+                    <div className="mt-3 pl-11 flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                      <input
+                        type="text"
+                        placeholder="CittaEFS reference code from the upload result"
+                        value={refCodeDraft}
+                        onChange={(e) => setRefCodeDraft(e.target.value)}
+                        className="w-full sm:w-72 px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      />
+                      <button
+                        onClick={() => handleConfirm(m.id)}
+                        disabled={isConfirming}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors"
+                      >
+                        {isConfirming ? 'Confirming…' : 'Save & Resubmit Invoices'}
+                      </button>
+                    </div>
+                  )}
+                  {isOpen && confirmError && (
+                    <div className="mt-2 pl-11 text-[11px] text-rose-600 font-medium">{confirmError}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

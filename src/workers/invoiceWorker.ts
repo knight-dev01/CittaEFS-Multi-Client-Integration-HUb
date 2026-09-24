@@ -12,6 +12,7 @@ export interface ProcessingResult {
   irn?: string;
   error?: string;
   movedToDLQ?: boolean;
+  needsRegistration?: boolean;
 }
 
 /**
@@ -64,6 +65,71 @@ export async function processInvoiceJob(
     } catch (e:any) {
       if (e.message && e.message.includes("Invalid Product Code")) throw e;
     }
+
+    // 0.5 Registration gate — CittaEFS rejects a B2B/B2G invoice whose buyer isn't
+    // already registered with it (confirmed: CittaHub_Section_E_Spec-5.xlsx, Interface
+    // sheet). B2C may carry an embedded, unregistered buyer, so it's exempt.
+    // Item registration is deliberately NOT gated here — the spec's own answers
+    // conflict (Interface sheet says items must be registered; the Item sheet's
+    // dedicated B2C answer says "item is not registered for integration — full
+    // item details are required"). Needs a confirmed answer before extending
+    // this gate to items.
+    if (job.data.invoiceKind === 'B2B' || job.data.invoiceKind === 'B2G') {
+      const mapping = await prisma.entityMapping.findUnique({
+        where: {
+          tenantId_entityType_sourceErpId: {
+            tenantId: job.data.tenantId,
+            entityType: 'CUSTOMER',
+            sourceErpId: job.data.customerCode,
+          },
+        },
+      });
+      if (!mapping || mapping.status !== 'MAPPED') {
+        const invoice = await prisma.invoice.findUnique({ where: { id: job.data.dbInvoiceId } });
+        if (!invoice) {
+          // Orphaned job with no backing Invoice row — a data-integrity
+          // anomaly (e.g. a stale test/leftover job), not a real
+          // registration case. Don't pollute EntityMapping with a row for a
+          // customer we can't actually trace back to an invoice.
+          await invoiceQueue.moveToDLQ(job, `No Invoice record found for dbInvoiceId ${job.data.dbInvoiceId} — orphaned job, cannot process`);
+          return { jobId: job.id, success: false, error: 'Orphaned job: invoice record not found', movedToDLQ: true };
+        }
+        await prisma.entityMapping.upsert({
+          where: {
+            tenantId_entityType_sourceErpId: {
+              tenantId: job.data.tenantId,
+              entityType: 'CUSTOMER',
+              sourceErpId: job.data.customerCode,
+            },
+          },
+          update: {
+            displayName: job.data.customerName,
+            tin: job.data.customerTin || null,
+          },
+          create: {
+            tenantId: job.data.tenantId,
+            entityType: 'CUSTOMER',
+            sourceErp: invoice?.sourceErp || 'unknown',
+            sourceErpId: job.data.customerCode,
+            displayName: job.data.customerName,
+            tin: job.data.customerTin || null,
+            status: 'PENDING_REGISTRATION',
+          },
+        });
+        await prisma.invoice.update({
+          where: { id: job.data.dbInvoiceId },
+          data: { status: 'NEEDS_EFS_REGISTRATION' },
+        }).catch((e: any) => {
+          console.error(`[Worker] Failed to set NEEDS_EFS_REGISTRATION for invoice ${job.data.dbInvoiceId}:`, e.message);
+        });
+        // Not a transient failure — retrying won't register the customer. Remove
+        // from the active queue; Phase 3's "Confirm Registered" action requeues it.
+        await invoiceQueue.removeForRegistration(job.id, `Awaiting CittaEFS registration for customer ${job.data.customerCode}`);
+        console.warn(`[Worker] Job ${job.id} needs EFS customer registration for ${job.data.customerCode} — removed from queue, not retried.`);
+        return { jobId: job.id, success: false, needsRegistration: true };
+      }
+    }
+
     // 1. Dispatch payload to CittaEFS Gateway C# REST API — forward all gold fields (header, currency, IRNs, customFields)
     const response: CittaEfsResponse = await cittaEfsClient.signAndStampInvoice({
       tenantId: job.data.tenantId,

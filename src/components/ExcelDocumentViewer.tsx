@@ -620,7 +620,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           r.issueDate, // Issuedate
           0, // HeaderCharges
           0, // HeaderDiscount
-          r.invoiceKind === 'B2C' ? '388' : '388', // InvoiceTypeCode (STANDARD)
+          '381', // InvoiceTypeCode (Commercial Invoice — CittaEFS valid code list)
           idx + 1, // Linenumber
           r.itemCode, // itemcode
           r.unitPrice, // Price

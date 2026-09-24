@@ -121,15 +121,23 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
     if (selectedError.errorCategory === 'MISSING_HS_CODE' && !selectedHsCode) return;
 
     setIsResolving(true);
-    await resolveValidationError(
-      selectedError.id,
-      selectedError.errorCategory === 'MISSING_HS_CODE' ? selectedHsCode : undefined,
-      selectedError.errorCategory === 'INVALID_TIN_FORMAT' ? correctedTin : undefined
-    );
+    let data: any = null;
+    try {
+      data = await resolveValidationError(
+        selectedError.id,
+        selectedError.errorCategory === 'MISSING_HS_CODE' ? selectedHsCode : undefined,
+        selectedError.errorCategory === 'INVALID_TIN_FORMAT' ? correctedTin : undefined
+      );
+    } catch {
+      // toast already shown by the store action — stay put so the user sees it
+    }
     setIsResolving(false);
     setSelectedError(null);
-    // Validation is fix-only — direct to Invoices for propagation (single retry module)
-    if (onNavigate) onNavigate('invoices');
+    // Only leave for Invoices when something actually propagated — otherwise
+    // navigating away read as "it worked" when the fix silently failed
+    // (nothing was created/queued), and hid the real outcome + any new error.
+    const propagated = data && (data.invoiceCreated || (data.requeued ?? 0) > 0);
+    if (propagated && onNavigate) onNavigate('invoices');
   };
 
   return (
