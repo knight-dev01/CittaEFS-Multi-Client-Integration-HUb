@@ -222,6 +222,7 @@ model ValidationError {
   fieldAffected       String   @map("field_affected")
   errorMessage        String   @map("error_message")
   rawPayloadSample    String   @map("raw_payload_sample")
+  sourceErp           String?  @map("source_erp") // qbo | odoo | excel — which ingestion path this came from, so "resolve" knows whether it can re-run ingestion from rawPayloadSample when no Invoice was ever created (see src/routes/validation.ts)
   status              String   @default("OPEN")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")

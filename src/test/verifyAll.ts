@@ -29,6 +29,7 @@ import {
   runNrsReconciliationCron,
   runQbReconciliationCron,
 } from "../crons/reconciliation";
+import { confirmEntityMappingRegistration } from "../services/entityMappingService";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -336,6 +337,8 @@ async function runAllTests() {
         ? `Second insert correctly rejected (${rejectionDetail})`
         : "Second insert with a duplicate clientInvoiceId was NOT rejected",
     );
+
+    await prisma.invoice.deleteMany({ where: { tenantId: "tenant_qbo", clientInvoiceId: dupInvoiceNumber } });
   } catch (err: any) {
     assert(
       "Database Integrity",
@@ -888,6 +891,11 @@ async function runAllTests() {
       "A stale PROCESSING job that already exhausted its retries moves to DLQ instead of being requeued indefinitely",
       inDlqAfterRecover ? "Found in DLQ" : "Not found in DLQ",
     );
+
+    // These jobs carry fake dbInvoiceIds (no real Invoice row backs them) —
+    // clean them up so they don't sit in the dev DB as permanent orphans that
+    // a live server's worker would pick up and try (and fail) to process.
+    await prisma.queueJob.deleteMany({ where: { id: { in: [job.id, staleJob.id, staleExhaustedJob.id] } } });
   } catch (err: any) {
     assert(
       "Async Queue Engine",
@@ -1414,6 +1422,13 @@ async function runAllTests() {
         ? `Caught real error: ${syncErrorMsg}`
         : "Failed to throw error",
     );
+
+    // Ingestion created a real Invoice (+ queued signInvoice job) — clean
+    // both up so repeated test runs don't pile up a stuck-forever backlog on
+    // the shared dev DB (see docs/CittaHub_Revision_Plan.md Phase 5).
+    await prisma.queueJob.deleteMany({ where: { payload: { contains: ingested.id } } });
+    await prisma.invoiceLineItem.deleteMany({ where: { invoiceId: ingested.id } });
+    await prisma.invoice.delete({ where: { id: ingested.id } }).catch(() => {});
   } catch (err: any) {
     assert(
       "QuickBooks Integration",
@@ -1604,10 +1619,151 @@ async function runAllTests() {
       "Throws real error on Odoo API failure instead of returning fake fallback data",
       syncFailedCorrectly ? `Caught real error: ${syncErrorMsg}` : "Failed to throw error",
     );
+
+    // Ingestion created a real Invoice (+ queued signInvoice job) — clean
+    // both up so repeated test runs don't pile up a stuck-forever backlog on
+    // the shared dev DB (see docs/CittaHub_Revision_Plan.md Phase 5).
+    await prisma.queueJob.deleteMany({ where: { payload: { contains: ingested.id } } });
+    await prisma.invoiceLineItem.deleteMany({ where: { invoiceId: ingested.id } });
+    await prisma.invoice.delete({ where: { id: ingested.id } }).catch(() => {});
   } catch (err: any) {
     assert(
       "Odoo Integration",
       "Odoo Suite Verification",
+      "Runtime",
+      false,
+      "No unhandled exceptions",
+      err.message,
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // MODULE 12: EntityMapping & Registration Gate (Thin-Hub Pivot)
+  // ------------------------------------------------------------------
+  try {
+    const tenantId = "tenant_qbo";
+    const customerCode = `ENTITYMAP-TEST-${Date.now()}`;
+
+    // Test 1: EntityMapping creation + unique-key lookup
+    const created = await prisma.entityMapping.create({
+      data: {
+        tenantId,
+        entityType: "CUSTOMER",
+        sourceErp: "excel",
+        sourceErpId: customerCode,
+        displayName: "Registration Gate Test Customer",
+        tin: "P088888888Z",
+        status: "PENDING_REGISTRATION",
+      },
+    });
+    const lookedUp = await prisma.entityMapping.findUnique({
+      where: {
+        tenantId_entityType_sourceErpId: { tenantId, entityType: "CUSTOMER", sourceErpId: customerCode },
+      },
+    });
+    assert(
+      "EntityMapping",
+      "EntityMapping Creation & Unique-Key Lookup",
+      "Implementation",
+      !!lookedUp && lookedUp.id === created.id && lookedUp.status === "PENDING_REGISTRATION",
+      "Creates a mapping and finds it back via the [tenantId, entityType, sourceErpId] unique key",
+      `Found: ${!!lookedUp}, id match: ${lookedUp?.id === created.id}, status: ${lookedUp?.status}`,
+    );
+
+    // Test 2 & 3: registration-gate pipeline branch + NEEDS_EFS_REGISTRATION transition.
+    // No nock interceptor is registered for this call — if the gate failed to
+    // block the request, the real gateway call below would attempt a live,
+    // unmocked network request instead of short-circuiting, which is itself
+    // proof the gate didn't fire.
+    const gatePayload = invoiceIngestionSchema.parse({
+      tenantId,
+      clientInvoiceNumber: `INVGATE${Date.now()}`,
+      invoiceKind: "B2B",
+      customerCode,
+      customerName: "Registration Gate Test Customer",
+      customerTin: "P088888888Z",
+      issueDate: "2026-07-29",
+      lineItems: [
+        { itemCode: "ITEM-GATE", description: "Gate test line", quantity: 1, unitPrice: 1000, vatRate: 7.5, hsOrServiceCode: "8471.30" },
+      ],
+    });
+    const gateInvoice = await prisma.invoice.create({
+      data: {
+        tenantId,
+        sourceErp: "excel",
+        clientInvoiceId: gatePayload.clientInvoiceNumber,
+        invoiceType: "STANDARD",
+        invoiceKind: "B2B",
+        issueDate: new Date(gatePayload.issueDate),
+        customerCode,
+        customerName: gatePayload.customerName,
+        customerTin: gatePayload.customerTin || undefined,
+        subtotal: 1000,
+        taxAmount: 75,
+        totalAmount: 1075,
+        status: "PENDING_NRS_STAMP",
+        lineItems: {
+          create: [{
+            itemCode: "ITEM-GATE", description: "Gate test line", quantity: 1, unitPrice: 1000,
+            taxableAmount: 1000, vatRate: 7.5, vatAmount: 75, totalAmount: 1075, hsOrServiceCode: "8471.30",
+          }],
+        },
+      },
+    });
+
+    const gateJob = await invoiceQueue.add("signInvoice", { ...gatePayload, dbInvoiceId: gateInvoice.id });
+    const gateResult = await processInvoiceJob(gateJob);
+
+    const invoiceAfterGate = await prisma.invoice.findUnique({ where: { id: gateInvoice.id } });
+    const mappingAfterGate = await prisma.entityMapping.findUnique({
+      where: { tenantId_entityType_sourceErpId: { tenantId, entityType: "CUSTOMER", sourceErpId: customerCode } },
+    });
+
+    assert(
+      "EntityMapping",
+      "Registration Gate Blocks Unmapped B2B Customer",
+      "Integration",
+      gateResult.needsRegistration === true && !gateResult.success,
+      "Worker routes a B2B invoice with an unmapped customer to registration instead of the gateway",
+      `needsRegistration: ${gateResult.needsRegistration}, success: ${gateResult.success}`,
+    );
+
+    assert(
+      "EntityMapping",
+      "Invoice & EntityMapping State After Gate",
+      "Runtime",
+      invoiceAfterGate?.status === "NEEDS_EFS_REGISTRATION" && mappingAfterGate?.status === "PENDING_REGISTRATION",
+      "Invoice.status becomes NEEDS_EFS_REGISTRATION; the EntityMapping stays PENDING_REGISTRATION",
+      `Invoice status: ${invoiceAfterGate?.status}, Mapping status: ${mappingAfterGate?.status}`,
+    );
+
+    // Test 4: requeue-on-mapping-resolved (Phase 3's confirm logic)
+    const { mapping: confirmedMapping, requeued } = await confirmEntityMappingRegistration(
+      prisma,
+      mappingAfterGate!,
+      "CITTA-CUST-VERIFYALL-TEST",
+      "verifyAll test runner",
+    );
+    const invoiceAfterConfirm = await prisma.invoice.findUnique({ where: { id: gateInvoice.id } });
+
+    assert(
+      "EntityMapping",
+      "Confirm Registration Requeues Stuck Invoices",
+      "Integration",
+      confirmedMapping.status === "MAPPED" && requeued === 1 && invoiceAfterConfirm?.status === "PENDING_NRS_STAMP",
+      "Confirming registration marks the mapping MAPPED and resets/requeues every invoice stuck on it",
+      `Mapping status: ${confirmedMapping.status}, requeued: ${requeued}, invoice status: ${invoiceAfterConfirm?.status}`,
+    );
+
+    // Cleanup
+    await prisma.queueJob.deleteMany({ where: { tenantId, payload: { contains: gateInvoice.id } } }).catch(() => {});
+    await prisma.invoiceLineItem.deleteMany({ where: { invoiceId: gateInvoice.id } });
+    await prisma.invoice.delete({ where: { id: gateInvoice.id } }).catch(() => {});
+    await prisma.entityMapping.delete({ where: { id: created.id } }).catch(() => {});
+  } catch (err: any) {
+    assert(
+      "EntityMapping",
+      "EntityMapping Suite Verification",
       "Runtime",
       false,
       "No unhandled exceptions",

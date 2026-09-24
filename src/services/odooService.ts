@@ -434,6 +434,7 @@ export async function ingestOdooInvoice(
         fieldAffected: "metadata",
         errorMessage: `Odoo validation failed: ${errorMsg}`,
         rawPayloadSample: JSON.stringify(rawMove),
+        sourceErp: "odoo",
         status: "OPEN",
       },
     });
@@ -476,7 +477,8 @@ export async function ingestOdooInvoice(
         errorCategory: "MISSING_HS_CODE",
         fieldAffected: "lineItems",
         errorMessage: `No invoice data provided — Odoo invoice ${clientInvoiceId} has no line items`,
-        rawPayloadSample: JSON.stringify(rawMove).slice(0, 2000),
+        rawPayloadSample: JSON.stringify(rawMove),
+        sourceErp: "odoo",
         status: "OPEN",
       },
     });
@@ -492,7 +494,8 @@ export async function ingestOdooInvoice(
           errorCategory: "MISSING_HS_CODE",
           fieldAffected: "hsOrServiceCode",
           errorMessage: `Invalid Product Code - must be valid HS Code or Service Code (found ${li.hsOrServiceCode} for ${li.itemCode}) — map in Item Dictionary`,
-          rawPayloadSample: JSON.stringify(rawMove).slice(0, 2000),
+          rawPayloadSample: JSON.stringify(rawMove),
+          sourceErp: "odoo",
           status: "OPEN",
         },
       });

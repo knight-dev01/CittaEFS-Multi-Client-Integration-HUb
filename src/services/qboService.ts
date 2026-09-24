@@ -676,6 +676,7 @@ export async function ingestQboInvoice(
         fieldAffected: "metadata",
         errorMessage: `QuickBooks validation failed: ${errorMsg}`,
         rawPayloadSample: JSON.stringify(rawInvoice),
+        sourceErp: "qbo",
         status: "OPEN",
       },
     });
@@ -753,7 +754,8 @@ export async function ingestQboInvoice(
         errorCategory: 'MISSING_HS_CODE',
         fieldAffected: 'lineItems',
         errorMessage: `No invoice data provided — QBO invoice ${docNumber} has no SalesItemLineDetail lines`,
-        rawPayloadSample: JSON.stringify(rawInvoice).slice(0,2000),
+        rawPayloadSample: JSON.stringify(rawInvoice),
+        sourceErp: 'qbo',
         status: 'OPEN',
       }
     });
@@ -769,7 +771,8 @@ export async function ingestQboInvoice(
           errorCategory: 'MISSING_HS_CODE',
           fieldAffected: 'hsOrServiceCode',
           errorMessage: `Invalid Product Code - must be valid HS Code or Service Code (found ${li.hsOrServiceCode} for ${li.itemCode}) — map in Item Dictionary`,
-          rawPayloadSample: JSON.stringify(rawInvoice).slice(0,2000),
+          rawPayloadSample: JSON.stringify(rawInvoice),
+          sourceErp: 'qbo',
           status: 'OPEN',
         }
       });

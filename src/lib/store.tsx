@@ -427,7 +427,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
         });
         const data = await parseJsonResponse(res);
         await refreshAll();
-        toastGlobal('success', 'Validation error resolved');
+        const worked = data.invoiceCreated || (data.requeued ?? 0) > 0;
+        toastGlobal(worked ? 'success' : 'info', worked ? 'Validation error resolved' : 'Resolved — no invoice queued', data.message || '');
         return data;
       } catch (e: any) {
         console.error('Resolve error:', e);

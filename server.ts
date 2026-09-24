@@ -124,8 +124,8 @@ async function startServer() {
   app.use(qboRouter);
   app.use(odooRouter);
   app.use(webhooksRouter);
-  app.use(systemRouter);
   app.use(entityMappingsRouter);
+  app.use(systemRouter);
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server:{ middlewareMode:true}, appType:"custom"});

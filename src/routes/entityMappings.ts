@@ -2,15 +2,11 @@ import { Router } from "express";
 import * as XLSX from "xlsx";
 import { prisma } from "../lib/prisma";
 import {
-  generateSha256,
-  safeAuditLogCreate,
   getScopedTenantWhere,
   canAccessTenant,
   parsePagination,
 } from "../lib/serverHelpers";
-import { invoiceIngestionSchema } from "../schemas/invoice.schema";
-import { invoiceQueue } from "../queues/invoiceQueue";
-import { getCittaCodeType } from "../data/referenceData";
+import { confirmEntityMappingRegistration } from "../services/entityMappingService";
 
 const router = Router();
 
@@ -131,63 +127,12 @@ router.post("/api/entity-mappings/:id/confirm", async (req: any, res) => {
     if (!mapping) return res.status(404).json({ success: false, error: "Entity mapping not found" });
     if (!canAccessTenant(req, mapping.tenantId)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
 
-    const refCode = cittaReferenceCode.trim();
-    const updated = await prisma.entityMapping.update({
-      where: { id },
-      data: { status: "MAPPED", cittaReferenceCode: refCode },
-    });
-
-    let requeued = 0;
-    if (mapping.entityType === "CUSTOMER") {
-      const stuck = await prisma.invoice.findMany({
-        where: { tenantId: mapping.tenantId, customerCode: mapping.sourceErpId, status: "NEEDS_EFS_REGISTRATION" },
-        include: { lineItems: true },
-      });
-      for (const inv of stuck) {
-        try {
-          await prisma.invoice.update({ where: { id: inv.id }, data: { status: "PENDING_NRS_STAMP" } });
-          const validated = invoiceIngestionSchema.parse({
-            tenantId: inv.tenantId,
-            clientInvoiceNumber: inv.clientInvoiceId,
-            documentNumber: inv.documentNumber || undefined,
-            invoiceType: inv.invoiceType as any,
-            invoiceKind: inv.invoiceKind as any,
-            issueDate: inv.issueDate.toISOString().substring(0, 10),
-            customerCode: inv.customerCode,
-            customerName: inv.customerName,
-            customerTin: inv.customerTin || undefined,
-            lineItems: inv.lineItems.map((li: any) => ({
-              itemCode: li.itemCode,
-              description: li.description,
-              quantity: li.quantity,
-              unitPrice: li.unitPrice,
-              discountAmount: 0,
-              hsOrServiceCode: li.hsOrServiceCode,
-              codeType: getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE",
-              vatRate: li.vatRate,
-            })),
-          });
-          await invoiceQueue.add(
-            "signInvoice",
-            { ...validated, dbInvoiceId: inv.id },
-            { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}:registered:${Date.now()}` }
-          );
-          requeued++;
-        } catch (e: any) {
-          console.error(`[EntityMapping Confirm] Failed to requeue invoice ${inv.id}:`, e.message);
-        }
-      }
-    }
-
-    await safeAuditLogCreate(prisma, {
-      tenantId: mapping.tenantId,
-      action: "ENTITY_REGISTERED",
-      entityType: mapping.entityType,
-      entityRef: mapping.sourceErpId,
-      details: `Confirmed CittaEFS registration for ${mapping.entityType.toLowerCase()} ${mapping.sourceErpId} (reference ${refCode}). Requeued ${requeued} invoice(s).`,
-      sha256PayloadHash: generateSha256(`${mapping.id}:${refCode}`),
-      performedBy: req.user?.email || "Operator",
-    });
+    const { mapping: updated, requeued } = await confirmEntityMappingRegistration(
+      prisma,
+      mapping,
+      cittaReferenceCode,
+      req.user?.email || "Operator"
+    );
 
     res.json({ success: true, mapping: updated, requeued });
   } catch (e: any) {

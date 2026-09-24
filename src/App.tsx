@@ -158,9 +158,25 @@ function HubMainContent() {
           {/* ERP-dedicated workspace */}
           <div className="transition-all duration-150">
             {!activeTenant ? (
-              <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>
+              !isInitialized ? (
+                <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>
+              ) : (
+                <div className="p-12 text-center bg-white rounded-xl border border-slate-200/80 shadow-sm space-y-4">
+                  <Layers className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">No clients onboarded yet</p>
+                    <p className="text-xs text-slate-400 mt-1">Onboard a client to connect their ERP and start pulling invoices.</p>
+                  </div>
+                  <button
+                    onClick={() => openOnboardModal()}
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg cursor-pointer"
+                  >
+                    + Onboard Client
+                  </button>
+                </div>
+              )
             ) : (
-              <ErpWorkspace activeTab={activeTab} setActiveTab={setActiveTab} onOpenOnboard={openOnboardModal} />
+              <ErpWorkspace activeTab={activeTab} setActiveTab={setActiveTab} onOpenOnboard={() => openOnboardModal()} />
             )}
           </div>
 

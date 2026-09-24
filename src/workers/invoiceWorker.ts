@@ -80,6 +80,14 @@ export async function processInvoiceJob(
       });
       if (!mapping || mapping.status !== 'MAPPED') {
         const invoice = await prisma.invoice.findUnique({ where: { id: job.data.dbInvoiceId } });
+        if (!invoice) {
+          // Orphaned job with no backing Invoice row — a data-integrity
+          // anomaly (e.g. a stale test/leftover job), not a real
+          // registration case. Don't pollute EntityMapping with a row for a
+          // customer we can't actually trace back to an invoice.
+          await invoiceQueue.moveToDLQ(job, `No Invoice record found for dbInvoiceId ${job.data.dbInvoiceId} — orphaned job, cannot process`);
+          return { jobId: job.id, success: false, error: 'Orphaned job: invoice record not found', movedToDLQ: true };
+        }
         await prisma.entityMapping.upsert({
           where: {
             tenantId_entityType_sourceErpId: {
