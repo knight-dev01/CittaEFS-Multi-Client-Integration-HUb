@@ -23,10 +23,13 @@ describe('Gateway immutability — ERP owns edits', () => {
     expect(i).toContain('Items are ERP-sourced and immutable');
   });
 
-  it('Onboard ERP not Client — no Excel option', async () => {
+  it('Onboard ERP not Client — only QBO/Odoo options offered', async () => {
     const fs = await import('fs');
     const src = fs.readFileSync('src/components/OnboardClientModal.tsx', 'utf8');
-    expect(src).not.toContain("'Excel & CSV Import'");
+    // Selectable channels are exactly QBO + Odoo (a legacy resume guard may still
+    // mention the retired Excel channel name for old tenants — not an option).
+    expect(src).toContain("(['QuickBooks Online','Odoo ERP'] as const)");
     expect(src).toContain("'QuickBooks Online','Odoo ERP'");
+    expect(src).not.toMatch(/<option[^>]*>[^<]*Excel/);
   });
 });

@@ -24,6 +24,7 @@ import odooRouter from "./src/routes/odoo";
 import webhooksRouter from "./src/routes/webhooks";
 import systemRouter from "./src/routes/system";
 import entityMappingsRouter from "./src/routes/entityMappings";
+import gatewayRouter from "./src/routes/gateway";
 
 const { JWT_SECRET } = getAuthConfig();
 
@@ -108,7 +109,7 @@ async function startServer() {
 
   app.use("/api/*", (req,res,next)=>{
     const p=req.baseUrl||req.path;
-    if (req.method==="OPTIONS"||p.startsWith("/api/auth/login")||p.startsWith("/api/auth/refresh")||p.startsWith("/api/auth/register")||p.startsWith("/api/health")||p.startsWith("/api/webhooks")||p.startsWith("/pay2/einvoicehookweb")||p.startsWith("/api/events")||p.startsWith("/api/integrations/qbo/callback")||p.startsWith("/api/connectors")||p.startsWith("/api/cron")) return next();
+    if (req.method==="OPTIONS"||p.startsWith("/api/auth/login")||p.startsWith("/api/auth/refresh")||p.startsWith("/api/auth/register")||p.startsWith("/api/health")||p.startsWith("/api/webhooks")||p.startsWith("/pay2/einvoicehookweb")||p.startsWith("/api/events")||p.startsWith("/api/integrations/qbo/callback")||p.startsWith("/api/connectors")||p.startsWith("/api/cron")||p.startsWith("/api/v1/")||p.startsWith("/api/hub/v1/")) return next();
     const bearerToken=req.headers.authorization?.startsWith("Bearer ")? req.headers.authorization.split(" ")[1]:null;
     const token=bearerToken||req.cookies?.token||null;
     if (!token){ (req as any).tenantId=(req.query.tenantId as string)||"tenant_qbo_smb"; if(req.method==="GET") return next(); return res.status(401).json({ success:false, error:"Authentication token required"}); }
@@ -126,6 +127,7 @@ async function startServer() {
   app.use(webhooksRouter);
   app.use(entityMappingsRouter);
   app.use(systemRouter);
+  app.use(gatewayRouter);
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server:{ middlewareMode:true}, appType:"custom"});

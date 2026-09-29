@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDatabaseUrl } from '../config/dbConfig';
 import { invoiceQueue, QueueJob, QueueablePayload } from '../queues/invoiceQueue';
 import { cittaEfsClient, CittaEfsResponse } from '../services/cittaEfsClient';
+import { dispatchMerchantWebhook } from '../services/merchantWebhook';
 import { isValidCittaCode, normalizeCittaCode, getCittaCodeType } from '../data/referenceData';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
@@ -179,6 +180,9 @@ export async function processInvoiceJob(
         response.qrCodeUrl || ''
       );
 
+      // Notify merchant webhook (Interswitch-style signed callback) — non-blocking
+      dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.authorized').catch(()=>{});
+
       await invoiceQueue.removeJob(job.id);
       return { jobId: job.id, success: true, irn: response.irn };
     } else {
@@ -191,6 +195,7 @@ export async function processInvoiceJob(
     if (errorMsg.includes('Invalid Product Code')) {
       await invoiceQueue.moveToDLQ(job, errorMsg);
       await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(()=>{});
+      dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
       try {
         await prisma.validationError.create({
           data: {
@@ -210,6 +215,7 @@ export async function processInvoiceJob(
     if (errorMsg.includes('No CittaEFS Gateway API key') || errorMsg.includes('GATEWAY_NOT_CONFIGURED')) {
       await invoiceQueue.moveToDLQ(job, errorMsg);
       await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(()=>{});
+      dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
       try {
         await prisma.validationError.create({
           data: {
@@ -233,6 +239,7 @@ export async function processInvoiceJob(
         where: { id: job.data.dbInvoiceId },
         data: { status: 'REJECTED' }
       }).catch(() => {});
+      dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
       // Surface reason in hub — create ValidationError so Validation Errors tab + Invoices REJECTED filter shows why
       try {
         await prisma.validationError.create({

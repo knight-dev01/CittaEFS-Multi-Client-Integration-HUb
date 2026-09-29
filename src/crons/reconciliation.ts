@@ -111,6 +111,11 @@ export async function runNrsReconciliationCron(tenantId?: string): Promise<Recon
             });
             // Attempt writeback
             await cittaEfsClient.executeClientLedgerWriteback(tid, inv.clientInvoiceId, irn, qr).catch(()=>{});
+            // Notify merchant webhook (Interswitch-style signed callback) — non-blocking
+            try {
+              const { dispatchMerchantWebhook } = await import('../services/merchantWebhook');
+              dispatchMerchantWebhook(tid, inv.id, 'invoice.authorized').catch(()=>{});
+            } catch {}
             recoveredCount++;
           } else {
             // Orphan older than 30 min with no gateway trace -> mark for DLQ investigation

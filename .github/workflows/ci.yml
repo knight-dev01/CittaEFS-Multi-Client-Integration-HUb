@@ -84,6 +84,8 @@ jobs:
         run: npx tsx src/test/verifyAll.ts
       - name: Gateway regression (vitest integration)
         run: npx vitest run src/test/gateway.test.ts --reporter=verbose
+      - name: Interswitch v1 facade regression (merchants, tokens, transactions)
+        run: npx vitest run src/test/unit/gatewayV1.test.ts --reporter=verbose
 
   build:
     runs-on: ubuntu-latest

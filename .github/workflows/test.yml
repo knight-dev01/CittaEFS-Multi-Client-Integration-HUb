@@ -7,7 +7,7 @@ on:
         description: Test suite
         type: choice
         default: all
-        options: [all, unit, verifyAll, gateway]
+        options: [all, unit, verifyAll, gateway, gatewayV1]
 
 jobs:
   tests:
@@ -46,3 +46,5 @@ jobs:
         run: npx tsx src/test/verifyAll.ts
       - if: inputs.suite == 'all' || inputs.suite == 'gateway'
         run: npx vitest run src/test/gateway.test.ts --reporter=verbose
+      - if: inputs.suite == 'all' || inputs.suite == 'gatewayV1'
+        run: npx vitest run src/test/unit/gatewayV1.test.ts --reporter=verbose

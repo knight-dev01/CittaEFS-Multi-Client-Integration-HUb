@@ -32,7 +32,12 @@ describe('Gateway — pending until verified + writeback FAILED', () => {
     const schema = fs.readFileSync('prisma/schema.prisma', 'utf8');
     expect(schema).toContain('companyId');
     expect(schema).toContain('@@unique([tenantId, erpId, companyId])');
-    expect(schema).toContain('@@unique([tenantId, sourceSystem, companyId])');
+    // Integration triple unique lives in the applied DB migration (schema.prisma
+    // keeps the legacy double unique until the findUnique call sites migrate —
+    // see odooService/qbo tenantId_sourceSystem usages). Guard both layers.
+    const migration = fs.readFileSync('prisma/migrations/20260910000000_erp_independent/migration.sql', 'utf8');
+    expect(migration).toContain('integrations_tenantId_sourceSystem_companyId_key');
+    expect(schema).toContain('tenantErpId');
   });
 
   it('mocks Citta gateway 400 HS- prefix rejected vs 200 bare 8130', async () => {

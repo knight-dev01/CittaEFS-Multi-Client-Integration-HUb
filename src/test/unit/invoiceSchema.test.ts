@@ -33,8 +33,8 @@ describe('invoiceIngestionSchema — ERP-sourced gateway', () => {
     expect(parsed.grandTotal).toBeLessThan(parsed.subtotal + parsed.totalVat + 0.01);
   });
 
-  it('defaults sourceErp qbo/odoo allowed, Excel would be rejected at route layer (schema allows but route 403)', () => {
+  it('channel scoping lives at the route layer — schema strips unknown sourceErp', () => {
     const parsed: any = invoiceIngestionSchema.parse({ ...base, sourceErp: 'excel' as any });
-    expect(parsed.sourceErp).toBe('excel');
+    expect(parsed.sourceErp).toBeUndefined();
   });
 });
