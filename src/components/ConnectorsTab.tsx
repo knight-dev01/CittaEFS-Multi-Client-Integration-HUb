@@ -7,15 +7,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   RefreshCw,
-  Plus,
   ShieldCheck,
   FileSpreadsheet,
   Globe,
   Layers,
   Zap
 } from 'lucide-react';
-import { Connector } from '../types';
-import { NewConnectorModal } from './NewConnectorModal';
 import { QboStagingInbox } from './QboStagingInbox';
 
 interface ConnectorStatus {
@@ -33,7 +30,6 @@ function formatWhen(iso: string | null): string {
 export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => void } = {}) {
   const { activeTenant } = useHub();
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [status, setStatus] = useState<ConnectorStatus | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [testingQbo, setTestingQbo] = useState(false);
@@ -168,10 +164,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
     }
   };
 
-  const handleAddConnector = (newConn: Connector) => {
-    toastGlobal('info', `${newConn.platform} noted`, 'Only QuickBooks Online and Excel/CSV are live in this release — other adapters are coming soon.');
-  };
-
   return (
     <div className="space-y-6 font-sans text-xs">
 
@@ -186,16 +178,9 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
             </span>
           </h2>
           <p className="text-slate-400 text-xs mt-1">
-            Active Connectors: QuickBooks Online (OAuth2), Odoo ERP (JSON-RPC) & Excel/CSV Upload • Other adapters (SAP, NetSuite, SQL) frozen for future release • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
+            Active Connectors: QuickBooks Online (OAuth2), Odoo ERP (JSON-RPC) & Excel/CSV Upload • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 shrink-0 transition-colors"
-        >
-          <Plus className="w-4 h-4 text-indigo-200" />
-          <span>Add New Connector</span>
-        </button>
       </div>
 
       {/* QuickBooks OAuth Callback Result */}
@@ -249,7 +234,7 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
             <div>
               <strong className="font-semibold text-amber-950">QuickBooks Disconnect Notice:</strong>
-              <p className="mt-0.5 text-amber-800">Your QuickBooks Online app session was disconnected from Intuit. To restore automated CDC webhooks & IRN writebacks, please click "+ Add New Connector Adapter" to re-authenticate.</p>
+              <p className="mt-0.5 text-amber-800">Your QuickBooks Online app session was disconnected from Intuit. To restore automated CDC webhooks & IRN writebacks, use "Connect QuickBooks Online" below to re-authenticate.</p>
             </div>
           </div>
         </div>
@@ -262,11 +247,11 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
             <Zap className="w-5 h-5 text-emerald-600 shrink-0" />
             <div>
               <strong className="font-semibold text-emerald-950">Intuit Authorization Request:</strong>
-              <p className="mt-0.5 text-emerald-800">You arrived via QuickBooks App Store integration link. Click "+ Add New Connector Adapter" or select QuickBooks Online below to initiate OAuth 2.0 grant.</p>
+              <p className="mt-0.5 text-emerald-800">You arrived via QuickBooks App Store integration link. Click below to initiate OAuth 2.0 grant.</p>
             </div>
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => onResumeConnect?.()}
             className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer text-xs shrink-0 transition-colors shadow-sm"
           >
             Authorize QBO Now
@@ -482,18 +467,8 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
         </div>
         <p className="text-emerald-700 text-xs leading-relaxed">
           <strong>Currently Active:</strong> QuickBooks Online (OAuth2 REST/Webhook), Odoo ERP (JSON-RPC), and Excel/CSV File Upload adapters are fully operational.
-          <br/><strong>Frozen for future release:</strong> SAP S/4HANA, NetSuite SuiteTalk, Custom SQL Staging, and Sage ERP adapters.
         </p>
       </div>
-
-      {/* New Connector Multi-Step Modal */}
-      <NewConnectorModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        tenantId={activeTenant.id}
-        tenantName={activeTenant.name}
-        onAddConnector={handleAddConnector}
-      />
 
     </div>
   );

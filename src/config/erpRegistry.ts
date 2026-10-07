@@ -1,7 +1,7 @@
-import { Zap, FileSpreadsheet, Building2, Layers, Database, Cloud } from 'lucide-react';
+import { Zap, FileSpreadsheet, Layers } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-export type ErpId = 'qbo' | 'excel' | 'sap' | 'netsuite' | 'odoo' | 'custom_sql' | 'generic';
+export type ErpId = 'qbo' | 'excel' | 'odoo' | 'generic';
 
 export interface ErpDefinition {
   id: ErpId;
@@ -49,38 +49,6 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
     configFields: [],
     matching: [],
   },
-  'SAP S/4HANA': {
-    id: 'sap',
-    platformType: 'SAP S/4HANA',
-    label: 'SAP S/4HANA',
-    shortLabel: 'SAP',
-    icon: Building2,
-    color: 'slate',
-    description: 'OData REST (API_INVOICE_SRV) with CSRF handshake — coming soon.',
-    comingSoon: true,
-    tabs: ['overview', 'mapping', 'gateway'],
-    configFields: [
-      { key: 'odataBaseUrl', label: 'OData Base URL', type: 'url', hint: 'https://host/sap/opu/odata/sap/API_INVOICE_SRV' },
-      { key: 'client', label: 'SAP Client', type: 'text', hint: '100' },
-    ],
-    matching: ['BillingDocument ↔ clientInvoiceNumber', 'SoldToParty ↔ customerCode', 'Material ↔ clientSku'],
-  },
-  'NetSuite': {
-    id: 'netsuite',
-    platformType: 'NetSuite',
-    label: 'NetSuite SuiteTalk',
-    shortLabel: 'NS',
-    icon: Cloud,
-    color: 'slate',
-    description: 'RESTlets with Token-Based Auth (TBA / HMAC-SHA256) — coming soon.',
-    comingSoon: true,
-    tabs: ['overview', 'mapping', 'gateway'],
-    configFields: [
-      { key: 'accountId', label: 'Account ID', type: 'text', hint: '123456' },
-      { key: 'roleId', label: 'Role ID', type: 'text', hint: '3' },
-    ],
-    matching: ['tranId ↔ clientInvoiceNumber', 'entity ↔ customerCode', 'item ↔ clientSku'],
-  },
   'Odoo ERP': {
     id: 'odoo',
     platformType: 'Odoo ERP',
@@ -97,22 +65,6 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
       { key: 'odooApiKey', label: 'API Key', type: 'password', hint: 'Generated under Settings → Users → API Keys' },
     ],
     matching: ['name ↔ clientInvoiceNumber', 'partner_id ↔ customerCode/TIN (via res.partner.vat)', 'product_id display name ↔ clientSku', 'price_total − price_subtotal ↔ vatAmount'],
-  },
-  'Custom SQL': {
-    id: 'custom_sql',
-    platformType: 'Custom SQL',
-    label: 'Custom SQL Staging',
-    shortLabel: 'SQL',
-    icon: Database,
-    color: 'slate',
-    description: 'PostgreSQL / SQL Server staging view vw_pending_invoices — coming soon.',
-    comingSoon: true,
-    tabs: ['overview', 'mapping', 'gateway'],
-    configFields: [
-      { key: 'connectionString', label: 'Connection String', type: 'password', hint: 'postgresql://...' },
-      { key: 'viewName', label: 'Staging View', type: 'text', hint: 'vw_pending_invoices' },
-    ],
-    matching: ['inv_num ↔ clientInvoiceNumber', 'cust_name ↔ customerCode', 'sku_code ↔ clientSku'],
   },
 };
 

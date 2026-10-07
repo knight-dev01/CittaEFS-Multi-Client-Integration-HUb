@@ -18,7 +18,7 @@ export interface Tenant {
   name: string;
   companyName: string;
   tin: string;
-  platformType: 'QuickBooks Online' | 'Odoo ERP' | 'SAP S/4HANA' | 'Microsoft Dynamics 365' | 'Xero' | string;
+  platformType: 'QuickBooks Online' | 'Odoo ERP' | string;
   region?: string;
   marketTier: 'Tier 1 (SMB)' | 'Tier 2 (Mid-Market)' | 'Tier 3 (Enterprise)' | string;
   cittaApiKey?: string;
@@ -207,18 +207,4 @@ export interface UserSession {
   loginAt: string;
 }
 
-export interface Connector {
-  id: string;
-  tenantId: TenantId;
-  platform: string;
-  type: string;
-  auth: string;
-  status: 'HEALTHY' | 'WARNING' | 'ERROR' | 'TESTING';
-  endpoint: string;
-  latencyMs: number;
-  lastSync: string;
-  syncedInvoices: number;
-  environment?: 'SANDBOX' | 'PRODUCTION';
-  syncInterval?: string;
-}
 
