@@ -67,6 +67,45 @@ export async function processInvoiceJob(
       if (e.message && e.message.includes("Invalid Product Code")) throw e;
     }
 
+    // 0.6 Item registration tracking — non-blocking, unlike the customer gate
+    // below. CittaEFS's own spec contradicts itself on whether items need
+    // pre-registration (Interface sheet says yes; the Item sheet's dedicated
+    // B2C answer says no, full item details go inline), so this only tracks
+    // new items for later export/registration — it never holds up transmission.
+    // Isolated in its own try/catch so a failure here can't affect sending.
+    try {
+      const invoiceForItems = await prisma.invoice.findUnique({
+        where: { id: job.data.dbInvoiceId },
+        select: { sourceErp: true },
+      });
+      for (const li of (job.data.lineItems as any[])) {
+        const itemCode = li.itemCode;
+        if (!itemCode) continue;
+        await prisma.entityMapping.upsert({
+          where: {
+            tenantId_entityType_sourceErpId: {
+              tenantId: job.data.tenantId,
+              entityType: 'ITEM',
+              sourceErpId: itemCode,
+            },
+          },
+          update: {
+            displayName: li.description || itemCode,
+          },
+          create: {
+            tenantId: job.data.tenantId,
+            entityType: 'ITEM',
+            sourceErp: invoiceForItems?.sourceErp || 'unknown',
+            sourceErpId: itemCode,
+            displayName: li.description || itemCode,
+            status: 'PENDING_REGISTRATION',
+          },
+        });
+      }
+    } catch (e: any) {
+      console.warn(`[Worker] Item registration tracking failed for job ${job.id} (non-blocking):`, e.message);
+    }
+
     // 0.5 Registration gate — CittaEFS rejects a B2B/B2G invoice whose buyer isn't
     // already registered with it (confirmed: CittaHub_Section_E_Spec-5.xlsx, Interface
     // sheet). B2C may carry an embedded, unregistered buyer, so it's exempt.

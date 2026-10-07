@@ -16,6 +16,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
+import { EntityRegistrationQueue } from './EntityRegistrationQueue';
 
 export function ItemDictionaryTab() {
   const { itemMappings, activeTenant, addItemMapping, autoMapItems, deleteItem } = useHub() as any;
@@ -216,6 +217,36 @@ export function ItemDictionaryTab() {
           </table>
         </div>
       </div>
+
+      {/* CittaEFS Item Registrations — distinct from the SKU dictionary above:
+          that's a Hub-owned HS/Service-code lookup; this tracks which items
+          CittaEFS itself has registered. Non-blocking (see invoiceWorker.ts) —
+          CittaEFS's spec contradicts itself on whether items need pre-registration,
+          so this is a running list to clear at your own pace, not a gate on sending. */}
+      <details className="group">
+        <summary className="list-none cursor-pointer">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+            <span className="font-bold text-slate-900 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-600" /> CittaEFS Item Registrations</span>
+            <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition" />
+          </div>
+        </summary>
+        <div className="mt-4">
+          <EntityRegistrationQueue
+            entityType="ITEM"
+            icon={Layers}
+            title="Item Registrations"
+            subtitle="Non-blocking: invoices still send with full item details inline while items await registration."
+            searchPlaceholder="Search item code or name..."
+            emptyMessage="No items seen yet. They appear here once an invoice references them."
+            howItWorks={[
+              'A new item appears here as Pending the first time any invoice references it.',
+              "Download the EFS registration file (pre-filled with everything the Hub knows) and upload it through CittaEFS's own portal — there is no registration API today.",
+              'Enter the CittaEFS reference code EFS returns, using Confirm Registered below. This never blocks invoices — they already sent with full item details inline.',
+            ]}
+            detailLine={(m) => `${m.sourceErpId} • via ${m.sourceErp}`}
+          />
+        </div>
+      </details>
 
       {/* ADD ITEM MAPPING MODAL */}
       {isAddModalOpen && (
