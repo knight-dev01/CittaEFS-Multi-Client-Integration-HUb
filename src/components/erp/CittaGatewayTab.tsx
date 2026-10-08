@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useHub } from '../../lib/store';
 import { fetchWithAuth, parseJsonResponse } from '../../lib/api';
-import { ShieldCheck, Key, Globe, Save, CheckCircle2, AlertCircle, Building2, Plug, Eye, EyeOff } from 'lucide-react';
+import { ShieldCheck, Key, Globe, Save, CheckCircle2, AlertCircle, Building2, Plug, Eye, EyeOff, ToggleLeft, ToggleRight } from 'lucide-react';
 import { getErpForTenant } from '../../config/erpRegistry';
 
 export function CittaGatewayTab() {
@@ -13,13 +13,30 @@ export function CittaGatewayTab() {
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [togglingMode, setTogglingMode] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const gatewayMode: 'live' | 'test' = ((activeTenant as any).cittaMode === 'test') ? 'test' : 'live';
 
   useEffect(() => {
     setGatewayUrl(activeTenant.cittaGatewayUrl || 'https://ei-api.azurewebsites.net');
     setApiKey(activeTenant.cittaApiKey || '');
     setWritebackTarget((activeTenant as any).cittaWritebackTarget || 'HUB');
-  }, [activeTenant.id]);
+  }, [activeTenant.id, (activeTenant as any).cittaMode]);
+
+  const handleToggleMode = async () => {
+    const target = gatewayMode === 'live' ? 'test' : 'live';
+    if (!confirm(`Switch the shared CittaEFS gateway from ${gatewayMode.toUpperCase()} to ${target.toUpperCase()}?\n\nThis affects every tenant — all invoices will transmit to whichever URL/key is active after the switch.`)) return;
+    setTogglingMode(true);
+    setMsg(null);
+    try {
+      const res = await fetchWithAuth('/api/system/citta-config/toggle-mode', { method: 'POST' });
+      const data = await parseJsonResponse(res);
+      await refreshAll();
+      setMsg({ type: 'success', text: `Switched to ${data.mode.toUpperCase()} mode across ${data.updatedCount} tenant(s).${data.note ? ' ' + data.note : ''}` });
+    } catch (e: any) {
+      setMsg({ type: 'error', text: e.message });
+    } finally { setTogglingMode(false); }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -65,6 +82,22 @@ export function CittaGatewayTab() {
         <div className="mt-3 bg-violet-500/10 border border-violet-500/20 rounded-lg px-3 py-2 text-xs text-violet-200">All tenants share one gateway. Saving here propagates the key & URL to every tenant. Set <span className="font-mono text-violet-300">CITTAEFS_API_KEY</span> in env (Render Secret File) to override DB at runtime.</div>
       </div>
 
+      {/* Gateway mode toggle — swaps the active url/key pair for the inactive one saved below */}
+      <div className={`rounded-xl border p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${gatewayMode === 'live' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+        <div>
+          <span className="text-[10px] font-bold tracking-wider uppercase text-slate-500 block">Gateway Mode</span>
+          <span className={`font-bold text-sm ${gatewayMode === 'live' ? 'text-emerald-700' : 'text-amber-700'}`}>{gatewayMode === 'live' ? 'LIVE — sending real NRS-stamped invoices' : 'TEST — sandbox gateway, not production'}</span>
+        </div>
+        <button
+          onClick={handleToggleMode}
+          disabled={togglingMode}
+          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2 shrink-0"
+        >
+          {gatewayMode === 'live' ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+          <span>{togglingMode ? 'Switching...' : `Switch to ${gatewayMode === 'live' ? 'TEST' : 'LIVE'}`}</span>
+        </button>
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 className="font-bold text-slate-900 flex items-center gap-2"><Building2 className="w-4 h-4 text-indigo-600" /> Tenant Workspace</h3>
@@ -77,7 +110,7 @@ export function CittaGatewayTab() {
             <span className="text-[11px] text-slate-500 block">{activeTenant.platformType}</span>
           </div>
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-            <span className="text-[10px] font-bold tracking-wider uppercase text-slate-500 block">ERP Mode</span>
+            <span className="text-[10px] font-bold tracking-wider uppercase text-slate-500 block">ERP Platform</span>
             <span className="font-bold text-slate-900 flex items-center gap-1.5"><erp.icon className="w-3.5 h-3.5" />{erp.label}</span>
             <span className="text-[11px] text-slate-500">{erp.description}</span>
           </div>
@@ -87,6 +120,7 @@ export function CittaGatewayTab() {
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 shadow-sm">
         <h3 className="font-bold text-slate-900 flex items-center gap-2"><Globe className="w-4 h-4 text-indigo-600" /> CittaEFS Gateway Credentials — Single Shared Key (provided by CittaEFS)</h3>
         <p className="text-slate-500 text-xs">One key for all tenants. Hub reads <span className="font-mono bg-slate-100 px-1 py-0.5 rounded border">CITTAEFS_API_KEY</span> env first (recommended: set in Render Secret File), otherwise the DB shared pool. Saving here updates <span className="font-semibold">every</span> tenant so they stay in sync. Env always wins at runtime.</p>
+        <p className="text-[11px] text-slate-400 -mt-2">These fields are whichever credentials are currently active (<strong>{gatewayMode.toUpperCase()}</strong> right now). Edit and Save to update the active pair — the other mode's saved pair is untouched until you switch to it above.</p>
 
         <div className="space-y-4">
           <div>

@@ -463,6 +463,61 @@ router.patch("/api/system/citta-config", async (req: any, res) => {
   }
 });
 
+// POST /api/system/citta-config/toggle-mode — swap the shared gateway between
+// its "live" and "test" credential pair. The pair NOT currently active is
+// snapshotted on tenants[0].cittaOtherModeConfig; toggling swaps it back in.
+// Shared-gateway invariant: propagates to every tenant, same as the save route above.
+router.post("/api/system/citta-config/toggle-mode", async (req: any, res) => {
+  try {
+    const role = req.user?.role;
+    if (req.user && role !== "ADMIN") return res.status(403).json({ success: false, error: "Admin required" });
+
+    const sample = await prisma.tenant.findFirst({
+      select: { cittaGatewayUrl: true, cittaApiKey: true, cittaMode: true, cittaOtherModeConfig: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!sample) return res.status(404).json({ success: false, error: "No tenants found" });
+
+    const currentMode = sample.cittaMode || "live";
+    const newMode = currentMode === "live" ? "test" : "live";
+
+    let other: { url: string | null; apiKey: string | null } = { url: null, apiKey: null };
+    if (sample.cittaOtherModeConfig) {
+      try { other = JSON.parse(sample.cittaOtherModeConfig); } catch {}
+    }
+
+    const data = {
+      cittaMode: newMode,
+      cittaGatewayUrl: other.url,
+      cittaApiKey: other.apiKey || sample.cittaApiKey, // never blank out the shared key — fall back to current if no test key saved yet
+      cittaOtherModeConfig: JSON.stringify({ url: sample.cittaGatewayUrl, apiKey: sample.cittaApiKey }),
+    };
+
+    const result = await prisma.tenant.updateMany({ data });
+    await safeAuditLogCreate(prisma, {
+      tenantId: (await prisma.tenant.findFirst({ select: { id: true } }))?.id || "system",
+      action: "CITTA_GATEWAY_MODE_TOGGLED",
+      entityType: "TENANT",
+      entityRef: "ALL_TENANTS",
+      details: `CittaEFS gateway mode switched ${currentMode} → ${newMode} for ${result.count} tenant(s).`,
+      sha256PayloadHash: generateSha256(`${currentMode}:${newMode}:${Date.now()}`),
+      performedBy: req.user?.email || "Admin",
+    });
+
+    res.json({
+      success: true,
+      mode: newMode,
+      cittaGatewayUrl: data.cittaGatewayUrl,
+      updatedCount: result.count,
+      note: newMode === "test" && !other.url
+        ? "No test gateway URL/key was saved yet — fill them in and Save while in test mode, so the next toggle has something real to swap to."
+        : undefined,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/system/webhook-config
 router.get("/api/system/webhook-config", async (req: any, res) => {
   try {

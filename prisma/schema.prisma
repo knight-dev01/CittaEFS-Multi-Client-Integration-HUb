@@ -21,6 +21,8 @@ model Tenant {
   monthlyUsed      Int      @default(0) @map("monthly_used")
   defaultVatRate   Float    @default(7.5) @map("default_vat_rate")
   cittaGatewayUrl  String?  @map("citta_gateway_url")
+  cittaMode        String   @default("live") @map("citta_mode") // live | test — which gateway credentials are currently active in cittaGatewayUrl/cittaApiKey
+  cittaOtherModeConfig String? @map("citta_other_mode_config") // JSON {url, apiKey} snapshot of whichever mode (live/test) is NOT currently active — swapped in on toggle
   cittaWritebackTarget String @default("BOTH") @map("citta_writeback_target") // HUB | CITTAEFS | BOTH — default BOTH so Hub invoices forward to CittaEFS
   erpConfig        String?  @map("erp_config") // JSON string per-ERP config & matching rules (legacy single)
   lastSyncAt       DateTime @default(now()) @map("last_sync_at")

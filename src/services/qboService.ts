@@ -215,12 +215,43 @@ export function getIntuitOAuthClient() {
   });
 }
 
+export type QboEnvironment = "sandbox" | "production";
+
 /**
- * Returns the base URL for QBO API calls depending on the environment.
+ * Resolves a tenant's chosen QBO environment from erpConfig.environment,
+ * defaulting to the server-wide QBO_ENVIRONMENT (itself defaulting to
+ * sandbox) for tenants that have never set a per-tenant preference —
+ * preserves prior single-environment behavior until a tenant opts in.
  */
-function getQboBaseUrl(): string {
-  const env = process.env.QBO_ENVIRONMENT || "sandbox";
-  return env.toLowerCase() === "production"
+export async function getTenantQboEnvironment(tenantId: string): Promise<QboEnvironment> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { erpConfig: true } });
+  let cfg: any = {};
+  try { cfg = tenant?.erpConfig ? JSON.parse(tenant.erpConfig) : {}; } catch {}
+  const env = String(cfg.environment || process.env.QBO_ENVIRONMENT || "sandbox").toLowerCase();
+  return env === "production" ? "production" : "sandbox";
+}
+
+/**
+ * Resolves OAuth client credentials for a given environment. Prefers
+ * environment-specific env vars (QBO_CLIENT_ID_SANDBOX / _PRODUCTION) so a
+ * single Intuit app's sandbox and production keysets can both be configured
+ * at once; falls back to the original global QBO_CLIENT_ID/SECRET so a
+ * deployment that only ever set those (the only kind possible before this)
+ * keeps working unchanged.
+ */
+export function getQboCredentialsForEnvironment(environment: QboEnvironment): { clientId: string; clientSecret: string } {
+  const suffix = environment === "production" ? "PRODUCTION" : "SANDBOX";
+  const clientId = process.env[`QBO_CLIENT_ID_${suffix}`] || process.env.QBO_CLIENT_ID || "";
+  const clientSecret = process.env[`QBO_CLIENT_SECRET_${suffix}`] || process.env.QBO_CLIENT_SECRET || "";
+  return { clientId, clientSecret };
+}
+
+/**
+ * Returns the base URL for QBO API calls depending on a tenant's environment.
+ */
+async function getQboBaseUrl(tenantId: string): Promise<string> {
+  const environment = await getTenantQboEnvironment(tenantId);
+  return environment === "production"
     ? "https://quickbooks.api.intuit.com"
     : "https://sandbox-quickbooks.api.intuit.com";
 }
@@ -256,11 +287,11 @@ export async function getValidQboAccessToken(
     }
   }
 
-  const clientId = process.env.QBO_CLIENT_ID;
-  const clientSecret = process.env.QBO_CLIENT_SECRET;
+  const environment = await getTenantQboEnvironment(tenantId);
+  const { clientId, clientSecret } = getQboCredentialsForEnvironment(environment);
   if (!clientId || !clientSecret) {
     throw new Error(
-      "QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables are required.",
+      `QBO_CLIENT_ID_${environment.toUpperCase()} (or QBO_CLIENT_ID) and the matching secret are required.`,
     );
   }
 
@@ -356,7 +387,7 @@ export async function fetchQboCompanyInfo(tenantId: string): Promise<any> {
   }
 
   const realmId = integration.companyId;
-  const baseUrl = getQboBaseUrl();
+  const baseUrl = await getQboBaseUrl(tenantId);
   const url = `${baseUrl}/v3/company/${realmId}/companyinfo/${realmId}?minorversion=65`;
 
   const response = await fetch(url, {
@@ -391,7 +422,7 @@ export async function fetchQboInvoices(
   }
 
   const realmId = integration.companyId;
-  const baseUrl = getQboBaseUrl();
+  const baseUrl = await getQboBaseUrl(tenantId);
 
   let query = "SELECT * FROM Invoice";
   if (options?.lastSyncAt) {
@@ -448,7 +479,7 @@ export async function fetchAllQboInvoicesPaginated(
   }
 
   const realmId = integration.companyId;
-  const baseUrl = getQboBaseUrl();
+  const baseUrl = await getQboBaseUrl(tenantId);
 
   let allInvoices: any[] = [];
   let startPosition = 1;
@@ -515,7 +546,7 @@ export async function fetchSingleQboInvoice(
   }
 
   const realmId = integration.companyId;
-  const baseUrl = getQboBaseUrl();
+  const baseUrl = await getQboBaseUrl(tenantId);
   const url = `${baseUrl}/v3/company/${realmId}/invoice/${qboInvoiceId}?minorversion=65`;
 
   const response = await fetch(url, {
@@ -867,7 +898,7 @@ export async function writebackToQbo(
   }
 
   const realmId = integration.companyId;
-  const baseUrl = getQboBaseUrl();
+  const baseUrl = await getQboBaseUrl(tenantId);
 
   // 1. Fetch current invoice first to get the latest SyncToken
   let syncToken = "0";

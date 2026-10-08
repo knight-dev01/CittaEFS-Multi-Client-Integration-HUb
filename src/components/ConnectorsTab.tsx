@@ -11,12 +11,14 @@ import {
   FileSpreadsheet,
   Globe,
   Layers,
-  Zap
+  Zap,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { QboStagingInbox } from './QboStagingInbox';
 
 interface ConnectorStatus {
-  qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null };
+  qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null; environment?: 'sandbox' | 'production' };
   odoo: { connected: boolean; status: string; database: string | null; lastSyncAt: string | null };
   excelCsv: { totalInvoices: number; lastInvoiceAt: string | null };
   cittaGateway: { totalStamped: number; totalPending: number; totalRejected: number };
@@ -36,6 +38,7 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
   const [syncingQbo, setSyncingQbo] = useState(false);
   const [testingOdoo, setTestingOdoo] = useState(false);
   const [syncingOdoo, setSyncingOdoo] = useState(false);
+  const [togglingQboEnv, setTogglingQboEnv] = useState(false);
 
   const queryParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const qboRedirectStatus = queryParams.get('qbo');
@@ -116,6 +119,35 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
     } catch (err: any) {
       setTestingQbo(false);
       toastGlobal('error', 'API error testing connector', err.message);
+    }
+  };
+
+  const handleToggleQboEnvironment = async () => {
+    const current = status?.qbo.environment || 'sandbox';
+    const target = current === 'sandbox' ? 'production' : 'sandbox';
+    const connected = !!status?.qbo.connected;
+    const confirmMsg = connected
+      ? `Switch QuickBooks from ${current.toUpperCase()} to ${target.toUpperCase()}?\n\nSandbox and production use separate Intuit credentials — your current connection will need to be reauthorized.`
+      : `Switch QuickBooks to ${target.toUpperCase()} before connecting?`;
+    if (!confirm(confirmMsg)) return;
+    setTogglingQboEnv(true);
+    try {
+      const res = await fetchWithAuth('/api/integrations/qbo/environment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: activeTenant.id, environment: target })
+      });
+      const data = await parseJsonResponse(res);
+      if (data.success) {
+        toastGlobal('success', `QuickBooks environment set to ${target.toUpperCase()}`, data.reauthRequired ? 'Existing connection needs reauthorization — use Connect QuickBooks Online below.' : '');
+      } else {
+        toastGlobal('error', 'Failed to switch environment', data.error || 'Unknown error');
+      }
+      await loadStatus();
+    } catch (err: any) {
+      toastGlobal('error', 'API error switching environment', err.message);
+    } finally {
+      setTogglingQboEnv(false);
     }
   };
 
@@ -291,6 +323,22 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
               <div className="flex justify-between text-slate-500">
                 <span>Last Sync:</span>
                 <span className="font-medium text-slate-900">{formatWhen(status?.qbo.lastSyncAt ?? null)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-500">
+                <span>Environment:</span>
+                <button
+                  onClick={handleToggleQboEnvironment}
+                  disabled={togglingQboEnv}
+                  title="Sandbox and production use separate Intuit credentials — switching an already-connected tenant will need reauthorization"
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border cursor-pointer disabled:opacity-50 transition-colors ${
+                    (status?.qbo.environment || 'sandbox') === 'production'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  {(status?.qbo.environment || 'sandbox') === 'production' ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                  <span>{togglingQboEnv ? 'Switching...' : (status?.qbo.environment || 'sandbox').toUpperCase()}</span>
+                </button>
               </div>
             </div>
 

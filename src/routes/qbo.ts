@@ -14,6 +14,9 @@ import {
   fetchAllQboInvoicesPaginated,
   fetchQboCompanyInfo,
   ingestQboInvoice,
+  getTenantQboEnvironment,
+  getQboCredentialsForEnvironment,
+  QboEnvironment,
 } from "../services/qboService";
 
 const router = Router();
@@ -42,12 +45,12 @@ router.get("/api/integrations/qbo/connect", async (req: any, res) => {
       (req.query.tenantId as string) ||
       req.user?.tenantId ||
       "tenant_qbo_smb";
-    const clientId = process.env.QBO_CLIENT_ID;
+    const environment = await getTenantQboEnvironment(tenantId);
+    const { clientId } = getQboCredentialsForEnvironment(environment);
     const redirectUri = process.env.QBO_REDIRECT_URI;
 
     if (!clientId || !redirectUri) {
-      const error =
-        "QBO_CLIENT_ID and QBO_REDIRECT_URI environment variables are required";
+      const error = `QBO client credentials for ${environment} (QBO_CLIENT_ID_${environment.toUpperCase()} or QBO_CLIENT_ID) and QBO_REDIRECT_URI environment variables are required`;
       if (wantsJson) return res.status(400).json({ error });
       return res
         .status(400)
@@ -61,7 +64,7 @@ router.get("/api/integrations/qbo/connect", async (req: any, res) => {
     }
 
     const stateToken = jwt.sign(
-      { tenantId, timestamp: Date.now() },
+      { tenantId, environment, timestamp: Date.now() },
       JWT_SECRET,
       { expiresIn: "15m" },
     );
@@ -118,8 +121,8 @@ router.get("/api/integrations/qbo/callback", async (req, res) => {
     }
 
     const tenantId = decoded.tenantId;
-    const clientId = process.env.QBO_CLIENT_ID;
-    const clientSecret = process.env.QBO_CLIENT_SECRET;
+    const environment: QboEnvironment = decoded.environment === "production" ? "production" : "sandbox";
+    const { clientId, clientSecret } = getQboCredentialsForEnvironment(environment);
     const redirectUri = process.env.QBO_REDIRECT_URI;
 
     if (!clientId || !clientSecret || !redirectUri) {
@@ -128,8 +131,7 @@ router.get("/api/integrations/qbo/callback", async (req, res) => {
         .send(
           renderOAuthBridgeHtml({
             success: false,
-            error:
-              "QBO_CLIENT_ID, QBO_CLIENT_SECRET, or QBO_REDIRECT_URI missing in server config",
+            error: `QBO client credentials for ${environment} (QBO_CLIENT_ID_${environment.toUpperCase()}/QBO_CLIENT_SECRET_${environment.toUpperCase()}, or else QBO_CLIENT_ID/SECRET), or QBO_REDIRECT_URI, missing in server config`,
             redirectQs: "qbo=error",
           }),
         );
@@ -200,6 +202,19 @@ router.get("/api/integrations/qbo/callback", async (req, res) => {
       },
     });
 
+    // Persist the environment this OAuth grant was issued under, so later
+    // token refreshes/API calls (qboService.ts) pick the matching credentials
+    // and base URL even if the tenant never touched the Mapping tab's dropdown.
+    try {
+      const tenantRow = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { erpConfig: true } });
+      let cfg: any = {};
+      try { cfg = tenantRow?.erpConfig ? JSON.parse(tenantRow.erpConfig) : {}; } catch {}
+      cfg.environment = environment;
+      await prisma.tenant.update({ where: { id: tenantId }, data: { erpConfig: JSON.stringify(cfg) } });
+    } catch (e: any) {
+      console.warn(`[QBO Callback] Failed to persist environment for tenant ${tenantId}:`, e.message);
+    }
+
     await safeAuditLogCreate(prisma, {
       tenantId,
       action: "CONNECTOR_AUTHENTICATED",
@@ -233,6 +248,54 @@ router.get("/api/integrations/qbo/callback", async (req, res) => {
   }
 });
 
+// QuickBooks Online — switch sandbox/production for this tenant. A single
+// Intuit app issues separate credentials per environment, so sandbox tokens
+// never work against production (or vice versa) — if this tenant already has
+// a QBO integration, flip it to NEEDS_REAUTH so the UI's existing "Connect"
+// flow naturally prompts a fresh OAuth grant under the new environment.
+router.post("/api/integrations/qbo/environment", async (req: any, res) => {
+  try {
+    const userRole = req.user?.role;
+    if (userRole && !["ADMIN", "INTEGRATION_MANAGER"].includes(userRole)) {
+      return res.status(403).json({ success: false, error: "Forbidden: Requires ADMIN or INTEGRATION_MANAGER role" });
+    }
+    const tenantId = req.body?.tenantId || req.user?.tenantId || (req.query.tenantId as string) || "tenant_qbo_smb";
+    const environment: QboEnvironment = req.body?.environment === "production" ? "production" : "sandbox";
+
+    const current = await getTenantQboEnvironment(tenantId);
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { erpConfig: true } });
+    if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
+
+    let cfg: any = {};
+    try { cfg = tenant.erpConfig ? JSON.parse(tenant.erpConfig) : {}; } catch {}
+    cfg.environment = environment;
+    await prisma.tenant.update({ where: { id: tenantId }, data: { erpConfig: JSON.stringify(cfg) } });
+
+    let reauthRequired = false;
+    if (environment !== current) {
+      const result = await prisma.integration.updateMany({
+        where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE", status: "CONNECTED" },
+        data: { status: "NEEDS_REAUTH" },
+      });
+      reauthRequired = result.count > 0;
+    }
+
+    await safeAuditLogCreate(prisma, {
+      tenantId,
+      action: "QBO_ENVIRONMENT_SWITCHED",
+      entityType: "INTEGRATION",
+      entityRef: "QUICKBOOKS_ONLINE",
+      details: `QBO environment switched ${current} → ${environment}.${reauthRequired ? " Existing connection flagged NEEDS_REAUTH." : ""}`,
+      sha256PayloadHash: generateSha256(`${tenantId}:${environment}:${Date.now()}`),
+      performedBy: req.user?.email || "Operator",
+    });
+
+    res.json({ success: true, environment, reauthRequired });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // QuickBooks Online — status
 router.get("/api/integrations/qbo/status", async (req: any, res) => {
   try {
@@ -247,11 +310,14 @@ router.get("/api/integrations/qbo/status", async (req: any, res) => {
       },
     });
 
+    const environment = await getTenantQboEnvironment(tenantId);
+
     if (!integration) {
       return res.json({
         connected: false,
         status: "DISCONNECTED",
         companyId: null,
+        environment,
       });
     }
 
@@ -260,6 +326,7 @@ router.get("/api/integrations/qbo/status", async (req: any, res) => {
       status: integration.status,
       companyId: integration.companyId,
       lastSyncAt: integration.lastSyncAt,
+      environment,
     });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -390,7 +457,7 @@ router.post("/api/connectors/qbo/test-live", async (req: any, res) => {
     res.json({
       success: true,
       platform: "QuickBooks Online",
-      environment: (process.env.QBO_ENVIRONMENT || "sandbox").toUpperCase(),
+      environment: (await getTenantQboEnvironment(tenantId)).toUpperCase(),
       latencyMs,
       status: "HTTP 200 OK",
       authStatus: "AUTHENTICATED",
@@ -413,7 +480,7 @@ router.get("/api/connectors/status", async (req: any, res) => {
   try {
     const tenantId = (req.query.tenantId as string) || req.user?.tenantId || "tenant_qbo_smb";
 
-    const [integration, odooIntegration, totalInvoices, lastInvoice, totalStamped, totalPending, totalRejected] = await Promise.all([
+    const [integration, odooIntegration, totalInvoices, lastInvoice, totalStamped, totalPending, totalRejected, qboEnvironment] = await Promise.all([
       prisma.integration.findFirst({
         where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" },
       }),
@@ -425,6 +492,7 @@ router.get("/api/connectors/status", async (req: any, res) => {
       prisma.invoice.count({ where: { tenantId, status: "APPROVED", irn: { not: null } } }),
       prisma.invoice.count({ where: { tenantId, status: "PENDING_NRS_STAMP" } }),
       prisma.invoice.count({ where: { tenantId, status: "REJECTED" } }),
+      getTenantQboEnvironment(tenantId),
     ]);
 
     res.json({
@@ -433,6 +501,7 @@ router.get("/api/connectors/status", async (req: any, res) => {
         status: integration?.status || "NOT_CONNECTED",
         companyId: integration?.companyId || null,
         lastSyncAt: integration?.lastSyncAt ? integration.lastSyncAt.toISOString() : null,
+        environment: qboEnvironment,
       },
       odoo: {
         connected: odooIntegration?.status === "CONNECTED",
