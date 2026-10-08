@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { useHub } from '../lib/store';
-import { 
+import {
   Activity,
   CheckCircle2,
   Clock,
   Building2,
   Trash2,
-  FileText
+  FileText,
+  ChevronDown
 } from 'lucide-react';
 
 interface OverviewTabProps {
@@ -89,12 +90,12 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">NRS Stamped</span>
           <div className="text-2xl font-bold text-violet-600 mt-1">{approvedInvoices}</div>
-          <span className="text-xs text-violet-600 font-medium block pt-2 border-t border-slate-100 mt-2">Compliance Rate</span>
+          <span className="text-xs text-violet-600 font-medium block pt-2 border-t border-slate-100 mt-2">{metrics.nrsStampSuccessRate}% compliance rate</span>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Queue Depth</span>
           <div className="text-2xl font-bold text-violet-600 mt-1">{queuedInvoices}</div>
-          <span className="text-xs text-slate-500 font-medium block pt-2 border-t border-slate-100 mt-2">Worker Active</span>
+          <span className="text-xs text-slate-500 font-medium block pt-2 border-t border-slate-100 mt-2">Awaiting transmission</span>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Gateway Latency</span>
@@ -147,31 +148,38 @@ export function OverviewTab({ onOpenOnboardModal }: OverviewTabProps) {
         </div>
       </div>
 
-      {/* System status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3"><span className="font-bold text-slate-900 text-xs">CittaEFS Gateway</span><span className="px-2.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-[10px]">{metrics.cittaGatewayStatus}</span></div>
-          <div className="space-y-2 text-xs text-slate-600 mt-3">
-            <div className="flex justify-between gap-3"><span className="shrink-0">Endpoint:</span><span className="font-mono font-semibold text-violet-700 break-all text-right">{cittaEndpoint}</span></div>
-            <div className="flex justify-between"><span>Security:</span><span className="font-semibold text-violet-600">AES-256-GCM</span></div>
-            <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-100">Shared key: all tenants use <span className="font-mono text-violet-600">CITTAEFS_API_KEY</span> → {cittaEndpoint}/api/integration/gen/invoices</div>
+      {/* System status — collapsed by default, secondary to the metrics/tables above */}
+      <details className="group">
+        <summary className="list-none cursor-pointer">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+            <span className="font-bold text-slate-900 text-xs flex items-center gap-2"><Activity className="w-4 h-4 text-violet-600" /> System Status</span>
+            <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition" />
+          </div>
+        </summary>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3"><span className="font-bold text-slate-900 text-xs">CittaEFS Gateway</span><span className="px-2.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-[10px]">{metrics.cittaGatewayStatus}</span></div>
+            <div className="space-y-2 text-xs text-slate-600 mt-3">
+              <div className="flex justify-between gap-3"><span className="shrink-0">Endpoint:</span><span className="font-mono font-semibold text-violet-700 break-all text-right">{cittaEndpoint}</span></div>
+              <div className="flex justify-between"><span>Security:</span><span className="font-semibold text-violet-600">AES-256-GCM</span></div>
+              <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-100">Shared key: all tenants use <span className="font-mono text-violet-600">CITTAEFS_API_KEY</span> → {cittaEndpoint}/api/integration/gen/invoices</div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3"><span className="font-bold text-slate-900 text-xs">Worker</span><span className="px-2.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-[10px]">RUNNING</span></div>
+            <div className="space-y-2 text-xs text-slate-600 mt-3">
+              <div className="flex justify-between"><span>Backoff:</span><span className="font-semibold text-slate-900">5s,30s,2m,10m</span></div>
+              <div className="flex justify-between"><span>Max Retries:</span><span className="font-semibold text-slate-900">5</span></div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3"><span className="font-bold text-slate-900 text-xs">Reconciliation</span><span className="px-2.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-[10px]">{metrics.reconciliationCronStatus}</span></div>
+            <div className="space-y-2 text-xs text-slate-600 mt-3">
+              <div className="flex justify-between"><span>NRS Cron:</span><span className="font-semibold text-slate-900">Every 15m</span></div>
+            </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3"><span className="font-bold text-slate-900 text-xs">Worker</span><span className="px-2.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-[10px]">RUNNING</span></div>
-          <div className="space-y-2 text-xs text-slate-600 mt-3">
-            <div className="flex justify-between"><span>Backoff:</span><span className="font-semibold text-slate-900">5s,30s,2m,10m</span></div>
-            <div className="flex justify-between"><span>Max Retries:</span><span className="font-semibold text-slate-900">5</span></div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3"><span className="font-bold text-slate-900 text-xs">Reconciliation</span><span className="px-2.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-[10px]">{metrics.reconciliationCronStatus}</span></div>
-          <div className="space-y-2 text-xs text-slate-600 mt-3">
-            <div className="flex justify-between"><span>NRS Cron:</span><span className="font-semibold text-slate-900">Every 15m</span></div>
-            <div className="flex justify-between"><span>Recovery:</span><span className="font-semibold text-violet-600">100%</span></div>
-          </div>
-        </div>
-      </div>
+      </details>
 
       {/* Recent invoices — overview only (no Send) — live tracks propagation via WS + 5s poll when pending */}
       <div className={`bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm ${hasPending ? 'ring-1 ring-violet-200' : ''}`}>

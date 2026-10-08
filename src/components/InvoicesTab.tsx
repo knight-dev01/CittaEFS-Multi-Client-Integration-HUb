@@ -24,7 +24,7 @@ import { toastGlobal } from './ui/Toast';
 import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
 
 export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void } = {}) {
-  const { invoices, activeTenant, customers, itemMappings, cancelInvoice, transmitInvoice, currentUser, bulkTransmitInvoices, updateInvoice, deleteInvoice, refreshAll, retryInvoice, retryBulkInvoices, isBgRefreshing } = useHub() as any;
+  const { invoices, activeTenant, customers, itemMappings, cancelInvoice, transmitInvoice, currentUser, updateInvoice, deleteInvoice, refreshAll, retryInvoice, retryBulkInvoices, isBgRefreshing } = useHub() as any;
   const tenantCustomers = (customers || []).filter((c:any) => c.tenantId === activeTenant?.id);
   const tenantItems = (itemMappings || []).filter((m:any) => m.tenantId === activeTenant?.id);
   const navigateToStaging = () => {
@@ -72,7 +72,6 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
     }
   };
 
-  const [isBulkSending, setIsBulkSending] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<{type:'success'|'error', text:string} | null>(null);
   const [showStagingDetails, setShowStagingDetails] = useState(false);
   const [showVerboseErrors, setShowVerboseErrors] = useState(false);
@@ -83,7 +82,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
   const isRetryable = (status:string) => ['REJECTED','FAILED'].includes(status);
   const hasRetryable = retryableBulk.length > 0;
   // Unified propagation guard — any CittaEFS send/retry in flight dulls ALL propagation buttons
-  const isAnyPropagating = !!sendingId || isBulkSending || !!retryingId || expandedSending || isBulkRetrying || isBgRefreshing;
+  const isAnyPropagating = !!sendingId || !!retryingId || expandedSending || isBulkRetrying || isBgRefreshing;
   const [propagatingSince, setPropagatingSince] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -156,47 +155,6 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
     });
     return errs;
   };
-  const handleBulkSend = async () => {
-    if (pendingBulk.length === 0) { setBulkMsg({type:'error', text:'No invoices to send — all are already APPROVED/SIGNED.'}); toastGlobal('info', 'Nothing to send', 'All filtered invoices are already APPROVED/SIGNED'); return; }
-    const invalidBulk = pendingBulk.filter(inv => getInvoiceErrors(inv).length>0);
-    if (invalidBulk.length>0) {
-      setBulkMsg({type:'error', text:`${invalidBulk.length} of ${pendingBulk.length} have missing fields (highlighted red). Fix TIN/HS code/Qty first — only valid will be sent. ${invalidBulk.slice(0,2).map((i:any)=>`${i.clientInvoiceNumber}: ${getInvoiceErrors(i).join('; ')}`).join(' | ')}`});
-      toastGlobal('error', `${invalidBulk.length} invoice(s) need fixing`, 'Highlighted red — TIN/HS/Qty');
-      // continue with only valid
-    }
-    const toSend = pendingBulk.filter(inv => getInvoiceErrors(inv).length===0);
-    if (toSend.length===0) return;
-    if (!confirm(`Bulk send ${toSend.length} valid invoice(s) to CittaEFS gateway? (idempotent — duplicates ignored)`)) return;
-    setIsBulkSending(true);
-    setBulkMsg(null);
-    toastGlobal('info', `Queuing ${toSend.length} invoice(s)…`, 'Bulk is idempotent — already queued will be skipped');
-    try {
-      const payloads = toSend.map(inv => ({
-        clientInvoiceNumber: inv.clientInvoiceNumber,
-        invoiceKind: inv.invoiceKind || 'B2B',
-        invoiceType: inv.invoiceType || 'STANDARD',
-        issueDate: inv.issueDate || new Date().toISOString().substring(0, 10),
-        customerCode: inv.customerCode || 'CUST-001',
-        customerName: inv.customerName,
-        customerTin: resolveTin(inv),
-        lineItems: inv.lineItems?.length ? inv.lineItems.map((li: any) => ({
-          itemCode: li.itemCode,
-          description: li.description,
-          quantity: li.quantity,
-          unitPrice: li.unitPrice,
-          hsOrServiceCode: li.hsOrServiceCode,
-          vatRate: li.vatRate,
-        })) : [{ itemCode: 'SKU-001', description: 'Item', quantity: 1, unitPrice: inv.grandTotal || 5000, hsOrServiceCode: 'UNMAPPED', vatRate: 7.5 }]
-      }));
-      const res = await bulkTransmitInvoices(payloads);
-      const detail = res.results?.filter((r:any)=>!r.success).map((r:any)=> `${r.clientInvoiceNumber}: ${r.errors?.join(', ')}`).join(' | ');
-      if (res.failedCount > 0) setBulkMsg({type:'error', text:`Bulk: ${res.successCount} ok, ${res.failedCount} failed. ${detail || res.message || ''}`});
-      else setBulkMsg({type:'success', text:`Bulk queued ${res.successCount} invoice(s) for NRS stamping. ${res.message || ''}`});
-    } catch (e: any) {
-      setBulkMsg({type:'error', text: e.message || 'Bulk send failed — check TIN/duplicate/HS code. See Validation tab.'});
-    } finally { setIsBulkSending(false); }
-  };
-
   return (
     <div className="space-y-6">
 
@@ -266,10 +224,6 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                 <span>{isBulkRetrying ? 'Retrying…' : `Retry Failed (${retryableBulk.length})`}</span>
               </button>
             )}
-            <button onClick={handleBulkSend} disabled title="Pending invoices locked — awaiting NRS (cannot re-send until REJECTED/FAILED)" className="px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-not-allowed shadow-sm font-sans opacity-40 grayscale bg-slate-600 text-slate-400">
-              <Send className="w-3.5 h-3.5" />
-              <span>Bulk Send to CittaEFS ({pendingBulk.length}) — locked</span>
-            </button>
           </div>
         </div>
 

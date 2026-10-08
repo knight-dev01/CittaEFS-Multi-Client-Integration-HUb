@@ -293,9 +293,9 @@ router.get("/api/metrics", async (req: any, res) => {
     const tenantsCount = await prisma.tenant.count({ where: req.user && req.user.role !== "ADMIN" ? { id: req.user.tenantId } : undefined });
     const openErrors = await prisma.validationError.count({ where: { ...(scoped.tenantId ? { tenantId: scoped.tenantId } : {}), status: "OPEN" } });
 
-    const successRate = totalInvoices > 0 ? Number(((approvedInvoices / totalInvoices) * 100).toFixed(2)) : 99.85;
+    const successRate = totalInvoices > 0 ? Number(((approvedInvoices / totalInvoices) * 100).toFixed(2)) : 0;
 
-    let averageLatencyMs = 138;
+    let averageLatencyMs = 0;
     let cittaGatewayStatus: string = "ONLINE";
     try {
       const recentJobs = await prisma.queueJob.findMany({ where: { status: "COMPLETED" }, orderBy: { updatedAt: "desc" }, take: 20 });

@@ -270,11 +270,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             </button>
           )}
         </div>
-        <div className="text-[10px] text-slate-400 font-medium mt-2 flex justify-between items-center px-0.5">
+        <div className="text-[10px] text-slate-400 font-medium mt-2 px-0.5">
           <span>{activeTenant?.platformType || 'QuickBooks / Excel'}</span>
-          <span className="bg-slate-800 px-2 py-0.5 text-[9px] text-indigo-300 rounded border border-slate-700 font-mono">
-            {activeTenant?.region || 'EU-WEST2'}
-          </span>
         </div>
         {userRole === 'ADMIN' && activeTenant && (
           <p className="text-[10px] text-slate-500 mt-1">ADMIN: use trash icon to remove this workspace (cascades all data).</p>

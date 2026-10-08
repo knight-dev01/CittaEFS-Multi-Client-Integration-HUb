@@ -2,23 +2,13 @@ import { useState, FormEvent, useEffect } from 'react';
 import { useHub } from '../lib/store';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { getStoredCittaEndpoint, saveStoredCittaEndpoint } from '../lib/gatewaySettings';
-import { 
-  Settings, 
-  ShieldCheck, 
-  Key, 
-  Clock, 
-  RefreshCw, 
-  UserCheck, 
-  Save, 
-  Lock, 
-  Globe, 
+import {
+  Settings,
+  Save,
   Sliders,
   Users,
-  Plus,
-  Trash2,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   UserPlus,
   ShieldAlert,
   Search,
@@ -30,18 +20,15 @@ interface UserMember {
   name: string;
   email: string;
   role: 'ADMIN' | 'OPERATOR';
-  mfaStatus: 'ENFORCED' | 'OPTIONAL' | 'DISABLED';
   lastActive: string;
   status: 'ACTIVE' | 'SUSPENDED' | 'INVITED';
 }
 
 export function SettingsTab() {
-  const { activeTenant, updateTenant } = useHub();
+  const { activeTenant, updateTenant, currentUser } = useHub() as any;
 
-  const [currentRole, setCurrentRole] = useState<'ADMIN' | 'OPERATOR'>('ADMIN');
-  const [retryMax, setRetryMax] = useState(5);
+  const userRole: 'ADMIN' | 'OPERATOR' = currentUser?.role === 'OPERATOR' ? 'OPERATOR' : 'ADMIN';
   const [cittaEndpoint, setCittaEndpoint] = useState(getStoredCittaEndpoint);
-  const [timeZone, setTimeZone] = useState('UTC (ISO-8601)');
   const [defaultVatRate, setDefaultVatRate] = useState(activeTenant?.defaultVatRate ?? 7.5);
   const [isSaved, setIsSaved] = useState(false);
   const [isSavingVat, setIsSavingVat] = useState(false);
@@ -59,7 +46,7 @@ export function SettingsTab() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('SecurePass123!');
+  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<'ADMIN' | 'OPERATOR'>('OPERATOR');
 
   useEffect(() => {
@@ -78,7 +65,6 @@ export function SettingsTab() {
           name: u.name,
           email: u.email,
           role: u.role,
-          mfaStatus: 'ENFORCED',
           lastActive: 'Recently',
           status: 'ACTIVE'
         }));
@@ -140,16 +126,15 @@ export function SettingsTab() {
           name: data.user.name,
           email: data.user.email,
           role: data.user.role,
-          mfaStatus: 'ENFORCED',
           lastActive: 'Just now',
           status: 'ACTIVE'
         };
         setUsers([createdUser, ...users]);
         setNewUserName('');
         setNewUserEmail('');
-        setNewUserPassword('SecurePass123!');
+        setNewUserPassword('');
         setIsAddUserOpen(false);
-        alert(`✅ User ${createdUser.name} (${createdUser.email}) successfully created with ${createdUser.role} role for tenant ${activeTenant?.name}!`);
+        alert(`✅ User ${createdUser.name} (${createdUser.email}) created with ${createdUser.role} role. Share this password with them directly — no invite email is sent.`);
       } else {
         alert(`❌ Failed to create user: ${data.error || 'Unknown error'}`);
       }
@@ -199,40 +184,9 @@ export function SettingsTab() {
             Row-Level Security Context • Multi-User RBAC • Workspace: <strong className="text-white font-medium">{activeTenant?.name || 'No Workspace'}</strong> ({activeTenant?.id || 'N/A'})
           </p>
         </div>
-      </div>
-
-      {/* Role Context Switcher Workbench */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-indigo-600" />
-            <span>Simulate Active RBAC Role Session Context</span>
-          </h3>
-          <span className="px-2.5 py-0.5 bg-emerald-50 border border-emerald-200 font-semibold text-[11px] rounded-full text-emerald-700">
-            ACTIVE ROLE: {currentRole}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { role: 'ADMIN', label: 'Platform Admin', desc: 'Full write, API key rotation, tenant onboarding & RBAC user control' },
-            { role: 'OPERATOR', label: 'Operations Tech', desc: 'Invoice ingestion, manual error recovery & job retries' }
-          ].map((r) => (
-            <button
-              key={r.role}
-              onClick={() => setCurrentRole(r.role as any)}
-              className={`p-4 border rounded-xl text-left space-y-1.5 cursor-pointer transition-all ${
-                currentRole === r.role ? 'bg-indigo-50/70 border-indigo-500 shadow-sm' : 'bg-white hover:bg-slate-50 border-slate-200/80'
-              }`}
-            >
-              <div className="font-bold text-slate-900 text-xs flex items-center justify-between">
-                <span>{r.label}</span>
-                {currentRole === r.role && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
-              </div>
-              <div className="text-xs text-slate-500 leading-relaxed">{r.desc}</div>
-            </button>
-          ))}
-        </div>
+        <span className="px-2.5 py-1 bg-emerald-500/20 border border-emerald-500/30 font-semibold text-[11px] rounded-full text-emerald-300 shrink-0">
+          Signed in as {userRole}
+        </span>
       </div>
 
       {/* User Permissions & Directory Section */}
@@ -243,7 +197,7 @@ export function SettingsTab() {
               <Users className="w-4 h-4 text-indigo-600" />
               <span>Tenant User Directory & Access Management</span>
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">Manage user access, role assignments, and MFA enforcement policies.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Manage user access and role assignments.</p>
           </div>
           
           <div className="flex items-center gap-2">
@@ -258,7 +212,7 @@ export function SettingsTab() {
               />
             </div>
             
-            {currentRole === 'ADMIN' ? (
+            {userRole === 'ADMIN' ? (
               <button
                 onClick={() => setIsAddUserOpen(true)}
                 className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-1.5 shrink-0 transition-colors"
@@ -281,7 +235,6 @@ export function SettingsTab() {
               <tr className="bg-slate-50/80 text-slate-500 font-semibold text-[10px] uppercase tracking-wider border-b border-slate-100">
                 <th className="p-3 px-4">User Name & Email</th>
                 <th className="p-3 px-4">Assigned Role</th>
-                <th className="p-3 px-4">MFA Status</th>
                 <th className="p-3 px-4">Last Active</th>
                 <th className="p-3 px-4">Status</th>
                 <th className="p-3 px-4 text-right">Actions</th>
@@ -290,13 +243,13 @@ export function SettingsTab() {
             <tbody className="divide-y divide-slate-100 text-xs text-slate-900">
               {isLoadingUsers ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={5} className="p-8 text-center text-slate-500">
                     Loading users...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={5} className="p-8 text-center text-slate-500">
                     <div className="flex flex-col items-center gap-2">
                       <Users className="w-8 h-8 text-slate-300" />
                       <p>No users yet</p>
@@ -316,11 +269,6 @@ export function SettingsTab() {
                       {user.role}
                     </span>
                   </td>
-                  <td className="p-3 px-4 font-medium text-slate-700">
-                    <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] rounded-full font-semibold">
-                      {user.mfaStatus}
-                    </span>
-                  </td>
                   <td className="p-3 px-4 text-slate-500 text-xs">{user.lastActive}</td>
                   <td className="p-3 px-4">
                     <span className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-full border ${
@@ -332,7 +280,7 @@ export function SettingsTab() {
                     </span>
                   </td>
                   <td className="p-3 px-4 text-right">
-                    {currentRole === 'ADMIN' ? (
+                    {userRole === 'ADMIN' ? (
                       <button
                         onClick={() => handleToggleUserStatus(user.id)}
                         className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg transition-colors cursor-pointer"
@@ -388,7 +336,7 @@ export function SettingsTab() {
       <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-5">
         <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
           <Sliders className="w-4 h-4 text-indigo-600" />
-          <span>Tenant Gateway & Retry Policies</span>
+          <span>Tenant Gateway & VAT Settings</span>
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -397,7 +345,7 @@ export function SettingsTab() {
             <input
               type="text"
               value={cittaEndpoint}
-              disabled={currentRole === 'OPERATOR'}
+              disabled={userRole === 'OPERATOR'}
               onChange={(e) => setCittaEndpoint(e.target.value)}
               className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 transition-all"
             />
@@ -416,20 +364,6 @@ export function SettingsTab() {
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">BullMQ Exponential Backoff Retries</label>
-            <select
-              value={retryMax}
-              disabled={currentRole === 'OPERATOR'}
-              onChange={(e) => setRetryMax(Number(e.target.value))}
-              className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-50 cursor-pointer transition-all"
-            >
-              <option value={3}>3 Retries (5s, 30s, 2m)</option>
-              <option value={5}>5 Retries (5s, 30s, 2m, 10m, 30m) - Recommended</option>
-              <option value={10}>10 Retries (High Tolerance)</option>
-            </select>
-          </div>
-
-          <div>
             <label className="block font-medium text-slate-700 mb-1">Default VAT Rate (%)</label>
             <input
               type="number"
@@ -437,7 +371,7 @@ export function SettingsTab() {
               max={100}
               step={0.1}
               value={defaultVatRate}
-              disabled={currentRole === 'OPERATOR'}
+              disabled={userRole === 'OPERATOR'}
               onChange={(e) => setDefaultVatRate(Number(e.target.value))}
               className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 transition-all"
             />
@@ -445,30 +379,17 @@ export function SettingsTab() {
               Applied to invoice line items and new catalog items when no item-specific rate is set. Nigeria's NRS standard rate is 7.5%.
             </span>
           </div>
-
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">Timestamp Serialization Format</label>
-            <select
-              value={timeZone}
-              disabled={currentRole === 'OPERATOR'}
-              onChange={(e) => setTimeZone(e.target.value)}
-              className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-50 cursor-pointer transition-all"
-            >
-              <option value="UTC (ISO-8601)">UTC ISO-8601 (YYYY-MM-DDTHH:mm:ssZ) - Required by NRS</option>
-              <option value="Local EAT (UTC+3)">Local EAT (UTC+3)</option>
-            </select>
-          </div>
         </div>
 
         <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
           {vatError && <span className="text-xs text-rose-600 font-medium">{vatError}</span>}
           <button
             onClick={handleSaveSettings}
-            disabled={currentRole === 'OPERATOR' || isSavingVat}
+            disabled={userRole === 'OPERATOR' || isSavingVat}
             className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm cursor-pointer flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Save className="w-4 h-4 text-white" />
-            <span>{isSavingVat ? 'Saving...' : isSaved ? 'Settings Saved!' : 'Save Security & Retry Policy'}</span>
+            <span>{isSavingVat ? 'Saving...' : isSaved ? 'Settings Saved!' : 'Save Gateway & VAT Settings'}</span>
           </button>
         </div>
       </div>
@@ -516,11 +437,11 @@ export function SettingsTab() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Temporary Password</label>
+                <label className="block font-medium text-slate-700 mb-1">Password</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. SecurePass123!"
+                  placeholder="Enter a strong password"
                   value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)}
                   className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
@@ -540,8 +461,8 @@ export function SettingsTab() {
               </div>
 
               <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200/80 text-xs text-amber-900 space-y-1">
-                <strong>Security Policy Note:</strong>
-                <p className="text-amber-800">An automated invitation link with enforced 2FA setup will be dispatched to the provided email.</p>
+                <strong>Note:</strong>
+                <p className="text-amber-800">This password is active immediately — there's no invite email yet, so share it with the new user directly.</p>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
