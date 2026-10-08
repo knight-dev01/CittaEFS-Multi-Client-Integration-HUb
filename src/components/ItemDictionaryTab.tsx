@@ -236,7 +236,7 @@ export function ItemDictionaryTab() {
             icon={Layers}
             title="Item Registrations"
             subtitle="Non-blocking: invoices still send with full item details inline while items await registration."
-            searchPlaceholder="Search item code or name..."
+            searchHint="Search item code or name..."
             emptyMessage="No items seen yet. They appear here once an invoice references them."
             howItWorks={[
               'A new item appears here as Pending the first time any invoice references it.',

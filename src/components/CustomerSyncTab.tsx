@@ -14,7 +14,7 @@ export function CustomerSyncTab() {
       icon={Users}
       title="Customer Registrations"
       subtitle="CittaEFS owns customer records. This is a queue to clear, not a directory to edit."
-      searchPlaceholder="Search customer name, code, or TIN..."
+      searchHint="Search customer name, code, or TIN..."
       emptyMessage="No customers seen yet. They appear here once an invoice references them."
       howItWorks={[
         'A new customer appears here as Pending the first time a B2B/B2G invoice references them.',

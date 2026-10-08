@@ -15,7 +15,7 @@ interface Props {
   icon: LucideIcon;
   title: string;
   subtitle: string;
-  searchPlaceholder: string;
+  searchHint: string;
   emptyMessage: string;
   howItWorks: [string, string, string];
   detailLine: (m: any) => string;
@@ -28,7 +28,7 @@ interface Props {
 // Both entity types drive off the same generic EntityMapping model/API
 // (see src/routes/entityMappings.ts), so this one component serves both
 // CustomerSyncTab and ItemDictionaryTab's registration section.
-export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitle, searchPlaceholder, emptyMessage, howItWorks, detailLine }: Props) {
+export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitle, searchHint, emptyMessage, howItWorks, detailLine }: Props) {
   const { entityMappings, activeTenant, exportEntityRegistrations, confirmEntityRegistration } = useHub() as any;
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -131,7 +131,7 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder={searchPlaceholder}
+            placeholder={searchHint}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-900"
