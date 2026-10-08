@@ -399,12 +399,33 @@ class InvoiceQueueManager {
         take: 100,
         orderBy: { createdAt: 'asc' },
       });
+      // Maps Invoice.sourceErp (qbo/odoo) to TenantErp.platformType so a
+      // per-connection autoEnqueue preference can be looked up below.
+      const SOURCE_ERP_TO_PLATFORM_TYPE: Record<string, string> = {
+        qbo: 'QuickBooks Online',
+        odoo: 'Odoo ERP',
+      };
       let recovered = 0;
       for (const inv of orphans) {
         const alreadyQueued = this.queue.some(j => (j.data as any).dbInvoiceId === inv.id);
         if (alreadyQueued) continue;
         // Skip very recent invoices (<5s) to avoid double-enqueue on normal flow (reduced from 30s)
         if (Date.now() - new Date(inv.createdAt).getTime() < 5000) continue;
+        // Don't auto-recover invoices deliberately parked in the preview inbox
+        // (TenantErp.autoEnqueueQbo === false) — those are indistinguishable
+        // from a genuine orphan by status alone, but recovering them would
+        // silently bypass the operator-approval gate qboService/odooService
+        // document. Only an ERP connection with autoEnqueue ON (or an invoice
+        // with no tracked connection at all, e.g. direct-API ingestion) is a
+        // genuine orphan worth recovering.
+        const platformType = SOURCE_ERP_TO_PLATFORM_TYPE[(inv as any).sourceErp || ''];
+        if (platformType) {
+          const erpRow = await prisma.tenantErp.findFirst({
+            where: { tenantId: inv.tenantId, platformType },
+            select: { autoEnqueueQbo: true },
+          });
+          if (erpRow && erpRow.autoEnqueueQbo === false) continue;
+        }
         const payload: any = {
           tenantId: inv.tenantId,
           clientInvoiceNumber: inv.clientInvoiceId,

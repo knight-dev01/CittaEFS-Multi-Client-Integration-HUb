@@ -66,10 +66,11 @@ router.get("/api/invoices/retry-status/:id", async (req:any, res)=>{
   } catch(e:any){ res.status(500).json({success:false, error:e.message});}
 });
 
-router.get("/api/invoices/:id", async (req, res) => {
+router.get("/api/invoices/:id", async (req: any, res) => {
   try {
     const inv = await prisma.invoice.findUnique({ where: { id: req.params.id }, include: { lineItems: true } });
     if (!inv) return res.status(404).json({ success: false, error: "Invoice not found" });
+    if (!canAccessTenant(req, inv.tenantId)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
     res.json(formatInvoice(inv));
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -671,8 +672,10 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
   }
 });
 
-router.post("/api/invoices/cancel", async (req, res) => {
+router.post("/api/invoices/cancel", async (req: any, res) => {
   try {
+    const role = req.user?.role;
+    if (req.user && !["ADMIN", "OPERATOR", "INTEGRATION_MANAGER"].includes(role)) return res.status(403).json({ success: false, error: "Forbidden" });
     const { invoiceId, reason } = req.body;
     const inv = await prisma.invoice.findUnique({
       where: { id: invoiceId },
@@ -682,6 +685,7 @@ router.post("/api/invoices/cancel", async (req, res) => {
       return res
         .status(404)
         .json({ success: false, error: "Invoice not found" });
+    if (!canAccessTenant(req, inv.tenantId)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
 
     const rawUpdated = await prisma.invoice.update({
       where: { id: invoiceId },
@@ -693,12 +697,12 @@ router.post("/api/invoices/cancel", async (req, res) => {
 
     await safeAuditLogCreate(prisma, {
       tenantId: inv.tenantId,
-      action: "CITTA_SUBMITTED",
+      action: "INVOICE_CANCELLED",
       entityType: "INVOICE",
       entityRef: inv.clientInvoiceId,
       details: `Revocation request dispatched to NRS Portal. Reason: ${reason || "Client Cancellation"}. IRN ${inv.irn} marked CANCELLED.`,
       sha256PayloadHash: generateSha256(`CANCEL_${inv.irn}`),
-      performedBy: "Client ERP Revocation Endpoint",
+      performedBy: req.user?.email || "Client ERP Revocation Endpoint",
     });
 
     res.json({ success: true, invoice: updated });

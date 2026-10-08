@@ -42,7 +42,12 @@ function getGlobalApiKey(): string | null {
   if (!raw) return null;
   const _ph = ["place", "holder"].join("");
   const _sentinel = ["citta", "_live_", "place", "holder"].join("");
-  if (raw.includes(_ph) || raw === _sentinel) return null;
+  // .env.example's actual uncustomized value ("your-cittaefs-api-key-here")
+  // doesn't match the sentinel above — catch that template shape too so
+  // copying the example file without editing it fails locally and clearly, not as a
+  // confusing remote 401 against the real gateway.
+  const looksLikeExampleTemplate = /^your[-_].*(-|_)here$/i.test(raw);
+  if (raw.includes(_ph) || raw === _sentinel || looksLikeExampleTemplate) return null;
   return raw;
 }
 
@@ -318,19 +323,14 @@ export class CittaEfsClient {
       csid = resData.invoices[0].csid || resData.invoices[0].Csid || "";
     }
 
-    // Default identifier assignment if not explicitly provided in the response JSON to preserve downstream pipeline
+    // successCount > 0 but no irn found in either known response shape — the
+    // gateway's response schema has drifted from what this client expects.
+    // Never fabricate a tax-compliance stamp: a made-up IRN/CSID would be
+    // written back to the client's ERP as if NRS had genuinely issued it.
     if (!irn) {
-      const irnSuffix = Math.floor(100000 + Math.random() * 900000);
-      irn =
-        payload.invoiceType === "CREDIT_NOTE"
-          ? `IRN-CN-NRS-2026-${irnSuffix}`
-          : `IRN-NRS-2026-${irnSuffix}`;
-    }
-    if (!csid) {
-      csid = `CSID-SHA256-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-    }
-    if (!qrCodeUrl) {
-      qrCodeUrl = `https://nrs.portal.gov/verify?irn=${irn}&csid=${csid}`;
+      throw new Error(
+        `CittaEFS Gateway reported success but returned no recognizable IRN in its response — refusing to fabricate one. Raw response: ${JSON.stringify(resData).slice(0, 500)}`,
+      );
     }
 
     return {
@@ -578,29 +578,27 @@ export class CittaEfsClient {
         return { synced: true, message: `IRN ${irn} written back to CittaEFS (writebackTarget=CITTAEFS).` };
       }
     }
-    // Hub writeback (and QBO ERP writeback) when target is HUB or BOTH
+    // Hub writeback (ERP ledger writeback) when target is HUB or BOTH — route
+    // by which ERP THIS invoice actually came from (Invoice.sourceErp), not
+    // "does this tenant have any integration of that type." A multi-ERP
+    // tenant can have both QBO and Odoo connected; branching on integration
+    // existence alone meant every Odoo-sourced invoice first attempted a
+    // guaranteed-to-fail QBO lookup before falling through to the correct path.
     try {
-      const integration = await prisma.integration.findFirst({
+      const invoice = await prisma.invoice.findFirst({
         where: {
           tenantId,
-          sourceSystem: "QUICKBOOKS_ONLINE",
+          OR: [
+            { clientInvoiceId: clientInvoiceNumber },
+            { id: clientInvoiceNumber },
+          ],
         },
       });
+      const targetInvoiceId = invoice
+        ? invoice.clientInvoiceId
+        : clientInvoiceNumber;
 
-      if (integration) {
-        const invoice = await prisma.invoice.findFirst({
-          where: {
-            tenantId,
-            OR: [
-              { clientInvoiceId: clientInvoiceNumber },
-              { id: clientInvoiceNumber },
-            ],
-          },
-        });
-        const targetInvoiceId = invoice
-          ? invoice.clientInvoiceId
-          : clientInvoiceNumber;
-
+      if (invoice?.sourceErp === "qbo") {
         const { writebackToQbo } = await import("./qboService");
         await writebackToQbo(tenantId, targetInvoiceId, irn, qrCodeUrl);
         return {
@@ -608,43 +606,7 @@ export class CittaEfsClient {
           message: `QuickBooks Online ledger updated for invoice ${targetInvoiceId} with IRN: ${irn} (writebackTarget=${writebackTarget})`,
         };
       }
-    } catch (err: any) {
-      console.error(
-        `[Writeback Error] Failed to execute QBO writeback for invoice ${clientInvoiceNumber}:`,
-        err,
-      );
-      // Set FAILED so hub can surface writeback failure and throw back to ERP via error queue; ERP can open hub to retry
-      try {
-        await prisma.invoice.updateMany({
-          where: { tenantId, clientInvoiceId: clientInvoiceNumber },
-          data: { ledgerWritebackStatus: "FAILED" },
-        });
-      } catch {}
-    }
-
-    // Odoo ERP ledger writeback (chatter message_post) when target is HUB or BOTH
-    try {
-      const odooIntegration = await prisma.integration.findFirst({
-        where: {
-          tenantId,
-          sourceSystem: "ODOO",
-        },
-      });
-
-      if (odooIntegration) {
-        const invoice = await prisma.invoice.findFirst({
-          where: {
-            tenantId,
-            OR: [
-              { clientInvoiceId: clientInvoiceNumber },
-              { id: clientInvoiceNumber },
-            ],
-          },
-        });
-        const targetInvoiceId = invoice
-          ? invoice.clientInvoiceId
-          : clientInvoiceNumber;
-
+      if (invoice?.sourceErp === "odoo") {
         const { writebackToOdoo } = await import("./odooService");
         await writebackToOdoo(tenantId, targetInvoiceId, irn, qrCodeUrl);
         return {
@@ -654,9 +616,10 @@ export class CittaEfsClient {
       }
     } catch (err: any) {
       console.error(
-        `[Writeback Error] Failed to execute Odoo writeback for invoice ${clientInvoiceNumber}:`,
+        `[Writeback Error] Failed to execute ERP writeback for invoice ${clientInvoiceNumber}:`,
         err,
       );
+      // Set FAILED so hub can surface writeback failure and throw back to ERP via error queue; ERP can open hub to retry
       try {
         await prisma.invoice.updateMany({
           where: { tenantId, clientInvoiceId: clientInvoiceNumber },
