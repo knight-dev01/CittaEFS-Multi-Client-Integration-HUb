@@ -7,8 +7,6 @@ import {
   Search, 
   Plus, 
   Wand2, 
-  CheckCircle2, 
-  AlertCircle, 
   Tag, 
   Edit3, 
   Layers,
@@ -17,6 +15,7 @@ import {
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
 import { EntityRegistrationQueue } from './EntityRegistrationQueue';
+import { StatusBadge, statusTone } from './ui/StatusBadge';
 
 export function ItemDictionaryTab() {
   const { itemMappings, activeTenant, addItemMapping, autoMapItems, deleteItem } = useHub() as any;
@@ -87,10 +86,10 @@ export function ItemDictionaryTab() {
     <div className="space-y-6 font-sans text-xs">
       
       {/* Top Banner & Actions */}
-      <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         
         <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-indigo-500/20 rounded-lg text-indigo-400 border border-indigo-500/30">
+          <div className="p-2.5 bg-emerald-700/20 rounded-lg text-emerald-400 border border-emerald-600/30">
             <BookOpen className="w-5 h-5" />
           </div>
           <div>
@@ -98,7 +97,7 @@ export function ItemDictionaryTab() {
               {activeTenant.name} Code Dictionary
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Maps internal client SKUs to official NRS Regulatory Codes (<strong className="text-slate-200 font-medium">hsOrServiceCode</strong>) for tax-code inference — a Hub-owned lookup, distinct from CittaEFS item registration
+              Maps internal client SKUs to official NRS Regulatory Codes (<strong className="text-slate-200 font-medium">hsOrServiceCode</strong>) for tax-code inference — a Gateway-owned lookup, distinct from CittaEFS item registration
             </p>
           </div>
         </div>
@@ -118,9 +117,9 @@ export function ItemDictionaryTab() {
 
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
           >
-            <Plus className="w-4 h-4 text-indigo-200" />
+            <Plus className="w-4 h-4 text-emerald-200" />
             <span>Add Item Mapping</span>
           </button>
 
@@ -129,7 +128,7 @@ export function ItemDictionaryTab() {
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-lg p-4 border border-slate-200/80 shadow-sm">
         
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -138,7 +137,7 @@ export function ItemDictionaryTab() {
             placeholder="Search Client SKU, Description, or HS Code..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-900"
+            className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all text-slate-900"
           />
         </div>
 
@@ -156,7 +155,7 @@ export function ItemDictionaryTab() {
       </div>
 
       {/* Item Table — simplified: core cols, verbose hidden in row dropdown */}
-      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
+      <div className="bg-white rounded-lg border border-slate-200/80 overflow-hidden shadow-sm">
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
           <span className="text-[11px] text-slate-500">Simplified — core fields visible, details in dropdown per SKU</span>
           <span className="text-[11px] font-semibold text-slate-600">{filteredMappings.length} items</span>
@@ -165,10 +164,10 @@ export function ItemDictionaryTab() {
           {filteredMappings.length===0 ? <div className="p-6 text-center text-slate-400 text-xs">No items</div> : filteredMappings.map((m:any)=>{
             const isOpen = expandedId===m.id;
             return (
-              <div key={`mi-${m.id}`} className="rounded-xl border border-slate-200 bg-white p-4 space-y-2 shadow-sm">
-                <div className="flex items-start justify-between gap-2"><div><div className="font-mono font-bold text-slate-900 text-sm">{m.clientSku}</div><div className="text-sm font-semibold text-slate-800 truncate max-w-[180px]">{m.name}</div></div><span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${m.status==='MAPPED'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-amber-50 text-amber-700 border-amber-200'}`}>{m.status}</span></div>
-                <div className="font-mono text-xs"><span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${m.status==='UNMAPPED'?'bg-rose-50 text-rose-700 border-rose-200':'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>{m.hsOrServiceCode}</span></div>
-                <div className="flex gap-2 pt-1"><button onClick={()=>setExpandedId(isOpen?null:m.id)} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold min-h-[44px] flex items-center justify-center gap-1">Details <ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button><button onClick={async()=>{ if(!confirm(`Delete ${m.clientSku}?`)) return; try{ await deleteItem(m.id);}catch(e:any){alert(e.message);}}} className="py-2.5 px-3 bg-white border border-slate-200 rounded-xl text-rose-600 min-h-[44px]"><Trash2 className="w-4 h-4" /></button></div>
+              <div key={`mi-${m.id}`} className="rounded-lg border border-slate-200 bg-white p-4 space-y-2 shadow-sm">
+                <div className="flex items-start justify-between gap-2"><div><div className="font-mono font-bold text-slate-900 text-sm">{m.clientSku}</div><div className="text-sm font-semibold text-slate-800 truncate max-w-[180px]">{m.name}</div></div><StatusBadge tone={statusTone(m.status)}>{m.status}</StatusBadge></div>
+                <div className="font-mono text-xs"><StatusBadge tone={m.status==='UNMAPPED' ? 'pending' : 'ok'}>{m.hsOrServiceCode}</StatusBadge></div>
+                <div className="flex gap-2 pt-1"><button onClick={()=>setExpandedId(isOpen?null:m.id)} className="flex-1 py-2.5 bg-slate-900 text-white rounded-lg text-xs font-semibold min-h-[44px] flex items-center justify-center gap-1">Details <ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button><button onClick={async()=>{ if(!confirm(`Delete ${m.clientSku}?`)) return; try{ await deleteItem(m.id);}catch(e:any){alert(e.message);}}} className="py-2.5 px-3 bg-white border border-slate-200 rounded-lg text-rose-600 min-h-[44px]"><Trash2 className="w-4 h-4" /></button></div>
                 {isOpen && <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px]"><div className="flex justify-between"><span className="text-slate-500">Desc</span><span className="truncate max-w-[150px]">{m.description}</span></div><div className="flex justify-between"><span className="text-slate-500">Unit/Cat</span><span>{m.unitCode} • {m.category}</span></div><div className="flex justify-between"><span className="text-slate-500">VAT/Updated</span><span>{m.defaultVatRate}% • {m.updatedAt}</span></div></div>}
               </div>
             );
@@ -198,13 +197,13 @@ export function ItemDictionaryTab() {
                   const isOpen = expandedId===m.id;
                   return (
                     <>
-                  <tr key={m.id} className={`hover:bg-slate-50/80 transition-colors ${isOpen?'bg-indigo-50/30':''}`}>
-                    <td className="py-3 px-3"><button onClick={()=>setExpandedId(isOpen?null:m.id)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer"><ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button></td>
+                  <tr key={m.id} className={`hover:bg-slate-50/80 transition-colors ${isOpen?'bg-emerald-50/30':''}`}>
+                    <td className="py-3 px-3"><button onClick={()=>setExpandedId(isOpen?null:m.id)} className="p-1 text-slate-400 hover:text-emerald-700 cursor-pointer"><ChevronDown className={`w-4 h-4 transition ${isOpen?'rotate-180':''}`} /></button></td>
                     <td className="py-3 px-4 font-mono font-semibold text-slate-900">{m.clientSku}</td>
                     <td className="py-3 px-4 max-w-xs truncate font-medium text-slate-800" title={m.name}>{m.name}</td>
-                    <td className="py-3 px-4 font-mono"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${m.status === 'UNMAPPED' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{m.hsOrServiceCode}</span></td>
-                    <td className="py-3 px-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${m.status === 'MAPPED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{m.status === 'MAPPED' ? <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" /> : <AlertCircle className="w-3 h-3 mr-1 text-amber-600" />}{m.status}</span></td>
-                    <td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-1"><button onClick={()=>setExpandedId(isOpen?null:m.id)} className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-violet-600 border border-slate-200 rounded-lg bg-white cursor-pointer">Details</button><button onClick={async()=>{ if(!confirm(`Delete item ${m.clientSku}?`)) return; try{ await deleteItem(m.id); }catch(e:any){ alert(e.message); } }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
+                    <td className="py-3 px-4 font-mono"><StatusBadge tone={m.status === 'UNMAPPED' ? 'pending' : 'ok'}>{m.hsOrServiceCode}</StatusBadge></td>
+                    <td className="py-3 px-4"><StatusBadge tone={statusTone(m.status)}>{m.status}</StatusBadge></td>
+                    <td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-1"><button onClick={()=>setExpandedId(isOpen?null:m.id)} className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg bg-white cursor-pointer">Details</button><button onClick={async()=>{ if(!confirm(`Delete item ${m.clientSku}?`)) return; try{ await deleteItem(m.id); }catch(e:any){ alert(e.message); } }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
                   </tr>
                   {isOpen && (
                     <tr key={`${m.id}-details`} className="bg-slate-50/60"><td colSpan={6} className="px-6 py-3"><div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]"><div><span className="font-semibold text-slate-500">Description</span><div className="text-slate-600 truncate" title={m.description}>{m.description}</div></div><div><span className="font-semibold text-slate-500">Unit / Category</span><div className="font-mono text-slate-700">{m.unitCode} • {m.category}</div></div><div><span className="font-semibold text-slate-500">Code Type / VAT</span><div className="text-slate-700">{m.codeType} • {m.defaultVatRate}%</div></div><div><span className="font-semibold text-slate-500">Last Updated</span><div className="font-mono text-slate-500">{m.updatedAt}</div></div></div></td></tr>
@@ -219,14 +218,14 @@ export function ItemDictionaryTab() {
       </div>
 
       {/* CittaEFS Item Registrations — distinct from the SKU dictionary above:
-          that's a Hub-owned HS/Service-code lookup; this tracks which items
+          that's a Gateway-owned HS/Service-code lookup; this tracks which items
           CittaEFS itself has registered. Non-blocking (see invoiceWorker.ts) —
           CittaEFS's spec contradicts itself on whether items need pre-registration,
           so this is a running list to clear at your own pace, not a gate on sending. */}
       <details className="group">
         <summary className="list-none cursor-pointer">
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
-            <span className="font-bold text-slate-900 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-600" /> CittaEFS Item Registrations</span>
+          <div className="bg-white rounded-lg border border-slate-200/80 shadow-sm px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+            <span className="font-bold text-slate-900 flex items-center gap-2"><Layers className="w-4 h-4 text-emerald-700" /> CittaEFS Item Registrations</span>
             <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition" />
           </div>
         </summary>
@@ -240,7 +239,7 @@ export function ItemDictionaryTab() {
             emptyMessage="No items seen yet. They appear here once an invoice references them."
             howItWorks={[
               'A new item appears here as Pending the first time any invoice references it.',
-              "Download the EFS registration file (pre-filled with everything the Hub knows) and upload it through CittaEFS's own portal — there is no registration API today.",
+              "Download the EFS registration file (pre-filled with everything the Gateway knows) and upload it through CittaEFS's own portal — there is no registration API today.",
               'Enter the CittaEFS reference code EFS returns, using Confirm Registered below. This never blocks invoices — they already sent with full item details inline.',
             ]}
             detailLine={(m) => `${m.sourceErpId} • via ${m.sourceErp}`}
@@ -251,11 +250,11 @@ export function ItemDictionaryTab() {
       {/* ADD ITEM MAPPING MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 text-slate-900 space-y-5">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-6 text-slate-900 space-y-5">
             
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Tag className="w-4 h-4 text-indigo-600" />
+                <Tag className="w-4 h-4 text-emerald-700" />
                 Add Client SKU Regulatory Mapping
               </h3>
               <button
@@ -276,7 +275,7 @@ export function ItemDictionaryTab() {
                   placeholder="e.g. SKU-LAP-DELL15"
                   value={sku}
                   onChange={(e) => setSku(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all"
                 />
               </div>
 
@@ -290,7 +289,7 @@ export function ItemDictionaryTab() {
                   value={itemName}
                   onChange={(e) => setItemName(e.target.value)}
                   maxLength={100}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all"
                 />
                 <span className="text-[11px] text-slate-500 font-medium block mt-1">
                   Short commercial name/title (max 100 characters)
@@ -307,7 +306,7 @@ export function ItemDictionaryTab() {
                   value={desc}
                   onChange={(e) => setDesc(e.target.value)}
                   maxLength={250}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all"
                 />
               </div>
 
@@ -320,7 +319,7 @@ export function ItemDictionaryTab() {
                   placeholder="e.g. EA, KGM, HUR, BOX"
                   value={unitCode}
                   onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all uppercase"
                 />
                 <span className="text-[11px] text-slate-500 font-medium block mt-1">
                   Standard unit of measure code, e.g. EA (Each), KGM (Kilograms), HUR (Hours)
@@ -350,7 +349,7 @@ export function ItemDictionaryTab() {
                   type="number"
                   value={vatRate}
                   onChange={(e) => setVatRate(Number(e.target.value))}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all"
                 />
               </div>
             </div>
@@ -364,7 +363,7 @@ export function ItemDictionaryTab() {
               </button>
               <button
                 onClick={handleSaveMapping}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors"
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors"
               >
                 Save Item Mapping
               </button>

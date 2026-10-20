@@ -18,7 +18,7 @@ export function CustomerSyncTab() {
       emptyMessage="No customers seen yet. They appear here once an invoice references them."
       howItWorks={[
         'A new customer appears here as Pending the first time a B2B/B2G invoice references them.',
-        "Download the EFS registration file (pre-filled with everything the Hub knows) and upload it through CittaEFS's own portal — there is no registration API today.",
+        "Download the EFS registration file (pre-filled with everything the Gateway knows) and upload it through CittaEFS's own portal — there is no registration API today.",
         'Enter the CittaEFS reference code EFS returns, using Confirm Registered below. Any invoices held up waiting on this customer resubmit automatically.',
       ]}
       detailLine={(m) => `${m.sourceErpId} • TIN ${m.tin || '—'} • via ${m.sourceErp}`}

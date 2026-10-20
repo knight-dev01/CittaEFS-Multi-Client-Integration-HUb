@@ -14,6 +14,7 @@ import {
   Search,
   X
 } from 'lucide-react';
+import { StatusBadge, statusTone } from './ui/StatusBadge';
 
 /**
  * The raw gateway rejection is a large JSON blob (one entry per invoice line,
@@ -64,9 +65,9 @@ function CodePicker({ value, onChange }: { value: string; onChange: (code: strin
   return (
     <div className="space-y-2">
       {selected && (
-        <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs">
-          <span className="font-mono font-bold text-indigo-900">{selected.code} — {selected.name}</span>
-          <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-semibold">{selected.type === 'HS_CODE' ? 'HS' : 'Service'}</span>
+        <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-xs">
+          <span className="font-mono font-bold text-emerald-900">{selected.code} — {selected.name}</span>
+          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-semibold">{selected.type === 'HS_CODE' ? 'HS' : 'Service'}</span>
         </div>
       )}
       <div className="relative">
@@ -76,7 +77,7 @@ function CodePicker({ value, onChange }: { value: string; onChange: (code: strin
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Type a code or keyword (e.g. 8471 or laptop)…"
-          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all"
         />
       </div>
       {query.trim().length >= 2 && (
@@ -144,9 +145,9 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
     <div className="space-y-6 font-sans text-xs">
       
       {/* Header Summary */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-start space-x-3.5">
-          <div className="p-3 bg-amber-500 rounded-xl text-slate-950 shrink-0 shadow-md shadow-amber-500/20">
+          <div className="p-3 bg-amber-500 rounded-lg text-slate-950 shrink-0 shadow-md shadow-amber-500/20">
             <AlertTriangle className="w-5 h-5 text-slate-950" />
           </div>
           <div>
@@ -178,13 +179,13 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
           }} disabled={isBulkFixing || openErrors.length===0} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-semibold disabled:opacity-50 cursor-pointer flex items-center gap-1">
             <Wrench className={`w-3 h-3 ${isBulkFixing?'animate-spin':''}`} /> {isBulkFixing ? 'Fixing…' : `One-Click Bulk Fix (${openErrors.length})`}
           </button>
-          <button onClick={() => onNavigate ? onNavigate('invoices') : null} title="Validation is fix-only — propagate in Invoices" className="px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-full font-semibold">Go to Invoices →</button>
+          <button onClick={() => onNavigate ? onNavigate('invoices') : null} title="Validation is fix-only — propagate in Invoices" className="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded-full font-semibold">Go to Invoices →</button>
         </div>
       </div>
 
       {/* Simplified — grouped dropdowns to reduce cognitive overload */}
       {tenantErrors.length === 0 ? (
-        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-10 text-center text-slate-800">
+        <div className="bg-white border border-slate-200/80 rounded-lg shadow-sm p-10 text-center text-slate-800">
           <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
           <p className="text-base font-bold text-slate-900">Zero Validation Errors</p>
           <p className="text-xs text-slate-500 mt-1">All transactions comply with CittaEFS & NRS — verbose errors hidden.</p>
@@ -195,22 +196,22 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
             const grouped = openErrors.reduce((acc:any, e:any)=>{ (acc[e.errorCategory]=acc[e.errorCategory]||[]).push(e); return acc; }, {} as Record<string, any[]>);
             const cats = Object.keys(grouped);
             if (cats.length===0) return (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-500">No open errors — {resolvedErrors.length} resolved hidden. <button onClick={()=>setShowResolved(v=>!v)} className="text-violet-600 underline ml-1">{showResolved?'Hide':'Show'} resolved</button></div>
+              <div className="bg-white border border-slate-200 rounded-lg p-6 text-center text-xs text-slate-500">No open errors — {resolvedErrors.length} resolved hidden. <button onClick={()=>setShowResolved(v=>!v)} className="text-slate-900 underline ml-1">{showResolved?'Hide':'Show'} resolved</button></div>
             );
             return (
               <>
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] text-slate-500">Grouped by category — click dropdown to expand verbose details</span>
-                  <button onClick={()=>setShowResolved(v=>!v)} className="text-[11px] font-semibold text-slate-600 hover:text-violet-600 flex items-center gap-1">{showResolved?'Hide':'Show'} resolved ({resolvedErrors.length}) <ChevronDown className={`w-3 h-3 transition ${showResolved?'rotate-180':''}`} /></button>
+                  <button onClick={()=>setShowResolved(v=>!v)} className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1">{showResolved?'Hide':'Show'} resolved ({resolvedErrors.length}) <ChevronDown className={`w-3 h-3 transition ${showResolved?'rotate-180':''}`} /></button>
                 </div>
                 {cats.map(cat=>{
                   const list = grouped[cat];
                   const isOpen = openCategory===cat;
                   return (
-                    <div key={cat} className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+                    <div key={cat} className="bg-white border border-slate-200/80 rounded-lg shadow-sm overflow-hidden">
                       <button onClick={()=>setOpenCategory(isOpen?null:cat)} className={`w-full flex items-center justify-between px-5 py-4 text-left cursor-pointer ${isOpen?'bg-amber-50/50':''} hover:bg-slate-50`}>
                         <div className="flex items-center gap-3">
-                          <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">{cat}</span>
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[10px] font-bold">{cat}</span>
                           <span className="text-xs font-bold text-slate-900">{list.length} error(s)</span>
                           <span className="hidden sm:inline text-[11px] text-slate-500">— {list[0]?.fieldAffected} • {list[0] && summarizeErrorMessage(list[0].errorMessage).summary.slice(0,80)}</span>
                         </div>
@@ -223,11 +224,11 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
                             <tbody className="divide-y divide-slate-100">
                               {list.map((err:any)=>(
                                 <tr key={err.id} className="hover:bg-slate-50/60">
-                                  <td className="py-2.5 px-4"><span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-amber-50 text-amber-700 border-amber-200">{err.status}</span></td>
+                                  <td className="py-2.5 px-4"><StatusBadge tone={statusTone(err.status)}>{err.status}</StatusBadge></td>
                                   <td className="py-2.5 px-4 font-mono font-bold">{err.clientInvoiceNumber}</td>
                                   <td className="py-2.5 px-4 font-mono text-[11px]">{err.fieldAffected}</td>
                                   <td className="py-2.5 px-4 max-w-md text-slate-600 text-[11px] leading-relaxed whitespace-normal break-words" title={err.errorMessage}>{summarizeErrorMessage(err.errorMessage).summary}</td>
-                                  <td className="py-2.5 px-4 text-right"><button onClick={()=>{setSelectedError(err); setSelectedHsCode(''); setShowRawError(false);}} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1"><Wrench className="w-3 h-3" /> Fix</button></td>
+                                  <td className="py-2.5 px-4 text-right"><button onClick={()=>{setSelectedError(err); setSelectedHsCode(''); setShowRawError(false);}} className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1"><Wrench className="w-3 h-3" /> Fix</button></td>
                                 </tr>
                               ))}
                             </tbody>
@@ -238,10 +239,10 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
                   );
                 })}
                 {showResolved && resolvedErrors.length>0 && (
-                  <div className="bg-white border border-emerald-200 rounded-2xl overflow-hidden">
+                  <div className="bg-white border border-emerald-200 rounded-lg overflow-hidden">
                     <div className="px-5 py-3 bg-emerald-50 border-b border-emerald-100 text-xs font-bold text-emerald-800 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Resolved ({resolvedErrors.length}) — hidden by default</div>
                     <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
-                      {resolvedErrors.slice(0,20).map((e:any)=>(<div key={e.id} className="px-4 py-2 flex items-center justify-between text-xs"><span className="font-mono font-semibold">{e.clientInvoiceNumber}</span><span className="text-slate-500">{e.errorCategory}</span><span className="text-emerald-600 font-semibold">RESOLVED</span></div>))}
+                      {resolvedErrors.slice(0,20).map((e:any)=>(<div key={e.id} className="px-4 py-2 flex items-center justify-between text-xs"><span className="font-mono font-semibold">{e.clientInvoiceNumber}</span><span className="text-slate-500">{e.errorCategory}</span><span className="text-emerald-700 font-semibold">RESOLVED</span></div>))}
                     </div>
                   </div>
                 )}
@@ -254,11 +255,11 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
       {/* 1-CLICK RESOLUTION MODAL */}
       {selectedError && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 text-slate-900 space-y-4">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-6 text-slate-900 space-y-4">
             
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-indigo-600" />
+                <Wrench className="w-5 h-5 text-emerald-700" />
                 1-Click Resolution for {selectedError.clientInvoiceNumber}
               </h3>
               <button
@@ -269,7 +270,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
               </button>
             </div>
 
-            <div className="bg-amber-50 rounded-xl border border-amber-200/80 p-3.5 text-xs text-amber-900 space-y-1.5">
+            <div className="bg-amber-50 rounded-lg border border-amber-200/80 p-3.5 text-xs text-amber-900 space-y-1.5">
               <p><strong>Affected Field:</strong> <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-300/80 font-bold text-amber-950">{selectedError.fieldAffected}</code></p>
               {(() => {
                 const { summary, raw } = summarizeErrorMessage(selectedError.errorMessage);
@@ -317,7 +318,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
                   value={correctedTin}
                   onChange={(e) => setCorrectedTin(e.target.value)}
                   placeholder="e.g. P051239841A"
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all uppercase"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all uppercase"
                 />
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Must follow standard NRS Taxpayer TIN format (Starts with P, followed by 9 digits and ending with letter).
@@ -335,7 +336,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
               <button
                 onClick={handleResolve}
                 disabled={isResolving || (selectedError.errorCategory === 'MISSING_HS_CODE' && !selectedHsCode)}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-1.5 transition-colors disabled:opacity-50 font-sans"
+                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-1.5 transition-colors disabled:opacity-50 font-sans"
               >
                 <span>{isResolving ? 'Fixing…' : 'Fix'}</span>
                 <ArrowRight className="w-4 h-4" />

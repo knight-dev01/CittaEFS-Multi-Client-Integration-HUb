@@ -66,7 +66,7 @@ export function QboStagingInbox({ tenantId }: { tenantId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold text-sm flex items-center gap-2"><Eye className="w-4 h-4 text-indigo-600"/> QBO Staging Inbox — Preview before CittaEFS</h3>
+        <h3 className="font-bold text-sm flex items-center gap-2"><Eye className="w-4 h-4 text-emerald-700"/> QBO Staging Inbox — Preview before CittaEFS</h3>
         <div className="flex items-center gap-2">
           <button onClick={toggleAuto} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${autoEnqueue?'bg-emerald-600 text-white border-emerald-700':'bg-white text-slate-700 border-slate-200'}`}>{autoEnqueue?'Auto-enqueue ON':'Auto-enqueue OFF (preview required)'}</button>
           <button onClick={load} disabled={loading} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs flex items-center gap-1 cursor-pointer"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`}/> Refresh</button>
@@ -74,14 +74,14 @@ export function QboStagingInbox({ tenantId }: { tenantId: string }) {
       </div>
       {msg && <div className="p-2 bg-slate-50 border border-slate-200 rounded text-xs">{msg}</div>}
       {invoices.length===0 ? (
-        <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-xl">No QBO invoices awaiting approval. Sync from QuickBooks first, or enable Auto-Enqueue to skip preview.</div>
+        <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-lg">No QBO invoices awaiting approval. Sync from QuickBooks first, or enable Auto-Enqueue to skip preview.</div>
       ) : (
         <>
           <div className="flex items-center gap-2">
-            <button onClick={approve} disabled={approving} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50"><Play className="w-3.5 h-3.5"/> {selected.size ? `Approve Selected (${selected.size})` : `Approve All (${invoices.length})`}</button>
+            <button onClick={approve} disabled={approving} className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50"><Play className="w-3.5 h-3.5"/> {selected.size ? `Approve Selected (${selected.size})` : `Approve All (${invoices.length})`}</button>
             <span className="text-xs text-slate-500">{invoices.length} pending • DocNumber is source of truth • qboId preserved for writeback</span>
           </div>
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <div className="overflow-x-auto border border-slate-200 rounded-lg">
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-[10px] uppercase font-semibold text-slate-500"><tr><th className="p-2"><input type="checkbox" checked={selected.size===invoices.length} onChange={e=> setSelected(e.target.checked? new Set(invoices.map((i:any)=>i.id)): new Set())}/></th><th className="p-2 text-left">Invoice # (DocNumber)</th><th className="p-2">qboId</th><th className="p-2">Date</th><th className="p-2 text-left">Customer</th><th className="p-2">TIN</th><th className="p-2">Lines</th><th className="p-2">Total</th><th className="p-2">Validation</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
@@ -97,7 +97,7 @@ export function QboStagingInbox({ tenantId }: { tenantId: string }) {
                       <td className="p-2 font-mono">{inv.customerTin||'N/A'}</td>
                       <td className="p-2 text-center">{inv.lineItems?.length||0}</td>
                       <td className="p-2 text-right">NGN {Number(inv.totalAmount||inv.grandTotal||0).toLocaleString()}</td>
-                      <td className="p-2">{errs.length? <span className="text-amber-700 flex items-center gap-1"><AlertCircle className="w-3 h-3"/>{errs[0]}</span> : <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/>OK</span>}</td>
+                      <td className="p-2">{errs.length? <span className="text-amber-700 flex items-center gap-1"><AlertCircle className="w-3 h-3"/>{errs[0]}</span> : <span className="text-emerald-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/>OK</span>}</td>
                     </tr>
                   )
                 })}

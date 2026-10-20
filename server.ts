@@ -126,8 +126,10 @@ async function startServer() {
   app.use(odooRouter);
   app.use(webhooksRouter);
   app.use(entityMappingsRouter);
-  app.use(systemRouter);
+  // Gateway BEFORE systemRouter — system's JSON 404 catch-all (router.use "/api/*")
+  // would otherwise shadow every /api/v1/* route the gateway registers.
   app.use(gatewayRouter);
+  app.use(systemRouter);
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server:{ middlewareMode:true}, appType:"custom"});

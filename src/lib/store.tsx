@@ -9,7 +9,6 @@ import {
   ItemCodeMapping,
   EntityMapping,
   ValidationErrorItem,
-  AuditLog,
   SystemMetrics,
   TenantId,
   UserSession
@@ -28,7 +27,6 @@ interface HubContextType {
   itemMappings: ItemCodeMapping[];
   entityMappings: EntityMapping[];
   validationErrors: ValidationErrorItem[];
-  auditLogs: AuditLog[];
   metrics: SystemMetrics;
   isBgRefreshing: boolean;
   isInitialized: boolean;
@@ -38,7 +36,6 @@ interface HubContextType {
   transmitInvoice: (payload: any, tenantIdOverride?: TenantId) => Promise<any>;
   cancelInvoice: (invoiceId: string, reason: string) => Promise<any>;
   resolveValidationError: (errorId: string, hsOrServiceCode?: string, correctedTin?: string) => Promise<any>;
-  runReconciliationCron: () => Promise<any>;
   autoMapItems: () => Promise<any>;
   addCustomer: (cust: Partial<CustomerProfile>, tenantIdOverride?: TenantId) => Promise<any>;
   addItemMapping: (mapping: Partial<ItemCodeMapping>, tenantIdOverride?: TenantId) => Promise<any>;
@@ -158,7 +155,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [itemMappings, setItemMappings] = useState<ItemCodeMapping[]>([]);
   const [entityMappings, setEntityMappings] = useState<EntityMapping[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationErrorItem[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [metrics, setMetrics] = useState<SystemMetrics>({ totalInvoicesProcessed: 0, nrsStampSuccessRate: 0, averageLatencyMs: 0, activeTenantsCount: 0, pendingValidationCount: 0, reconciliationCronStatus: 'IDLE' as any, cittaGatewayStatus: 'UNKNOWN' as any });
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -197,14 +193,13 @@ export function HubProvider({ children }: { children: ReactNode }) {
       try {
         const fetchOrNull = (url: string) => safeFetchJson(url).catch(() => null);
 
-        const [tenRes, invRes, custRes, itemRes, entityMapRes, errRes, auditRes, metRes] = await Promise.all([
+        const [tenRes, invRes, custRes, itemRes, entityMapRes, errRes, metRes] = await Promise.all([
           fetchOrNull('/api/tenants'),
           fetchOrNull('/api/invoices'),
           fetchOrNull('/api/customers'),
           fetchOrNull('/api/items/mappings'),
           fetchOrNull('/api/entity-mappings'),
           fetchOrNull('/api/validation-errors'),
-          fetchOrNull('/api/audit-logs'),
           fetchOrNull('/api/metrics')
         ]);
 
@@ -241,7 +236,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
         const itemArr = unwrap(itemRes); if (itemArr) setItemMappings(prev => (isSameIds(prev as any, itemArr as any) ? prev : itemArr));
         const entityMapArr = unwrap(entityMapRes); if (entityMapArr) setEntityMappings(prev => (isSameIds(prev as any, entityMapArr as any) ? prev : entityMapArr));
         const errArr = unwrap(errRes); if (errArr) setValidationErrors(prev => (isSameIds(prev as any, errArr as any) ? prev : errArr));
-        const auditArr = unwrap(auditRes); if (auditArr) setAuditLogs(prev => (isSameIds(prev as any, auditArr as any) ? prev : auditArr));
         if (metRes && typeof metRes === 'object') setMetrics(prev => JSON.stringify(prev) === JSON.stringify(metRes) ? prev : metRes);
       } catch (e) {
         console.error('Backend refresh warning, preserving local state:', e);
@@ -433,22 +427,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
       } catch (e: any) {
         console.error('Resolve error:', e);
         toastGlobal('error', 'Resolve failed', e.message || String(e));
-        throw e;
-      }
-    });
-  };
-
-  const runReconciliationCron = async () => {
-    return withLoading(async () => {
-      try {
-        const res = await fetchWithAuth('/api/cron/reconcile', { method: 'POST' });
-        const data = await parseJsonResponse(res);
-        await refreshAll();
-        toastGlobal('success', 'Reconciliation complete', `${data?.reconciled ?? ''} records checked`);
-        return data;
-      } catch (e: any) {
-        console.error('Reconciliation error:', e);
-        toastGlobal('error', 'Reconciliation failed', e.message || String(e));
         throw e;
       }
     });
@@ -874,7 +852,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
         itemMappings,
         entityMappings,
         validationErrors,
-        auditLogs,
         metrics,
         isBgRefreshing,
         isInitialized,
@@ -882,7 +859,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
         transmitInvoice,
         cancelInvoice,
         resolveValidationError,
-        runReconciliationCron,
         autoMapItems,
         addCustomer,
         addItemMapping,

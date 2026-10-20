@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
 import { toastGlobal } from './ui/Toast';
+import { StatusBadge, statusTone, writebackTone } from './ui/StatusBadge';
 import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
 
 export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void } = {}) {
@@ -159,7 +160,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
     <div className="space-y-6">
 
       {/* Top Action Bar & Filters */}
-      <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans">
+      <div className="bg-white rounded-lg p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans">
 
         {/* Search */}
         <div className="relative flex-1 max-w-md">
@@ -169,7 +170,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
             placeholder="Search Invoice #, IRN, or Customer Name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-900"
+            className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all text-slate-900"
           />
         </div>
 
@@ -206,17 +207,17 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
       </div>
 
       {/* Invoices Master Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm font-sans">
+      <div className="bg-white rounded-lg border border-slate-200/80 overflow-hidden shadow-sm font-sans">
         <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <FileText className="w-4 h-4 text-violet-400" />
+            <FileText className="w-4 h-4 text-slate-400" />
             <h3 className="text-sm font-bold tracking-tight">
               {activeTenant.name} Invoices Ledger ({filteredInvoices.length})
             </h3>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-300 hidden sm:inline">
-              Format: <strong className="text-violet-300">{activeTenant.platformType}</strong>
+              Format: <strong className="text-slate-300">{activeTenant.platformType}</strong>
             </span>
             {hasRetryable && (
               <button onClick={handleBulkRetry} disabled={isAnyPropagating} title={hasRetryable ? 'Retry pending — Bulk Send dulled until failures cleared (Send → Retry sequential)' : ''} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale bg-amber-600 hover:bg-amber-700 text-white`}>
@@ -228,8 +229,8 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
         </div>
 
         {bulkMsg && (
-          <div className={`mx-5 mt-4 p-3 rounded-xl border text-xs flex items-center gap-2 ${bulkMsg.type==='error' ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-violet-50 text-violet-900 border-violet-200'}`}>
-            {bulkMsg.type==='error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-violet-600" />}
+          <div className={`mx-5 mt-4 p-3 rounded-lg border text-xs flex items-center gap-2 ${bulkMsg.type==='error' ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-slate-50 text-slate-900 border-slate-200'}`}>
+            {bulkMsg.type==='error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-slate-900" />}
             <span className="flex-1">{bulkMsg.text}</span>
             <button onClick={()=>setBulkMsg(null)} className="text-xs font-semibold hover:underline cursor-pointer">Dismiss</button>
           </div>
@@ -239,7 +240,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
           const invalid = filteredInvoices.filter(inv => getInvoiceErrors(inv).length >0);
           if (invalid.length===0) return null;
           return (
-            <div className="mx-5 mt-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs overflow-hidden">
+            <div className="mx-5 mt-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs overflow-hidden">
               <button onClick={()=>setShowVerboseErrors(v=>!v)} className="w-full flex items-center justify-between p-3 text-left cursor-pointer hover:bg-amber-100/50">
                 <span className="font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4 text-amber-600" /> {invalid.length} invoice(s) need fixing — verbose errors hidden</span>
                 <span className="flex items-center gap-1 text-amber-700 font-semibold">{showVerboseErrors ? 'Hide' : 'Show'} <ChevronDown className={`w-3.5 h-3.5 transition ${showVerboseErrors?'rotate-180':''}`} /></span>
@@ -257,14 +258,14 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
         })()}
 
         {isAnyPropagating && (
-          <div className="mx-5 mt-3 p-3 rounded-xl border border-violet-300 bg-violet-600 text-white flex items-center justify-between gap-3 font-sans shadow-sm">
+          <div className="mx-5 mt-3 p-3 rounded-lg border border-slate-300 bg-slate-600 text-white flex items-center justify-between gap-3 font-sans shadow-sm">
             <div className="flex items-center gap-2.5">
-              <Clock className="w-4 h-4 animate-spin text-violet-200" />
+              <Clock className="w-4 h-4 animate-spin text-slate-200" />
               <span className="text-xs font-bold tracking-tight">Propagating to CittaEFS…</span>
               <span className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] font-mono font-bold">{elapsedSec}s elapsed</span>
-              <span className="hidden sm:inline text-[11px] text-violet-100">Send / Retry dulled until feedback — do not close</span>
+              <span className="hidden sm:inline text-[11px] text-slate-100">Send / Retry dulled until feedback — do not close</span>
             </div>
-            <span className="text-[11px] font-mono bg-white/15 px-2 py-1 rounded">Hub → ei-api.azurewebsites.net</span>
+            <span className="text-[11px] font-mono bg-white/15 px-2 py-1 rounded">Citta Gateway → ei-api.azurewebsites.net</span>
           </div>
         )}
 
@@ -279,27 +280,27 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
           const writeback = (activeTenant as any)?.cittaWritebackTarget || 'HUB';
           const gatewayOk = hasKey && !!gw;
           return (
-            <div className="mx-5 mt-4 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-indigo-50 overflow-hidden">
+            <div className="mx-5 mt-4 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
               <div className="p-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className={`w-2 h-2 rounded-full ${stagingPending>0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
                   <span className="text-xs font-bold text-slate-800">Staging</span>
-                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold">{stagingPending} pending</span>
+                  <StatusBadge tone="pending">{stagingPending} pending</StatusBadge>
                   <span className="text-[11px] text-slate-600 hidden sm:inline">Total <strong className="text-slate-900">{totalStaging}</strong> • <span className="text-emerald-700">✓ {stagingApproved}</span>{stagingFailed>0 && <span className="text-rose-700"> • ✗ {stagingFailed}</span>}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={()=>setShowStagingDetails(v=>!v)} className="px-2.5 py-1 text-[11px] font-semibold text-violet-700 bg-white border border-violet-200 rounded-lg hover:bg-violet-50 cursor-pointer flex items-center gap-1">Details <ChevronDown className={`w-3 h-3 transition ${showStagingDetails?'rotate-180':''}`} /></button>
-                  <button onClick={navigateToStaging} className="px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer bg-white text-violet-700 border-violet-200 hover:bg-violet-50 font-sans">View staging →</button>
+                  <button onClick={()=>setShowStagingDetails(v=>!v)} className="px-2.5 py-1 text-[11px] font-semibold text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer flex items-center gap-1">Details <ChevronDown className={`w-3 h-3 transition ${showStagingDetails?'rotate-180':''}`} /></button>
+                  <button onClick={navigateToStaging} className="px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer bg-white text-slate-900 border-slate-200 hover:bg-slate-50 font-sans">View staging →</button>
                 </div>
               </div>
               {showStagingDetails && (
-                <div className="px-4 py-2 bg-white/60 border-t border-violet-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+                <div className="px-4 py-2 bg-white/60 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
                   <div className="flex items-center gap-3 flex-wrap font-mono">
                     <span className={gatewayOk ? 'text-emerald-700' : 'text-amber-700'}>Gateway: {gw.replace(/^https?:\/\//,'')}</span>
                     <span className="text-slate-400">•</span>
                     <span className={hasKey ? 'text-emerald-700' : 'text-rose-700'}>Key: {hasKey ? 'set' : 'missing'}</span>
                     <span className="text-slate-400">•</span>
-                    <span className="text-slate-600">Writeback: <strong className={writeback==='BOTH'?'text-violet-700': writeback==='CITTAEFS'?'text-emerald-700':'text-amber-700'}>{writeback}</strong></span>
+                    <span className="text-slate-600">Writeback: <strong className={writeback==='BOTH'?'text-slate-900': writeback==='CITTAEFS'?'text-emerald-700':'text-amber-700'}>{writeback}</strong></span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {!gatewayOk && <span className="text-rose-700 font-semibold">Configure in Admin → Citta Gateway</span>}
@@ -332,7 +333,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                 const errs = getInvoiceErrors(inv);
                 const hasErr = errs.length>0;
                 return (
-                  <div key={`m-${inv.id}`} className={`rounded-xl border p-4 space-y-3 bg-white shadow-sm ${hasErr ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200'}`}>
+                  <div key={`m-${inv.id}`} className={`rounded-lg border p-4 space-y-3 bg-white shadow-sm ${hasErr ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="font-mono font-bold text-slate-900 text-sm">{inv.clientInvoiceNumber}</div>
@@ -341,16 +342,16 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                         <div className="text-[11px] font-mono text-slate-500">TIN: {inv.customerTin || 'N/A'}</div>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-full border ${inv.status === 'SIGNED' || inv.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : inv.status === 'PENDING_NRS_STAMP' ? 'bg-amber-50 text-amber-700 border-amber-200' : inv.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-700'}`}>{inv.status}</span>
+                        <StatusBadge tone={statusTone(inv.status)}>{inv.status}</StatusBadge>
                         <span className="text-xs font-bold text-slate-900">NGN {inv.grandTotal.toLocaleString()}</span>
                         <span className="text-[11px] text-slate-500">VAT NGN {inv.totalVat.toLocaleString()}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600"><span className="truncate">{inv.irn ? inv.irn.slice(0,22)+'…' : 'Pending Stamp'}</span>{inv.irn && <button onClick={()=>setQrModalInvoice(inv)} className="p-1 text-slate-400 hover:text-indigo-600"><QrCode className="w-4 h-4" /></button>}<button onClick={()=>setExpandedInvoiceId(inv.id)} className="ml-auto px-2 py-1 bg-slate-900 text-white rounded-lg text-[11px]">Details</button></div>
+                    <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600"><span className="truncate">{inv.irn ? inv.irn.slice(0,22)+'…' : 'Pending Stamp'}</span>{inv.irn && <button onClick={()=>setQrModalInvoice(inv)} className="p-1 text-slate-400 hover:text-emerald-700"><QrCode className="w-4 h-4" /></button>}<button onClick={()=>setExpandedInvoiceId(inv.id)} className="ml-auto px-2 py-1 bg-slate-900 text-white rounded-lg text-[11px]">Details</button></div>
                     {hasErr && <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 leading-relaxed">{errs[0]} {errs.length>1 && <button onClick={()=>setShowVerboseErrors(true)} className="underline font-semibold">+{errs.length-1} more</button>}</div>}
                     <div className="flex items-center gap-2 pt-1">
-                      {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && <button onClick={()=>{ setEditError(null); const copy=JSON.parse(JSON.stringify(inv)); const master=tenantCustomers.find((c:any)=> c.clientCustomerCode===copy.customerCode); if((!copy.customerTin||copy.customerTin==='N/A')&&master?.tin) copy.customerTin=master.tin; setEditingInvoice(copy); }} className="flex-1 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 min-h-[44px]"><Pencil className="w-4 h-4" /> Edit</button>}
-                      {inv.status === 'APPROVED' || inv.status === 'SIGNED' ? <span className="flex-1 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs font-semibold text-violet-700 flex items-center justify-center gap-1 min-h-[44px]"><CheckCircle2 className="w-4 h-4" /> Done</span> : ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status) ? <span className="flex-1 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-700 flex items-center justify-center gap-1 min-h-[44px]"><Clock className="w-4 h-4 animate-pulse" /> Pending</span> : ['REJECTED','FAILED'].includes(inv.status) ? <button disabled={isAnyPropagating} onClick={()=>handleRetry(inv)} className="flex-1 py-2.5 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><RotateCcw className="w-4 h-4" /> Retry</button> : ['CANCELLED'].includes(inv.status) ? <span className="flex-1 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 min-h-[44px]">Cancelled — edit & re-send</span> : <button disabled={isAnyPropagating} onClick={async()=>{ if(sendingId) return; const e=getInvoiceErrors(inv); if(e.length){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${e.join('; ')}`}); return;} setSendingId(inv.id); try{ const tin=resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))}); } finally{ setSendingId(null); } }} className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><Send className="w-4 h-4" /> Send</button>}
+                      {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && <button onClick={()=>{ setEditError(null); const copy=JSON.parse(JSON.stringify(inv)); const master=tenantCustomers.find((c:any)=> c.clientCustomerCode===copy.customerCode); if((!copy.customerTin||copy.customerTin==='N/A')&&master?.tin) copy.customerTin=master.tin; setEditingInvoice(copy); }} className="flex-1 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 min-h-[44px]"><Pencil className="w-4 h-4" /> Edit</button>}
+                      {inv.status === 'APPROVED' || inv.status === 'SIGNED' ? <span className="flex-1 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 flex items-center justify-center gap-1 min-h-[44px]"><CheckCircle2 className="w-4 h-4" /> Done</span> : ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status) ? <span className="flex-1 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-700 flex items-center justify-center gap-1 min-h-[44px]"><Clock className="w-4 h-4 animate-pulse" /> Pending</span> : ['REJECTED','FAILED'].includes(inv.status) ? <button disabled={isAnyPropagating} onClick={()=>handleRetry(inv)} className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><RotateCcw className="w-4 h-4" /> Retry</button> : ['CANCELLED'].includes(inv.status) ? <span className="flex-1 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 min-h-[44px]">Cancelled — edit & re-send</span> : <button disabled={isAnyPropagating} onClick={async()=>{ if(sendingId) return; const e=getInvoiceErrors(inv); if(e.length){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${e.join('; ')}`}); return;} setSendingId(inv.id); try{ const tin=resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))}); } finally{ setSendingId(null); } }} className="flex-1 py-2.5 bg-slate-600 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><Send className="w-4 h-4" /> Send</button>}
                     </div>
                   </div>
                 );
@@ -378,11 +379,11 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                   const hasErr = errs.length>0;
 
                   return (
-                    <tr key={inv.id} className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-indigo-50/30' : ''} ${hasErr ? 'bg-rose-50/40 ring-1 ring-rose-200' : ''}`}>
+                    <tr key={inv.id} className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-emerald-50/30' : ''} ${hasErr ? 'bg-rose-50/40 ring-1 ring-rose-200' : ''}`}>
                       <td className="py-3 px-3">
                         <button
                           onClick={() => setExpandedInvoiceId(isExpanded ? null : inv.id)}
-                          className="text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer p-1"
+                          className="text-slate-400 hover:text-emerald-700 transition-colors cursor-pointer p-1"
                         >
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </button>
@@ -395,10 +396,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
 
                       <td className="py-3 px-4">
                         <div className="flex flex-col space-y-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full w-max ${inv.invoiceType === 'CREDIT_NOTE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                              inv.invoiceType === 'DEBIT_NOTE' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                'bg-slate-100 text-slate-700'
-                            }`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full w-max bg-slate-100 text-slate-700 border border-slate-200`}>
                             {inv.invoiceType}
                           </span>
                           <span className="text-[11px] text-slate-400">Kind: {inv.invoiceKind}</span>
@@ -425,7 +423,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                             <span className="truncate max-w-[140px]" title={inv.irn}>{inv.irn}</span>
                             <button
                               onClick={() => setQrModalInvoice(inv)}
-                              className="text-slate-400 hover:text-indigo-600 p-0.5 transition-colors cursor-pointer"
+                              className="text-slate-400 hover:text-emerald-700 p-0.5 transition-colors cursor-pointer"
                               title="Show Official QR Code"
                             >
                               <QrCode className="w-4 h-4" />
@@ -442,26 +440,20 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${inv.status === 'SIGNED' || inv.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                            inv.status === 'PENDING_NRS_STAMP' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                              inv.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                                'bg-slate-100 text-slate-700'
-                          }`}>
+                        <StatusBadge tone={statusTone(inv.status)}>
                           {inv.status === 'SIGNED' || inv.status === 'APPROVED' ? (
-                            <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />
+                            <CheckCircle2 className="w-3 h-3 mr-1 text-white" />
                           ) : inv.status === 'REJECTED' ? (
-                            <AlertCircle className="w-3 h-3 mr-1 text-rose-600" />
+                            <AlertCircle className="w-3 h-3 mr-1 text-white" />
                           ) : null}
                           {inv.status}
-                        </span>
+                        </StatusBadge>
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${inv.ledgerWritebackStatus === 'SYNCED' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
-                            'bg-slate-100 text-slate-600'
-                          }`}>
+                        <StatusBadge tone={writebackTone(inv.ledgerWritebackStatus)}>
                           {inv.ledgerWritebackStatus === 'SYNCED' ? 'Synced to ERP' : 'Pending Writeback'}
-                        </span>
+                        </StatusBadge>
                       </td>
 
                       <td className="py-3 px-4 text-right">
@@ -476,8 +468,8 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                                 copy.lineItems = (copy.lineItems||[]).map((li:any)=>{ const m = tenantItems.find((x:any)=> x.clientSku===li.itemCode); if ((!li.hsOrServiceCode || li.hsOrServiceCode==='UNMAPPED') && m?.hsOrServiceCode) return {...li, hsOrServiceCode: m.hsOrServiceCode, vatRate: li.vatRate ?? m.defaultVatRate}; return li; });
                                 setEditingInvoice(copy);
                               }}
-                              className="p-1.5 bg-white hover:bg-violet-50 text-slate-500 hover:text-violet-600 border border-slate-200 hover:border-violet-200 rounded-lg cursor-pointer"
-                              title="Edit invoice — pre-filled from hub"
+                              className="p-1.5 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-200 rounded-lg cursor-pointer"
+                              title="Edit invoice — pre-filled from the Gateway"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -495,9 +487,9 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                             </button>
                           )}
                           {(inv.status === 'APPROVED' || inv.status === 'SIGNED') ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-900 border border-slate-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
                           ) : ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status) ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[11px] font-semibold"><Clock className="w-3 h-3 animate-pulse" /> Pending — awaiting NRS</span>
+                            <StatusBadge tone="pending"><Clock className="w-3 h-3 mr-1 animate-pulse" /> Pending — awaiting NRS</StatusBadge>
                           ) : ['REJECTED','FAILED'].includes(inv.status) ? (
                             <button
                               disabled={isAnyPropagating}
@@ -508,7 +500,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                               <RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id ? 'animate-spin' : ''}`} /> {retryingId===inv.id ? 'Retrying…' : 'Retry'}
                             </button>
                           ) : ['CANCELLED'].includes(inv.status) ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-semibold"><Clock className="w-3 h-3" /> Cancelled — edit & re-send</span>
+                            <StatusBadge tone="neutral"><Clock className="w-3 h-3 mr-1" /> Cancelled — edit & re-send</StatusBadge>
                           ) : (
                             <button
                               disabled={isAnyPropagating}
@@ -539,7 +531,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                                   else setBulkMsg({type:'error', text: msg});
                                 } finally { setSendingId(null); }
                               }}
-                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${sendingId===inv.id ? 'bg-violet-400 text-white border-violet-300 cursor-wait opacity-80 backdrop-blur-sm' : 'bg-violet-600 hover:bg-violet-700 text-white border-transparent cursor-pointer'}`}
+                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${sendingId===inv.id ? 'bg-slate-400 text-white border-slate-300 cursor-wait opacity-80 backdrop-blur-sm' : 'bg-slate-600 hover:bg-slate-700 text-white border-transparent cursor-pointer'}`}
                             >
                               <Send className={`w-3.5 h-3.5 ${sendingId===inv.id ? 'animate-pulse' : ''}`} /> {sendingId===inv.id ? 'Queuing…' : 'Send'}
                             </button>
@@ -562,16 +554,16 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
         if (!inv) return null;
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setExpandedInvoiceId(null)}>
-            <div className="bg-white w-full max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-violet-50">
-                <h4 className="text-sm font-bold text-violet-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-violet-600" />
+            <div className="bg-white w-full max-w-3xl rounded-lg border border-slate-200 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-slate-900" />
                   {inv.clientInvoiceNumber} — {inv.lineItems.length} item(s) • {inv.customerName}
                 </h4>
                 <button onClick={() => setExpandedInvoiceId(null)} className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-slate-700 border border-transparent hover:border-slate-200 cursor-pointer"><XCircle className="w-4 h-4" /></button>
               </div>
               <div className="overflow-y-auto p-4 space-y-3">
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
                       <tr>
@@ -587,27 +579,27 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {inv.lineItems.map((li) => (
-                        <tr key={li.id} className="hover:bg-violet-50/30">
-                          <td className="py-2 px-3 font-mono font-semibold text-violet-700">{li.itemCode}</td>
+                        <tr key={li.id} className="hover:bg-slate-50/30">
+                          <td className="py-2 px-3 font-mono font-semibold text-slate-900">{li.itemCode}</td>
                           <td className="py-2 px-3 text-slate-700">{li.description}</td>
                           <td className="py-2 px-3 text-center">{li.quantity}</td>
                           <td className="py-2 px-3 text-right">NGN {li.unitPrice.toLocaleString()}</td>
                           <td className="py-2 px-3 text-right">NGN {li.taxableAmount.toLocaleString()}</td>
                           <td className="py-2 px-3 text-center">{li.vatRate}%</td>
-                          <td className="py-2 px-3 font-mono text-[11px]"><span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${li.hsOrServiceCode==='UNMAPPED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>{li.hsOrServiceCode}</span></td>
+                          <td className="py-2 px-3 font-mono text-[11px]"><StatusBadge tone={li.hsOrServiceCode==='UNMAPPED' ? 'fail' : 'neutral'}>{li.hsOrServiceCode}</StatusBadge></td>
                           <td className="py-2 px-3 text-right font-bold text-slate-900">NGN {li.totalAmount.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-xl"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
+                {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-lg"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setExpandedInvoiceId(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Close</button>
                   {(inv.status === 'REJECTED' || inv.status === 'FAILED') && <button disabled={isAnyPropagating} onClick={async()=>{ setExpandedSending(true); try{ await retryInvoice(inv.id); setBulkMsg({type:'success', text:`Retry queued for ${inv.clientInvoiceNumber}`}); setExpandedInvoiceId(null);} catch(e:any){ setBulkMsg({type:'error', text:e.message});} finally{ setExpandedSending(false);}}} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${retryingId===inv.id ? 'bg-amber-400 cursor-wait' : 'bg-amber-600 hover:bg-amber-700'}`}><RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id?'animate-spin':''}`} /> {retryingId===inv.id?'Retrying…':'Retry — re-queue to CittaEFS'}</button>}
-                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='CANCELLED') && <button disabled={isAnyPropagating} onClick={async () => { if(expandedSending) return; const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); toastGlobal('error','Fix before sending', errs[0]); return; } setExpandedSending(true); toastGlobal('info',`Queuing ${inv.clientInvoiceNumber}…`,'Idempotent'); try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } finally{ setExpandedSending(false);} }} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${expandedSending ? 'bg-violet-400 cursor-wait opacity-80' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className={`w-3.5 h-3.5 ${expandedSending ? 'animate-pulse' : ''}`} /> {expandedSending ? 'Queuing…' : 'Send to CittaEFS'}</button>}
+                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='CANCELLED') && <button disabled={isAnyPropagating} onClick={async () => { if(expandedSending) return; const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); toastGlobal('error','Fix before sending', errs[0]); return; } setExpandedSending(true); toastGlobal('info',`Queuing ${inv.clientInvoiceNumber}…`,'Idempotent'); try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } finally{ setExpandedSending(false);} }} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${expandedSending ? 'bg-slate-400 cursor-wait opacity-80' : 'bg-slate-600 hover:bg-slate-700'}`}><Send className={`w-3.5 h-3.5 ${expandedSending ? 'animate-pulse' : ''}`} /> {expandedSending ? 'Queuing…' : 'Send to CittaEFS'}</button>}
                   {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING') && <button disabled={retryingId===inv.id} onClick={async()=>{ try{ await retryInvoice(inv.id); setBulkMsg({type:'success', text:`Forced retry for ${inv.clientInvoiceNumber}`}); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } }} className="px-3 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1"><RotateCcw className="w-3.5 h-3.5" /> Force Retry</button>}
-                  {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
+                  {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-slate-50 text-slate-900 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
                 </div>
               </div>
             </div>
@@ -618,14 +610,14 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
       {/* Edit Invoice Overlay */}
       {editingInvoice && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setEditError(null); setEditingInvoice(null); }}>
-          <div className="bg-white w-full max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-violet-50">
-              <h4 className="text-sm font-bold text-violet-900 flex items-center gap-2"><Pencil className="w-4 h-4 text-violet-600" /> Edit Invoice {editingInvoice.clientInvoiceNumber}</h4>
+          <div className="bg-white w-full max-w-3xl rounded-lg border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2"><Pencil className="w-4 h-4 text-slate-900" /> Edit Invoice {editingInvoice.clientInvoiceNumber}</h4>
               <button onClick={() => { setEditError(null); setEditingInvoice(null); }} className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-slate-700 border border-transparent hover:border-slate-200 cursor-pointer"><XCircle className="w-4 h-4" /></button>
             </div>
             <div className="overflow-y-auto p-6 space-y-4">
               {editError && (
-                <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs">
+                <div className="p-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-xs">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                     <div className="flex-1 space-y-1">
@@ -641,61 +633,61 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Invoice # *</label>
-                  <input value={editingInvoice.clientInvoiceNumber} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, clientInvoiceNumber: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <input value={editingInvoice.clientInvoiceNumber} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, clientInvoiceNumber: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-slate-500 focus:ring-1 focus:ring-slate-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Issue Date *</label>
-                  <input type="date" value={editingInvoice.issueDate ? new Date(editingInvoice.issueDate).toISOString().slice(0,10) : ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, issueDate: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <input type="date" value={editingInvoice.issueDate ? new Date(editingInvoice.issueDate).toISOString().slice(0,10) : ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, issueDate: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Invoice Kind *</label>
-                  <select value={editingInvoice.invoiceKind || 'B2B'} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, invoiceKind: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+                  <select value={editingInvoice.invoiceKind || 'B2B'} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, invoiceKind: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:border-slate-500 focus:ring-1 focus:ring-slate-500">
                     <option value="B2B">B2B</option><option value="B2C">B2C</option><option value="B2G">B2G</option><option value="EXPORT">EXPORT</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Invoice Type *</label>
-                  <select value={editingInvoice.invoiceType || 'STANDARD'} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, invoiceType: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+                  <select value={editingInvoice.invoiceType || 'STANDARD'} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, invoiceType: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:border-slate-500 focus:ring-1 focus:ring-slate-500">
                     <option value="STANDARD">STANDARD</option><option value="CREDIT_NOTE">CREDIT_NOTE</option><option value="DEBIT_NOTE">DEBIT_NOTE</option>
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer — pick from hub (auto-fills TIN & name, no manual typing)</label>
-                  <select value={editingInvoice.customerCode || ''} onChange={e=>{ setEditError(null); const code=e.target.value; const m = tenantCustomers.find((c:any)=> c.clientCustomerCode===code || c.clientSystemCustId===code); setEditingInvoice({...editingInvoice, customerCode: code, customerName: m?.name || editingInvoice.customerName, customerTin: m?.tin || m?.taxId || editingInvoice.customerTin }); }} className="w-full px-3 py-2 border border-violet-200 bg-violet-50/40 rounded-lg text-xs font-medium focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
-                    <option value="">— Select customer from hub ({tenantCustomers.length} available) —</option>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer — pick from the Gateway (auto-fills TIN & name, no manual typing)</label>
+                  <select value={editingInvoice.customerCode || ''} onChange={e=>{ setEditError(null); const code=e.target.value; const m = tenantCustomers.find((c:any)=> c.clientCustomerCode===code || c.clientSystemCustId===code); setEditingInvoice({...editingInvoice, customerCode: code, customerName: m?.name || editingInvoice.customerName, customerTin: m?.tin || m?.taxId || editingInvoice.customerTin }); }} className="w-full px-3 py-2 border border-slate-200 bg-slate-50/40 rounded-lg text-xs font-medium focus:border-slate-500 focus:ring-1 focus:ring-slate-500">
+                    <option value="">— Select customer from the Gateway ({tenantCustomers.length} available) —</option>
                     {tenantCustomers.map((c:any)=>(
                       <option key={c.id} value={c.clientCustomerCode || c.clientSystemCustId}>{c.name} — {c.clientCustomerCode || c.clientSystemCustId} — TIN:{c.tin || c.taxId || '—'}</option>
                     ))}
                     <option value={editingInvoice.customerCode}>— Keep current: {editingInvoice.customerCode} —</option>
                   </select>
-                  {tenantCustomers.length===0 && <p className="text-[11px] text-amber-600 mt-1">No customers in hub for this tenant — add in Customers tab first.</p>}
+                  {tenantCustomers.length===0 && <p className="text-[11px] text-amber-600 mt-1">No customers in the Gateway for this tenant — add in Customer Registrations first.</p>}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Name * (pulled from hub)</label>
-                  <input value={editingInvoice.customerName || ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerName: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500" placeholder="Auto-filled when you pick customer above" />
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Name * (pulled from the Gateway)</label>
+                  <input value={editingInvoice.customerName || ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerName: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500" placeholder="Auto-filled when you pick customer above" />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer TIN {editingInvoice.invoiceKind==='B2B' || editingInvoice.invoiceKind==='B2G' ? '*' : '(B2C optional)'} — pulled from hub</label>
-                  <input value={editingInvoice.customerTin || resolveTin(editingInvoice) || ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerTin: e.target.value}); }} placeholder="Auto-filled from Customers hub" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
-                  {resolveTin(editingInvoice) && !editingInvoice.customerTin && <p className="text-[10px] text-emerald-600 mt-1">✓ Pulled TIN {resolveTin(editingInvoice)} from hub — will be saved</p>}
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer TIN {editingInvoice.invoiceKind==='B2B' || editingInvoice.invoiceKind==='B2G' ? '*' : '(B2C optional)'} — pulled from the Gateway</label>
+                  <input value={editingInvoice.customerTin || resolveTin(editingInvoice) || ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerTin: e.target.value}); }} placeholder="Auto-filled from customer records" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:border-slate-500 focus:ring-1 focus:ring-slate-500" />
+                  {resolveTin(editingInvoice) && !editingInvoice.customerTin && <p className="text-[10px] text-emerald-700 mt-1">✓ Pulled TIN {resolveTin(editingInvoice)} from the Gateway — will be saved</p>}
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Code (from hub)</label>
-                  <input value={editingInvoice.customerCode || ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerCode: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono bg-slate-50 focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Customer Code (from the Gateway)</label>
+                  <input value={editingInvoice.customerCode || ''} onChange={e=>{ setEditError(null); setEditingInvoice({...editingInvoice, customerCode: e.target.value}); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono bg-slate-50 focus:border-slate-500 focus:ring-1 focus:ring-slate-500" />
                 </div>
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-600">Line Items ({editingInvoice.lineItems?.length || 0}) — pulled from hub: pick SKU from Items dictionary</span>
-                  <button onClick={()=>{ setEditError(null); const newLine={ itemCode: tenantItems[0]?.clientSku || `SKU-${Date.now().toString().slice(-4)}`, description: tenantItems[0]?.name || 'New line', quantity:1, unitPrice:1000, hsOrServiceCode: tenantItems[0]?.hsOrServiceCode || 'UNMAPPED', vatRate: tenantItems[0]?.defaultVatRate ?? 7.5 }; setEditingInvoice({...editingInvoice, lineItems:[...(editingInvoice.lineItems||[]), newLine]}); }} className="px-2 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1"><Plus className="w-3 h-3" /> Add line (from hub)</button>
+                  <span className="text-[11px] font-semibold text-slate-600">Line Items ({editingInvoice.lineItems?.length || 0}) — pulled from the Gateway: pick SKU from Items dictionary</span>
+                  <button onClick={()=>{ setEditError(null); const newLine={ itemCode: tenantItems[0]?.clientSku || `SKU-${Date.now().toString().slice(-4)}`, description: tenantItems[0]?.name || 'New line', quantity:1, unitPrice:1000, hsOrServiceCode: tenantItems[0]?.hsOrServiceCode || 'UNMAPPED', vatRate: tenantItems[0]?.defaultVatRate ?? 7.5 }; setEditingInvoice({...editingInvoice, lineItems:[...(editingInvoice.lineItems||[]), newLine]}); }} className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1"><Plus className="w-3 h-3" /> Add line (from Gateway)</button>
                 </div>
-                <div className="mt-2 space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-xl p-2 bg-slate-50/50">
+                <div className="mt-2 space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-slate-50/50">
                   {(editingInvoice.lineItems || []).map((li:any, idx:number)=>(
                     <div key={idx} className="grid grid-cols-12 gap-1.5 bg-white p-2 rounded-lg border border-slate-200 items-end">
                       <div className="col-span-3">
-                        <label className="block text-[9px] font-semibold text-slate-500 mb-1">SKU — from hub</label>
-                        <select value={li.itemCode} onChange={e=>{ setEditError(null); const code=e.target.value; const m=tenantItems.find((x:any)=> x.clientSku===code); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, itemCode:code, description: m?.name || x.description, hsOrServiceCode: m?.hsOrServiceCode || x.hsOrServiceCode, vatRate: m?.defaultVatRate ?? x.vatRate} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} className="w-full px-2 py-1.5 border border-violet-200 bg-violet-50/30 rounded text-xs font-mono">
-                          {tenantItems.length>0 ? tenantItems.map((m:any)=>(<option key={m.id} value={m.clientSku}>{m.clientSku} — {m.name} ({m.hsOrServiceCode})</option>)) : <option value={li.itemCode}>{li.itemCode} (no hub items — see Items tab)</option>}
+                        <label className="block text-[9px] font-semibold text-slate-500 mb-1">SKU — from the Gateway</label>
+                        <select value={li.itemCode} onChange={e=>{ setEditError(null); const code=e.target.value; const m=tenantItems.find((x:any)=> x.clientSku===code); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, itemCode:code, description: m?.name || x.description, hsOrServiceCode: m?.hsOrServiceCode || x.hsOrServiceCode, vatRate: m?.defaultVatRate ?? x.vatRate} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} className="w-full px-2 py-1.5 border border-slate-200 bg-slate-50/30 rounded text-xs font-mono">
+                          {tenantItems.length>0 ? tenantItems.map((m:any)=>(<option key={m.id} value={m.clientSku}>{m.clientSku} — {m.name} ({m.hsOrServiceCode})</option>)) : <option value={li.itemCode}>{li.itemCode} (no gateway items — see Items tab)</option>}
                           {!tenantItems.find((x:any)=>x.clientSku===li.itemCode) && <option value={li.itemCode}>{li.itemCode} — current</option>}
                         </select>
                       </div>
@@ -734,7 +726,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                     </div>
                   ))}
                 </div>
-                {tenantItems.length===0 && <p className="text-[11px] text-amber-600 mt-1">No items in hub — add mappings in Items tab; HS codes fall back to entry above.</p>}
+                {tenantItems.length===0 && <p className="text-[11px] text-amber-600 mt-1">No items in the Gateway — add mappings in the Items tab; HS codes fall back to entry above.</p>}
               </div>
               <div className="flex justify-end gap-2">
                 <button onClick={()=>{ setEditError(null); setEditingInvoice(null); }} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Cancel</button>
@@ -764,7 +756,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                     finally { setEditSaving(false); }
                   }}
                   disabled={editSaving || isAnyPropagating}
-                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans"
+                  className="px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans"
                 >
                   <Save className="w-3.5 h-3.5" /> {editSaving ? 'Saving...' : 'Save Changes'}
                 </button>

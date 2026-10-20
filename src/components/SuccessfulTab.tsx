@@ -12,6 +12,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { OverlaySelect } from './ui/OverlaySelect';
+import { StatusBadge, statusTone, writebackTone } from './ui/StatusBadge';
 
 export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => void } = {}) {
   const { invoices, activeTenant, currentUser } = useHub() as any;
@@ -40,7 +41,7 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
   return (
     <div className="space-y-6">
       {/* Top Bar */}
-      <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans">
+      <div className="bg-white rounded-lg p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
@@ -78,10 +79,10 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
       </div>
 
       {/* Successful Invoices Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm font-sans">
+      <div className="bg-white rounded-lg border border-slate-200/80 overflow-hidden shadow-sm font-sans">
         <div className="px-5 py-4 bg-emerald-50 text-emerald-900 border-b border-emerald-100 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-700" />
             <h3 className="text-sm font-bold tracking-tight">
               {activeTenant.name} Successful Invoices ({filteredInvoices.length})
             </h3>
@@ -124,7 +125,7 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
                       <td className="py-3 px-3">
                         <button
                           onClick={() => setExpandedInvoiceId(isExpanded ? null : inv.id)}
-                          className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1"
+                          className="text-slate-400 hover:text-emerald-700 transition-colors cursor-pointer p-1"
                         >
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </button>
@@ -137,10 +138,7 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
 
                       <td className="py-3 px-4">
                         <div className="flex flex-col space-y-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full w-max ${inv.invoiceType === 'CREDIT_NOTE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                              inv.invoiceType === 'DEBIT_NOTE' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full w-max bg-slate-100 text-slate-700 border border-slate-200`}>
                             {inv.invoiceType}
                           </span>
                           <span className="text-[11px] text-slate-400">Kind: {inv.invoiceKind}</span>
@@ -167,7 +165,7 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
                             <span className="truncate max-w-[140px]" title={inv.irn}>{inv.irn}</span>
                             <button
                               onClick={() => setQrModalInvoice(inv)}
-                              className="text-slate-400 hover:text-emerald-600 p-0.5 transition-colors cursor-pointer"
+                              className="text-slate-400 hover:text-emerald-700 p-0.5 transition-colors cursor-pointer"
                               title="Show Official QR Code"
                             >
                               <QrCode className="w-4 h-4" />
@@ -184,27 +182,23 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${inv.status === 'SIGNED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                            'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}>
-                          {inv.status === 'SIGNED' && <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />}
+                        <StatusBadge tone={statusTone(inv.status)}>
+                          {inv.status === 'SIGNED' && <CheckCircle2 className="w-3 h-3 mr-1 text-white" />}
                           {inv.status}
-                        </span>
+                        </StatusBadge>
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 text-[10px] font-semibold rounded-full ${inv.ledgerWritebackStatus === 'SYNCED' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
-                            'bg-slate-100 text-slate-600'
-                          }`}>
+                        <StatusBadge tone={writebackTone(inv.ledgerWritebackStatus)}>
                           {inv.ledgerWritebackStatus === 'SYNCED' ? 'Synced to ERP' : 'Pending Writeback'}
-                        </span>
+                        </StatusBadge>
                       </td>
 
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-semibold">
-                            <CheckCircle2 className="w-3 h-3" /> Completed
-                          </span>
+                          <StatusBadge tone="ok">
+                            <CheckCircle2 className="w-3 h-3 mr-1 text-white" /> Completed
+                          </StatusBadge>
                         </div>
                       </td>
                     </tr>
@@ -221,16 +215,16 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
           if (!inv) return null;
           return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setExpandedInvoiceId(null)}>
-              <div className="bg-white w-full max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="bg-white w-full max-w-3xl rounded-lg border border-slate-200 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
                   <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-emerald-600" />
+                    <FileText className="w-4 h-4 text-emerald-700" />
                     {inv.clientInvoiceNumber} — {inv.lineItems.length} item(s) • {inv.customerName}
                   </h4>
                   <button onClick={() => setExpandedInvoiceId(null)} className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-slate-700 border border-transparent hover:border-slate-200 cursor-pointer"><ChevronRight className="w-4 h-4 rotate-90" /></button>
                 </div>
                 <div className="overflow-y-auto p-4 space-y-3">
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">
                         <tr>
@@ -253,7 +247,7 @@ export function SuccessfulTab({ onNavigate }: { onNavigate?: (tab: string) => vo
                             <td className="py-2 px-3 text-right">NGN {li.unitPrice.toLocaleString()}</td>
                             <td className="py-2 px-3 text-right">NGN {li.taxableAmount.toLocaleString()}</td>
                             <td className="py-2 px-3 text-center">{li.vatRate}%</td>
-                            <td className="py-2 px-3 font-mono text-[11px]"><span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${li.hsOrServiceCode==='UNMAPPED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>{li.hsOrServiceCode}</span></td>
+                            <td className="py-2 px-3 font-mono text-[11px]"><StatusBadge tone={li.hsOrServiceCode==='UNMAPPED' ? 'fail' : 'ok'}>{li.hsOrServiceCode}</StatusBadge></td>
                             <td className="py-2 px-3 text-right font-bold text-slate-900">NGN {li.totalAmount.toLocaleString()}</td>
                           </tr>
                         ))}

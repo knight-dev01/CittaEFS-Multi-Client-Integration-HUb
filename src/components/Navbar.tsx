@@ -10,7 +10,6 @@ import {
   Layers, 
   RotateCcw, 
   ShieldCheck, 
-  Settings, 
   Users, 
   Tag, 
   Sliders, 
@@ -181,8 +180,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     { id: 'gateway', label: 'CittaEFS Gateway', icon: Globe, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
 
     // Admin tabs
-    { id: 'companies', label: 'Companies', icon: Building2, category: 'admin', requiredRoles: ['ADMIN'] },
-    { id: 'settings', label: 'Settings', icon: Settings, category: 'admin', requiredRoles: ['ADMIN'] }
+    { id: 'companies', label: 'Companies', icon: Building2, category: 'admin', requiredRoles: ['ADMIN'] }
   ];
 
   const visibleTabs = allTabs.filter(tab => {
@@ -202,20 +200,15 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       {/* Brand Title */}
       <div className="p-5 border-b border-slate-800/80 shrink-0">
         <div className="flex items-center space-x-3">
-          <div className="bg-gradient-to-tr from-indigo-600 to-indigo-500 p-2 rounded-xl text-white shadow-md shadow-indigo-600/30 flex items-center justify-center shrink-0">
+          <div className="bg-emerald-700 p-2 rounded-lg text-white flex items-center justify-center shrink-0">
             <Layers className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-white tracking-tight leading-none">
-                CittaEFS
-              </h1>
-              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30 shrink-0">
-                v2.28
-              </span>
-            </div>
+            <h1 className="text-sm font-bold text-white tracking-tight leading-none">
+              Citta Gateway
+            </h1>
             <p className="text-[11px] text-slate-400 font-normal mt-1">
-              Integration & Tax Compliance Hub
+              Integration &amp; tax compliance
             </p>
           </div>
         </div>
@@ -225,11 +218,11 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       <div className="p-4 border-b border-slate-800/80 shrink-0 bg-slate-950/30">
         <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider flex items-center justify-between">
           <span>Active Workspace ERP:</span>
-          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${erp.id==='qbo'?'bg-amber-500/20 text-amber-300 border-amber-500/30': erp.id==='odoo'?'bg-violet-500/20 text-violet-300 border-violet-500/30':'bg-slate-700 text-slate-300 border-slate-600'}`}>{erp.shortLabel} MODE</span>
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border bg-slate-700 text-slate-200 border-slate-600`}>{erp.shortLabel} MODE</span>
         </label>
         <div className="relative flex items-center gap-2">
-          <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 flex-1 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-            <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
+          <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 flex-1 focus-within:ring-2 focus-within:ring-emerald-600 transition-all">
+            <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <select
               value={activeTenantId}
               onChange={(e) => {
@@ -242,7 +235,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
               className="bg-transparent text-white font-medium focus:outline-none cursor-pointer text-xs w-full pr-4 appearance-none"
             >
               {tenants.length === 0 ? (
-                <option value="" className="bg-slate-900 text-indigo-400 font-medium">
+                <option value="" className="bg-slate-900 text-emerald-400 font-medium">
                   + Onboard ERP
                 </option>
               ) : (
@@ -304,7 +297,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                       onClick={() => handleNavClick(tab.id)}
                       className={`flex items-center justify-between w-full px-3 py-2 rounded-lg font-medium text-xs transition-all cursor-pointer ${
                         isActive
-                          ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                          ? 'bg-emerald-700 text-white shadow-sm shadow-emerald-700/30'
                           : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                       }`}
                     >
@@ -336,7 +329,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
               onOpenOnboardModal();
               setIsMobileMenuOpen(false);
             }}
-            className="flex items-center justify-center space-x-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg cursor-pointer shadow-sm transition-all"
+            className="flex items-center justify-center space-x-2 w-full py-2 bg-emerald-700 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg cursor-pointer shadow-sm transition-all"
           >
             <Plus className="w-4 h-4 text-white" />
             <span>Onboard ERP</span>
@@ -350,7 +343,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             }}
             className="flex items-center justify-center space-x-2 w-full py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg border border-slate-700 cursor-pointer transition-all"
           >
-            <Plus className="w-4 h-4 text-indigo-400" />
+            <Plus className="w-4 h-4 text-emerald-400" />
             <span>Ingest Transaction</span>
           </button>
         )}
@@ -359,7 +352,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
       {/* User profile footer section */}
       <div className="p-4 border-t border-slate-800/80 bg-slate-950/50 shrink-0 flex items-center justify-between text-xs gap-2">
         <div className="flex items-center space-x-2.5 shrink-0 truncate max-w-[140px]">
-          <div className="w-8 h-8 bg-indigo-500/20 border border-indigo-500/30 rounded-full flex items-center justify-center font-bold text-indigo-400 text-xs shrink-0">
+          <div className="w-8 h-8 bg-emerald-700/20 border border-emerald-600/30 rounded-full flex items-center justify-center font-bold text-emerald-400 text-xs shrink-0">
             {currentUser?.name?.substring(0, 2).toUpperCase() || 'OP'}
           </div>
           <div className="flex flex-col text-left truncate">
@@ -375,7 +368,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition-colors"
             title="Refresh All Engine Services"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
 
           {/* Logout */}
@@ -403,10 +396,10 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="flex items-center space-x-2">
-            <div className="bg-indigo-600 p-1.5 rounded-lg font-bold text-white flex items-center justify-center shrink-0">
+            <div className="bg-emerald-700 p-1.5 rounded-lg font-bold text-white flex items-center justify-center shrink-0">
               <Layers className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-white tracking-tight">CittaEFS</span>
+            <span className="text-sm font-bold text-white tracking-tight">Citta Gateway</span>
           </div>
         </div>
 
@@ -419,7 +412,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             onClick={handleRefresh}
             className="p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white bg-slate-800/80 cursor-pointer transition-colors"
           >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
         </div>
       </header>
@@ -456,7 +449,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           <button
             onClick={() => toggleCollapsed()}
             title={isCollapsed ? 'Expand sidebar (also hover to expand)' : 'Collapse sidebar'}
-            className="absolute -right-3 top-5 z-40 w-6 h-6 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center text-slate-600 hover:text-violet-600 hover:border-violet-300 cursor-pointer"
+            className="absolute -right-3 top-5 z-40 w-6 h-6 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center text-slate-600 hover:text-slate-900 hover:border-slate-300 cursor-pointer"
           >
             {isCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
           </button>
@@ -466,14 +459,14 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           {isCollapsed && (
             <div className="flex flex-col h-full bg-slate-900 text-slate-100 border-r border-slate-800">
               <div className="p-3 border-b border-slate-800 flex flex-col items-center gap-2">
-                <div className="bg-gradient-to-tr from-violet-600 to-indigo-500 p-2 rounded-xl text-white"><Layers className="w-4 h-4" /></div>
+                <div className="bg-gradient-to-tr from-slate-600 to-emerald-600 p-2 rounded-lg text-white"><Layers className="w-4 h-4" /></div>
               </div>
               <div className="flex-1 overflow-y-auto py-3 space-y-1">
                 {visibleTabs.slice(0,8).map(tab => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
                   return (
-                    <button key={tab.id} onClick={() => handleNavClick(tab.id)} title={tab.label} className={`w-full flex justify-center py-2.5 ${isActive ? 'text-violet-400 bg-violet-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'} cursor-pointer`}>
+                    <button key={tab.id} onClick={() => handleNavClick(tab.id)} title={tab.label} className={`w-full flex justify-center py-2.5 ${isActive ? 'text-slate-400 bg-slate-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'} cursor-pointer`}>
                       <Icon className="w-4 h-4" />
                     </button>
                   );

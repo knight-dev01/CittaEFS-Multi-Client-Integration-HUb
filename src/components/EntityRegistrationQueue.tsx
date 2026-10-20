@@ -9,6 +9,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { StatusBadge } from './ui/StatusBadge';
 
 interface Props {
   entityType: 'CUSTOMER' | 'ITEM';
@@ -87,9 +88,9 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
     <div className="space-y-6 font-sans text-xs">
 
       {/* Header Banner */}
-      <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-indigo-500/20 rounded-lg text-indigo-400 border border-indigo-500/30">
+          <div className="p-2.5 bg-emerald-700/20 rounded-lg text-emerald-400 border border-emerald-600/30">
             <Icon className="w-5 h-5" />
           </div>
           <div>
@@ -105,15 +106,15 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
         <button
           onClick={handleExport}
           disabled={isExporting || pendingCount === 0}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
+          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
         >
-          <Download className="w-4 h-4 text-indigo-200" />
+          <Download className="w-4 h-4 text-emerald-200" />
           <span>{isExporting ? 'Preparing…' : 'Download EFS Registration File'}</span>
         </button>
       </div>
 
       {/* How this works — collapsed behind dropdown */}
-      <details className="bg-white rounded-xl border border-slate-200/80 shadow-sm group">
+      <details className="bg-white rounded-lg border border-slate-200/80 shadow-sm group">
         <summary className="list-none px-5 py-3 flex items-center justify-between cursor-pointer text-xs font-semibold text-slate-700">
           <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-amber-500" /> How registration works — click for details</span>
           <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition" />
@@ -126,7 +127,7 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
       </details>
 
       {/* Search & Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-lg p-4 border border-slate-200/80 shadow-sm">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
@@ -134,7 +135,7 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
             placeholder={searchHint}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-900"
+            className="w-full pl-10 pr-4 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all text-slate-900"
           />
         </div>
 
@@ -143,7 +144,7 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+            className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all cursor-pointer"
           >
             <option value="ALL">All</option>
             <option value="PENDING_REGISTRATION">Pending Registration</option>
@@ -153,7 +154,7 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
       </div>
 
       {/* Registration Queue */}
-      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-sm">
+      <div className="bg-white rounded-lg border border-slate-200/80 overflow-hidden shadow-sm">
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
           <span className="text-[11px] text-slate-500">Sourced from client ERP activity — not editable here</span>
           <span className="text-[11px] font-semibold text-slate-600">{filtered.length} {entityType === 'CUSTOMER' ? 'customer(s)' : 'item(s)'}</span>
@@ -172,7 +173,7 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
                 <div key={m.id} className="p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className={`shrink-0 p-2 rounded-lg border ${isMapped ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>
+                      <span className="shrink-0 p-2 rounded-lg border bg-white border-slate-200 text-slate-500">
                         {isMapped ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                       </span>
                       <div className="min-w-0">
@@ -181,9 +182,9 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-full border ${isMapped ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      <StatusBadge tone={isMapped ? 'ok' : 'pending'}>
                         {isMapped ? 'REGISTERED' : 'PENDING REGISTRATION'}
-                      </span>
+                      </StatusBadge>
                       {!isMapped && (
                         <button
                           onClick={() => { setExpandedId(isOpen ? null : m.id); setConfirmError(''); setRefCodeDraft(''); }}
@@ -208,12 +209,12 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
                         placeholder="CittaEFS reference code from the upload result"
                         value={refCodeDraft}
                         onChange={(e) => setRefCodeDraft(e.target.value)}
-                        className="w-full sm:w-72 px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        className="w-full sm:w-72 px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all"
                       />
                       <button
                         onClick={() => handleConfirm(m.id)}
                         disabled={isConfirming}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors"
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors"
                       >
                         {isConfirming ? 'Confirming…' : entityType === 'CUSTOMER' ? 'Save & Resubmit Invoices' : 'Save Registration'}
                       </button>

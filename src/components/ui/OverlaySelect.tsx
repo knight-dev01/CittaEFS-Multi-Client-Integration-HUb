@@ -38,7 +38,7 @@ export function OverlaySelect({ value, onChange, options, hint = 'Select', label
         {label && <span className="text-xs font-medium text-slate-600">{label}</span>}
         <button
           onClick={() => { setOpen(true); setQuery(''); }}
-          className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium flex items-center gap-2 hover:border-violet-300 hover:bg-violet-50/30 transition-colors cursor-pointer min-w-[140px] justify-between"
+          className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium flex items-center gap-2 hover:border-slate-300 hover:bg-slate-50/30 transition-colors cursor-pointer min-w-[140px] justify-between"
         >
           <span>{selected?.label || hint}</span>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -46,7 +46,7 @@ export function OverlaySelect({ value, onChange, options, hint = 'Select', label
       </div>
       {open && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
               <span className="font-bold text-slate-900 text-sm">{label || 'Select option'}</span>
               <button onClick={() => setOpen(false)} className="text-xs text-slate-500 hover:text-slate-700 cursor-pointer">Close</button>
@@ -61,7 +61,7 @@ export function OverlaySelect({ value, onChange, options, hint = 'Select', label
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     placeholder="Search…"
-                    className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all"
+                    className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 transition-all"
                   />
                 </div>
               </div>
@@ -75,7 +75,7 @@ export function OverlaySelect({ value, onChange, options, hint = 'Select', label
                   <button
                     key={opt.value}
                     onClick={() => { onChange(opt.value); setOpen(false); }}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-medium flex items-center justify-between border ${active ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-violet-50 hover:border-violet-200 cursor-pointer'}`}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between border ${active ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-200 cursor-pointer'}`}
                   >
                     <span>{opt.label}</span>
                     {active && <Check className="w-3.5 h-3.5" />}

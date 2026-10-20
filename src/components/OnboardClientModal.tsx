@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Sparkles,
   Zap,
-  FileSpreadsheet,
   Layers,
   AlertCircle,
   RefreshCw,
@@ -312,13 +311,13 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto font-sans text-xs">
-      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-5 rounded-2xl border border-slate-200 shadow-xl relative">
+      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-5 rounded-lg border border-slate-200 shadow-xl relative">
 
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-indigo-600" />
+              <Building2 className="w-5 h-5 text-emerald-700" />
               {step === 1 ? 'Onboard ERP Connection' : isResuming ? `Reconnect ${platformType}` : `Connect ${platformType}`}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -345,13 +344,13 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
 
         {/* Step indicator */}
         <div className="flex items-center gap-2 text-[11px] font-semibold">
-          <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500'}`}>
             {step > 1 ? <CheckCircle2 className="w-3.5 h-3.5" /> : '1'}
           </span>
-          <span className={step >= 1 ? 'text-indigo-600' : 'text-slate-400'}>ERP & Channel</span>
+          <span className={step >= 1 ? 'text-emerald-700' : 'text-slate-400'}>ERP & Channel</span>
           <div className="flex-1 h-px bg-slate-200" />
-          <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
-          <span className={step >= 2 ? 'text-indigo-600' : 'text-slate-400'}>Connect ERP</span>
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
+          <span className={step >= 2 ? 'text-emerald-700' : 'text-slate-400'}>Connect ERP</span>
         </div>
 
         {step === 1 ? (
@@ -367,7 +366,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                   onBlur={() => setTouched(prev => ({ ...prev, companyName: true }))}
                   placeholder="e.g. Acme Logistics Ltd"
                   className={`w-full px-3.5 py-2 border rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all ${
-                    nameError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500'
+                    nameError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-emerald-600/20 focus:border-emerald-600'
                   }`}
                   required
                 />
@@ -384,7 +383,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                   placeholder="e.g. P099112233X"
                   maxLength={11}
                   className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${
-                    tinError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500'
+                    tinError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-emerald-600/20 focus:border-emerald-600'
                   }`}
                   required
                 />
@@ -398,7 +397,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                 <select
                   value={marketTier}
                   onChange={(e) => setMarketTier(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all cursor-pointer"
                 >
                   <option value="Enterprise">Enterprise (10,000 monthly invoices)</option>
                   <option value="Mid-Market">Mid-Market (5,000 monthly invoices)</option>
@@ -408,13 +407,13 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               <div />
             </div>
 
-            <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg text-[11px] text-violet-800">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-800">
               Company will be created first — you’ll configure ERPs on the next step. Existing multi-ERP setup (“Companies & ERPs” admin) remains unchanged.
             </div>
 
-            <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-1">
+            <div className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200/80 space-y-1">
               <div className="flex items-center gap-1.5 font-semibold text-slate-900">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
                 <span>ERP Onboarding Protocol:</span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
@@ -435,17 +434,17 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors disabled:opacity-50"
+                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors disabled:opacity-50"
               >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+                <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
                 <span>{isSubmitting ? (tenant ? 'Saving Changes...' : 'Onboarding ERP...') : 'Continue'}</span>
-                {!isSubmitting && <ArrowRight className="w-3.5 h-3.5 text-indigo-200" />}
+                {!isSubmitting && <ArrowRight className="w-3.5 h-3.5 text-emerald-200" />}
               </button>
             </div>
           </form>
         ) : isQbo ? (
           <div className="space-y-4">
-            <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
+            <div className="bg-slate-50/80 p-4 rounded-lg border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
               <div>
                 <span className="text-slate-500 font-medium text-[11px] block">Tenant ID</span>
                 <span className="font-mono font-bold text-slate-900">{tenant?.id}</span>
@@ -456,7 +455,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               </div>
             </div>
             {/* Company first, then ERPs — selector lives in step 2 (not step 1) */}
-            <div className="p-3 bg-white rounded-xl border border-slate-200">
+            <div className="p-3 bg-white rounded-lg border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
@@ -478,10 +477,10 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                         await refreshAll();
                       }
                     }}
-                    className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                    className={`p-3 rounded-lg border-2 text-left cursor-pointer ${platformType===opt ? 'bg-emerald-50 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                   >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : opt==='Odoo ERP' ? <Layers className="w-3.5 h-3.5 text-violet-600"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : opt==='Odoo ERP' ? 'API key + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <Layers className="w-3.5 h-3.5 text-slate-900"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'API key + auto sync'}</span>
                   </button>
                 ))}
               </div>
@@ -489,7 +488,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             </div>
 
             {qboState === 'idle' && (
-              <div className="p-5 bg-white rounded-xl border border-slate-200/80 text-center space-y-3">
+              <div className="p-5 bg-white rounded-lg border border-slate-200/80 text-center space-y-3">
                 <Zap className="w-8 h-8 text-amber-500 mx-auto" />
                 <p className="text-slate-600 text-xs leading-relaxed max-w-sm mx-auto">
                   Click below to open the ERP in a secure popup and authorize CittaEFS to read invoices, customers, and items.
@@ -505,23 +504,23 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             )}
 
             {qboState === 'connecting' && (
-              <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-200/80 text-center space-y-2">
-                <RefreshCw className="w-6 h-6 text-indigo-500 mx-auto animate-spin" />
+              <div className="p-5 bg-slate-50/80 rounded-lg border border-slate-200/80 text-center space-y-2">
+                <RefreshCw className="w-6 h-6 text-emerald-700 mx-auto animate-spin" />
                 <p className="text-slate-600 text-xs">Waiting for authorization in the popup window...</p>
               </div>
             )}
 
             {(qboState === 'connected' || qboState === 'syncing') && (
-              <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-200/80 text-center space-y-2">
-                <RefreshCw className="w-6 h-6 text-indigo-500 mx-auto animate-spin" />
+              <div className="p-5 bg-slate-50/80 rounded-lg border border-slate-200/80 text-center space-y-2">
+                <RefreshCw className="w-6 h-6 text-emerald-700 mx-auto animate-spin" />
                 <p className="text-slate-600 text-xs">QuickBooks connected. Pulling historical invoices, customers, and items...</p>
               </div>
             )}
 
             {qboState === 'synced' && (
-              <div className="p-4 bg-emerald-50 text-emerald-900 rounded-xl border border-emerald-200 space-y-2">
+              <div className="p-4 bg-emerald-50 text-emerald-900 rounded-lg border border-emerald-200 space-y-2">
                 <div className="flex items-center gap-2 font-bold text-sm">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-700" />
                   <span>QuickBooks Online Connected & Synced!</span>
                 </div>
                 <p className="text-xs">
@@ -533,7 +532,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             )}
 
             {qboState === 'error' && (
-              <div className="p-4 bg-rose-50 text-rose-900 rounded-xl border border-rose-200 space-y-2">
+              <div className="p-4 bg-rose-50 text-rose-900 rounded-lg border border-rose-200 space-y-2">
                 <div className="flex items-center gap-2 font-bold text-sm">
                   <AlertCircle className="w-5 h-5 text-rose-600" />
                   <span>Connection Issue</span>
@@ -559,16 +558,16 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               </button>
               <button
                 onClick={onClose}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
+                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
               >
-                <CheckCircle2 className="w-4 h-4 text-indigo-200" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
                 <span>{qboState === 'synced' ? `Go to ${tenant?.name}` : 'Finish Later & Close'}</span>
               </button>
             </div>
           </div>
         ) : isOdoo ? (
           <div className="space-y-4">
-            <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
+            <div className="bg-slate-50/80 p-4 rounded-lg border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
               <div>
                 <span className="text-slate-500 font-medium text-[11px] block">Tenant ID</span>
                 <span className="font-mono font-bold text-slate-900">{tenant?.id}</span>
@@ -578,7 +577,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                 <span className="font-bold text-slate-900">{tenant?.name}</span>
               </div>
             </div>
-            <div className="p-3 bg-white rounded-xl border border-slate-200">
+            <div className="p-3 bg-white rounded-lg border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
@@ -600,10 +599,10 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                         await refreshAll();
                       }
                     }}
-                    className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                    className={`p-3 rounded-lg border-2 text-left cursor-pointer ${platformType===opt ? 'bg-emerald-50 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                   >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : opt==='Odoo ERP' ? <Layers className="w-3.5 h-3.5 text-violet-600"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : opt==='Odoo ERP' ? 'API key + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <Layers className="w-3.5 h-3.5 text-slate-900"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'API key + auto sync'}</span>
                   </button>
                 ))}
               </div>
@@ -611,28 +610,28 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
             </div>
 
             {(odooState === 'idle' || odooState === 'error') && (
-              <form onSubmit={handleConnectOdoo} className="p-5 bg-white rounded-xl border border-slate-200/80 space-y-3">
+              <form onSubmit={handleConnectOdoo} className="p-5 bg-white rounded-lg border border-slate-200/80 space-y-3">
                 <div className="flex items-center gap-2 text-slate-700 font-semibold">
-                  <Layers className="w-5 h-5 text-violet-600" />
+                  <Layers className="w-5 h-5 text-slate-900" />
                   <span>Connect Odoo Instance</span>
                 </div>
                 <p className="text-slate-500 text-[11px]">Generate an API key under Settings → Users → API Keys in the client's Odoo instance, then enter their details below.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block font-medium text-slate-700 mb-1">Odoo URL *</label>
-                    <input type="url" required value={odooForm.odooUrl} onChange={e => setOdooForm(f => ({ ...f, odooUrl: e.target.value }))} placeholder="https://client.odoo.com" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                    <input type="url" required value={odooForm.odooUrl} onChange={e => setOdooForm(f => ({ ...f, odooUrl: e.target.value }))} placeholder="https://client.odoo.com" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all" />
                   </div>
                   <div>
                     <label className="block font-medium text-slate-700 mb-1">Database *</label>
-                    <input type="text" required value={odooForm.odooDatabase} onChange={e => setOdooForm(f => ({ ...f, odooDatabase: e.target.value }))} placeholder="odoo_prod" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                    <input type="text" required value={odooForm.odooDatabase} onChange={e => setOdooForm(f => ({ ...f, odooDatabase: e.target.value }))} placeholder="odoo_prod" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all" />
                   </div>
                   <div>
                     <label className="block font-medium text-slate-700 mb-1">Username / Email *</label>
-                    <input type="text" required value={odooForm.odooUsername} onChange={e => setOdooForm(f => ({ ...f, odooUsername: e.target.value }))} placeholder="integration@client.com" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                    <input type="text" required value={odooForm.odooUsername} onChange={e => setOdooForm(f => ({ ...f, odooUsername: e.target.value }))} placeholder="integration@client.com" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all" />
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block font-medium text-slate-700 mb-1">API Key *</label>
-                    <input type="password" required value={odooForm.odooApiKey} onChange={e => setOdooForm(f => ({ ...f, odooApiKey: e.target.value }))} placeholder="••••••••••••" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" />
+                    <input type="password" required value={odooForm.odooApiKey} onChange={e => setOdooForm(f => ({ ...f, odooApiKey: e.target.value }))} placeholder="••••••••••••" className="w-full px-3.5 py-2 border border-slate-200 rounded-lg font-mono text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all" />
                   </div>
                 </div>
                 {odooState === 'error' && (
@@ -642,23 +641,23 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                   </div>
                 )}
                 <button type="submit" className="w-full px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center justify-center gap-2 transition-colors">
-                  <Layers className="w-3.5 h-3.5 text-violet-400" />
+                  <Layers className="w-3.5 h-3.5 text-slate-400" />
                   <span>Connect & Sync Odoo</span>
                 </button>
               </form>
             )}
 
             {(odooState === 'connecting' || odooState === 'syncing') && (
-              <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-200/80 text-center space-y-2">
-                <RefreshCw className="w-6 h-6 text-indigo-500 mx-auto animate-spin" />
+              <div className="p-5 bg-slate-50/80 rounded-lg border border-slate-200/80 text-center space-y-2">
+                <RefreshCw className="w-6 h-6 text-emerald-700 mx-auto animate-spin" />
                 <p className="text-slate-600 text-xs">{odooState === 'connecting' ? 'Authenticating with Odoo...' : 'Odoo connected. Pulling historical invoices, customers, and items...'}</p>
               </div>
             )}
 
             {odooState === 'synced' && (
-              <div className="p-4 bg-emerald-50 text-emerald-900 rounded-xl border border-emerald-200 space-y-2">
+              <div className="p-4 bg-emerald-50 text-emerald-900 rounded-lg border border-emerald-200 space-y-2">
                 <div className="flex items-center gap-2 font-bold text-sm">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-700" />
                   <span>Odoo ERP Connected & Synced!</span>
                 </div>
                 <p className="text-xs">
@@ -680,16 +679,16 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               </button>
               <button
                 onClick={onClose}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
+                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
               >
-                <CheckCircle2 className="w-4 h-4 text-indigo-200" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
                 <span>{odooState === 'synced' ? `Go to ${tenant?.name}` : 'Finish Later & Close'}</span>
               </button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="p-3 bg-white rounded-xl border border-slate-200">
+            <div className="p-3 bg-white rounded-lg border border-slate-200">
               <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
@@ -711,10 +710,10 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                         await refreshAll();
                       }
                     }}
-                    className={`p-3 rounded-xl border-2 text-left cursor-pointer ${platformType===opt ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                    className={`p-3 rounded-lg border-2 text-left cursor-pointer ${platformType===opt ? 'bg-emerald-50 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                   >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : opt==='Odoo ERP' ? <Layers className="w-3.5 h-3.5 text-violet-600"/> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : opt==='Odoo ERP' ? 'API key + auto sync' : 'Spreadsheet upload + normalize'}</span>
+                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <Layers className="w-3.5 h-3.5 text-slate-900"/>}{opt}</span>
+                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'API key + auto sync'}</span>
                   </button>
                 ))}
               </div>
@@ -731,9 +730,9 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
               </button>
               <button
                 onClick={onClose}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
+                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
               >
-                <CheckCircle2 className="w-4 h-4 text-indigo-200" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
                 <span>Finish Onboarding</span>
               </button>
             </div>

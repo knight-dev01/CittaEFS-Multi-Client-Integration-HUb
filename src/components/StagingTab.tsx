@@ -49,9 +49,9 @@ export function StagingTab({ onNavigate }: { onNavigate?: (t: string) => void } 
 
   return (
     <div className="space-y-6 font-sans text-xs">
-      <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-amber-500 rounded-xl text-slate-950"><Layers className="w-5 h-5" /></div>
+          <div className="p-2 bg-amber-500 rounded-lg text-slate-950"><Layers className="w-5 h-5" /></div>
           <div>
             <h2 className="text-base font-bold flex items-center gap-2">Staging <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/20 rounded-full text-[10px]">PRE-TRANSMISSION</span></h2>
             <p className="text-slate-400 text-xs mt-1">Holding area before CittaEFS gateway — review, normalize, then send. Distinct from <strong className="text-amber-300">Validation</strong> (post-failure).</p>
@@ -60,46 +60,46 @@ export function StagingTab({ onNavigate }: { onNavigate?: (t: string) => void } 
         <div className="flex items-center gap-2 font-sans">
           <button onClick={load} disabled={loading || isBgRefreshing} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer font-sans text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /> Refresh</button>
           <button onClick={goToInvoices} title="Staging is view-only — retry in Invoices (single propagation module)" className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs shadow-sm"><RotateCcw className="w-3.5 h-3.5" /> Go to Invoices to Retry {hasDLQ ? `(${counts.dlqCount} DLQ)` : ''}</button>
-          <button onClick={goToInvoices} title="Staging is view-only — use Invoices Bulk Send" className={`px-3.5 py-1.5 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs shadow-sm ${hasDLQ ? 'bg-slate-600 opacity-60' : 'bg-violet-600 hover:bg-violet-700'}`}><Send className="w-3.5 h-3.5" /> Go to Invoices ({counts.pending} pending)</button>
+          <button onClick={goToInvoices} title="Staging is view-only — use Invoices Bulk Send" className={`px-3.5 py-1.5 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer font-sans text-xs shadow-sm ${hasDLQ ? 'bg-slate-600 opacity-60' : 'bg-slate-600 hover:bg-slate-700'}`}><Send className="w-3.5 h-3.5" /> Go to Invoices ({counts.pending} pending)</button>
         </div>
       </div>
 
       {isAnyPropagating && (
-        <div className="p-3 rounded-xl border border-violet-300 bg-violet-600 text-white flex items-center justify-between gap-3 font-sans shadow-sm">
+        <div className="p-3 rounded-lg border border-slate-300 bg-slate-600 text-white flex items-center justify-between gap-3 font-sans shadow-sm">
           <div className="flex items-center gap-2.5">
-            <Clock className="w-4 h-4 animate-spin text-violet-200" />
+            <Clock className="w-4 h-4 animate-spin text-slate-200" />
             <span className="text-xs font-bold tracking-tight">Propagating to CittaEFS…</span>
             <span className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] font-mono font-bold">{elapsedSec}s elapsed</span>
-            <span className="hidden sm:inline text-[11px] text-violet-100">Buttons dulled until feedback</span>
+            <span className="hidden sm:inline text-[11px] text-slate-100">Buttons dulled until feedback</span>
           </div>
-          <span className="text-[11px] font-mono bg-white/15 px-2 py-1 rounded">Hub → ei-api.azurewebsites.net</span>
+          <span className="text-[11px] font-mono bg-white/15 px-2 py-1 rounded">Citta Gateway → ei-api.azurewebsites.net</span>
         </div>
       )}
 
       <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="text-[10px] font-bold tracking-wider uppercase text-slate-500">Pending Staging</div>
           <div className="text-2xl font-black text-amber-600 mt-1">{counts.pending}</div>
           <div className="text-[11px] text-slate-500">Queued {counts.queued} • Engine {queue.engine}</div>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="text-[10px] font-bold tracking-wider uppercase text-slate-500">Approved</div>
-          <div className="text-2xl font-black text-emerald-600 mt-1">{counts.approved}</div>
+          <div className="text-2xl font-black text-emerald-700 mt-1">{counts.approved}</div>
           <div className="text-[11px] text-slate-500">IRN stamped</div>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="text-[10px] font-bold tracking-wider uppercase text-slate-500">Rejected / DLQ</div>
           <div className="text-2xl font-black text-rose-600 mt-1">{counts.rejected} <span className="text-sm font-bold text-slate-400">/ {counts.dlqCount} DLQ</span></div>
           <div className="text-[11px] text-slate-500">See Validation tab for fix</div>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="text-[10px] font-bold tracking-wider uppercase text-slate-500 flex items-center gap-1"><Database className="w-3 h-3" /> Queue</div>
           <div className="text-xs font-mono mt-1">{queue.queued} queued • {queue.processing} processing • {queue.failedInDLQ} DLQ</div>
           <div className="text-[11px] text-slate-500">{queue.bullMqReady ? 'BullMQ Redis' : 'DB-memory • 5s tick • 5× retry 5s/30s/2m/10m/30m'}</div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200/80 overflow-hidden">
         <div className="px-5 py-3 bg-slate-900 text-white flex items-center justify-between">
           <h3 className="text-xs font-bold flex items-center gap-2"><Clock className="w-4 h-4 text-amber-400" /> Staging Queue — {pending.length} pending (preview 50)</h3>
           <span className="text-[11px] text-slate-400">{activeTenant.name} • DocNumber is source of truth • review HS/TIN before send</span>
@@ -128,7 +128,7 @@ export function StagingTab({ onNavigate }: { onNavigate?: (t: string) => void } 
                       <td className="py-2 px-3 font-mono">{inv.customerTin || 'N/A'}</td>
                       <td className="py-2 px-3 text-center">{inv.lineItems?.length}</td>
                       <td className="py-2 px-3 text-right">NGN {Number(inv.totalAmount||0).toLocaleString()}</td>
-                      <td className="py-2 px-3">{errs.length ? <span className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {errs[0].slice(0,60)}</span> : <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> OK</span>}</td>
+                      <td className="py-2 px-3">{errs.length ? <span className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {errs[0].slice(0,60)}</span> : <span className="text-emerald-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> OK</span>}</td>
                     </tr>
                   )
                 })}
@@ -139,7 +139,7 @@ export function StagingTab({ onNavigate }: { onNavigate?: (t: string) => void } 
       </div>
 
       {dlq.length>0 && (
-        <div className="bg-white rounded-xl border border-rose-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-rose-200 overflow-hidden">
           <div className="px-5 py-3 bg-rose-50 border-b border-rose-200 flex items-center justify-between">
             <h3 className="text-xs font-bold text-rose-900 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> DLQ — {dlq.length} gateway failures (auto 5× exhausted)</h3>
             <span className="text-[11px] text-rose-700">Use Retry buttons in Invoices tab or Staging header</span>
@@ -158,10 +158,10 @@ export function StagingTab({ onNavigate }: { onNavigate?: (t: string) => void } 
         </div>
       )}
 
-      <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-xs space-y-1">
-        <p className="font-bold text-indigo-900">Staging vs Validation — how they differ</p>
-        <ul className="list-disc list-inside text-indigo-800 space-y-1">
-          <li><strong>Staging</strong> (this tab): <em>pre-transmission</em> holding area — invoices are <code className="bg-white px-1 rounded">PENDING_NRS_STAMP</code> in Hub, not yet sent to CittaEFS. You review HS/TIN, edit, approve/re-queue. Source: QBO preview inbox (when auto-enqueue OFF) + Excel import + any pending in Invoices.</li>
+      <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-4 text-xs space-y-1">
+        <p className="font-bold text-emerald-900">Staging vs Validation — how they differ</p>
+        <ul className="list-disc list-inside text-emerald-900 space-y-1">
+          <li><strong>Staging</strong> (this tab): <em>pre-transmission</em> holding area — invoices are <code className="bg-white px-1 rounded">PENDING_NRS_STAMP</code> in the Gateway, not yet sent to CittaEFS. You review HS/TIN, edit, approve/re-queue. Source: QBO preview inbox (when auto-enqueue OFF) + Excel import + any pending in Invoices.</li>
           <li><strong>Validation</strong> tab: <em>post-failure</em> — gateway or pre-flight rejections (`REJECTED`) with `errorCategory` + 1-click fix. Staging feeds Validation on failure.</li>
           <li>With the new retry logic, <strong>Validation suffices for error triage</strong>, but <strong>Staging adds operational clarity</strong> — it is the inbox operators watch. Recommendation: keep both. If you prefer minimalism, we can fold Staging counts into Validation header and hide this tab for OPERATOR.</li>
         </ul>

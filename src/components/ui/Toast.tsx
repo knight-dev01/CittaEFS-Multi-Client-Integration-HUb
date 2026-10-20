@@ -34,9 +34,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none max-w-sm w-[92vw] sm:w-[380px]">
         {toasts.map(t => (
-          <div key={t.id} className={`pointer-events-auto flex items-start gap-3 p-3 pr-2 rounded-xl border shadow-lg backdrop-blur-sm text-xs font-medium animate-[slideIn_0.2s_ease] ${t.type==='success' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : t.type==='error' ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-white border-slate-200 text-slate-800'}`}>
+          <div key={t.id} className={`pointer-events-auto flex items-start gap-3 p-3 pr-2 rounded-lg border shadow-lg backdrop-blur-sm text-xs font-medium animate-[slideIn_0.2s_ease] ${t.type==='success' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : t.type==='error' ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-white border-slate-200 text-slate-800'}`}>
             <span className="mt-0.5">
-              {t.type==='success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : t.type==='error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <Info className="w-4 h-4 text-violet-600" />}
+              {t.type==='success' ? <CheckCircle2 className="w-4 h-4 text-emerald-700" /> : t.type==='error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <Info className="w-4 h-4 text-slate-900" />}
             </span>
             <div className="flex-1 min-w-0">
               <p className="font-bold leading-tight">{t.title}</p>

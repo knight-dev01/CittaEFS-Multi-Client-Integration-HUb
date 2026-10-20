@@ -41,16 +41,16 @@ export function ErpMappingTab() {
 
   return (
     <div className="space-y-6 font-sans text-xs">
-      <div className="bg-slate-900 text-white rounded-xl p-6 border border-slate-800">
+      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800">
         <div className="flex items-center gap-2">
-          <Sliders className="w-5 h-5 text-indigo-400" />
+          <Sliders className="w-5 h-5 text-emerald-400" />
           <h1 className="text-base font-bold tracking-tight">{erp.label} — Field Mapping & Resolution</h1>
         </div>
-        <p className="text-slate-400 text-xs mt-1">Per-ERP dedicated matching, transformation rules, and error resolution. Stored per tenant in <span className="font-mono text-indigo-300">erpConfig</span>.</p>
+        <p className="text-slate-400 text-xs mt-1">Per-ERP dedicated matching, transformation rules, and error resolution. Stored per tenant in <span className="font-mono text-emerald-300">erpConfig</span>.</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 shadow-sm">
-        <h3 className="font-bold text-slate-900 flex items-center gap-2"><Key className="w-4 h-4 text-indigo-600" /> ERP Connection Config</h3>
+      <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-5 shadow-sm">
+        <h3 className="font-bold text-slate-900 flex items-center gap-2"><Key className="w-4 h-4 text-emerald-700" /> ERP Connection Config</h3>
         {erp.configFields.length === 0 ? (
           <p className="text-slate-500">No extra config for this ERP — mapping below is sufficient.</p>
         ) : (
@@ -72,9 +72,9 @@ export function ErpMappingTab() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-sm">
+      <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-slate-900 flex items-center gap-2"><Tag className="w-4 h-4 text-indigo-600" /> Field Mapping Rules <span className="text-[11px] font-normal text-slate-500">({fieldRules.length})</span></h3>
+          <h3 className="font-bold text-slate-900 flex items-center gap-2"><Tag className="w-4 h-4 text-emerald-700" /> Field Mapping Rules <span className="text-[11px] font-normal text-slate-500">({fieldRules.length})</span></h3>
           <button onClick={() => setFieldRules([...fieldRules, { source: '', target: '' }])} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs cursor-pointer">+ Add Rule</button>
         </div>
         <p className="text-slate-500 text-xs">Source (ERP field) ↔ Target (CittaEFS EFS matrix). Used for normalization and for the Validation → Auto-fix suggestions.</p>
@@ -95,7 +95,7 @@ export function ErpMappingTab() {
 
       <div className="flex justify-end items-center gap-3">
         {msg && <span className={`text-xs font-medium ${msg.type==='success'?'text-emerald-700':'text-rose-700'} flex items-center gap-1`}>{msg.type==='success'?<CheckCircle2 className="w-3.5 h-3.5"/>:<AlertCircle className="w-3.5 h-3.5"/>}{msg.text}</span>}
-        <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2"><Save className="w-3.5 h-3.5" /><span>{saving?'Saving...':'Save Mapping & Config'}</span></button>
+        <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer flex items-center gap-2"><Save className="w-3.5 h-3.5" /><span>{saving?'Saving...':'Save Mapping & Config'}</span></button>
       </div>
     </div>
   );

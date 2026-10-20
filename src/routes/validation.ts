@@ -255,34 +255,8 @@ router.post("/api/validation-errors/bulk-resolve", async (req: any, res) => {
 });
 
 // ==========================================
-// 8. AUDIT LOGS & METRICS API (DB Backed)
+// 8. METRICS API (DB Backed)
 // ==========================================
-router.get("/api/audit-logs", async (req: any, res) => {
-  try {
-    const queryTenantId = req.query.tenantId as string | undefined;
-    const { skip, take, page, limit } = parsePagination(req);
-    const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
-    const [total, logs] = await Promise.all([
-      prisma.auditLog.count({ where }),
-      prisma.auditLog.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip,
-        take,
-      }),
-    ]);
-    if (req.query.page !== undefined || req.query.limit !== undefined) {
-      res.json({ data: logs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
-    } else {
-      res.setHeader("X-Total-Count", String(total));
-      res.json(logs);
-    }
-  } catch (e: any) {
-    console.error("[API Error] GET /api/audit-logs failed:", e);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
-
 router.get("/api/metrics", async (req: any, res) => {
   try {
     const scoped = getScopedTenantWhere(req, req.query.tenantId as string | undefined);

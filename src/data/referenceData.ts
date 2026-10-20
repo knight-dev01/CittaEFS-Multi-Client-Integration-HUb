@@ -1,4 +1,4 @@
-import { Tenant, Invoice, CustomerProfile, ItemCodeMapping, ValidationErrorItem, AuditLog, QueueJob, SystemMetrics } from '../types';
+import { Tenant } from '../types';
 import hsCodesRaw from './hsCodes.json';
 import serviceCodesRaw from './serviceCodes.json';
 
@@ -81,23 +81,3 @@ export function searchCittaCodes(query: string): { code: string; name: string; t
   matches.sort((a, b) => Number(aliasCodes.has(b.code)) - Number(aliasCodes.has(a.code)));
   return matches;
 }
-
-export const INITIAL_ITEM_MAPPINGS: ItemCodeMapping[] = [];
-
-export const INITIAL_CUSTOMERS: CustomerProfile[] = [];
-
-export const INITIAL_INVOICES: Invoice[] = [];
-
-export const INITIAL_VALIDATION_ERRORS: ValidationErrorItem[] = [];
-
-export const INITIAL_AUDIT_LOGS: AuditLog[] = [];
-
-export const INITIAL_METRICS: SystemMetrics = {
-  totalInvoicesProcessed: 0,
-  nrsStampSuccessRate: 100.0,
-  averageLatencyMs: 0,
-  activeTenantsCount: 0,
-  pendingValidationCount: 0,
-  reconciliationCronStatus: 'HEALTHY',
-  cittaGatewayStatus: 'ONLINE'
-};

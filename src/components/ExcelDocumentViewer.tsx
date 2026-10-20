@@ -775,11 +775,11 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
     <div className="space-y-6 font-sans text-xs">
 
       {/* Top Banner Toolbar */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-5 space-y-5 shadow-sm">
+      <div className="bg-white rounded-lg border border-slate-200/80 p-5 space-y-5 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600 border border-emerald-100">
+              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-700 border border-emerald-100">
                 <FileSpreadsheet className="w-5 h-5" />
               </div>
               <div>
@@ -814,7 +814,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             <button
               onClick={handleNormalizeMasterData}
               disabled={isProcessing || rows.length === 0}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center gap-2 shadow-sm transition-all"
+              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center gap-2 shadow-sm transition-all"
             >
               <Sparkles className="w-4 h-4" />
               <span>Normalize Master Data</span>
@@ -836,7 +836,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           <div className={`p-3.5 rounded-lg border text-xs font-medium flex items-center gap-2.5 ${statusMsg.type === 'error' ? 'bg-rose-50 text-rose-800 border-rose-200' :
               statusMsg.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-slate-50 text-slate-800 border-slate-200'
             }`}>
-            {statusMsg.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />}
+            {statusMsg.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />}
             <span>{statusMsg.text}</span>
           </div>
         )}
@@ -846,7 +846,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
           const invalid = rows.filter(r => getRowErrors(r).length>0);
           if (invalid.length===0) return null;
           return (
-            <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs">
+            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs">
               <div className="font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4 text-amber-600" /> {invalid.length} row(s) have missing/invalid fields — highlighted red below. Fix before Send.</div>
               <ul className="list-disc list-inside mt-1 space-y-0.5">
                 {invalid.slice(0,3).map(r=> <li key={r.id}><span className="font-mono font-semibold">{r.clientInvoiceNumber}</span> — {getRowErrors(r).join('; ')}</li>)}
@@ -867,7 +867,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
 
           <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
             <span className="text-[10px] text-slate-400 font-semibold uppercase block">Invoices / Lines</span>
-            <span className="font-semibold text-indigo-600 mt-0.5 block">{uniqueInvoicesCount} Invoices ({filteredRows.length} Lines)</span>
+            <span className="font-semibold text-emerald-700 mt-0.5 block">{uniqueInvoicesCount} Invoices ({filteredRows.length} Lines)</span>
           </div>
 
           <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
@@ -882,7 +882,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
 
           <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70 col-span-2 sm:col-span-1">
             <span className="text-[10px] text-slate-400 font-semibold uppercase block">Grand Total</span>
-            <span className="font-bold text-emerald-600 mt-0.5 block">NGN {grandTotal.toLocaleString()}</span>
+            <span className="font-bold text-emerald-700 mt-0.5 block">NGN {grandTotal.toLocaleString()}</span>
           </div>
         </div>
 
@@ -895,7 +895,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Filter by Invoice #, Customer, or SKU..."
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
             />
           </div>
 
@@ -904,13 +904,13 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
               onClick={handleAddRow}
               className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg border border-slate-200 cursor-pointer flex items-center gap-1.5 transition-all"
             >
-              <Plus className="w-3.5 h-3.5 text-indigo-600" />
+              <Plus className="w-3.5 h-3.5 text-emerald-700" />
               <span>Add Row</span>
             </button>
 
             <button
               onClick={handleExportEFSTemplate}
-              className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-lg border border-violet-700 cursor-pointer flex items-center gap-1.5 transition-all"
+              className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white font-semibold text-xs rounded-lg border border-slate-700 cursor-pointer flex items-center gap-1.5 transition-all"
               title="Export 3-sheet EFS Template (Invoices/Customer/Product) matching EFS Template.xlsx"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -921,7 +921,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
               onClick={() => handleExportSpreadsheet('xlsx')}
               className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg border border-slate-200 cursor-pointer flex items-center gap-1.5 transition-all"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <Download className="w-3.5 h-3.5 text-emerald-700" />
               <span>Export .xlsx</span>
             </button>
 
@@ -929,7 +929,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
               onClick={() => handleExportSpreadsheet('csv')}
               className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg border border-slate-200 cursor-pointer flex items-center gap-1.5 transition-all"
             >
-              <Download className="w-3.5 h-3.5 text-indigo-600" />
+              <Download className="w-3.5 h-3.5 text-emerald-700" />
               <span>Export .csv</span>
             </button>
           </div>
@@ -937,7 +937,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
       </div>
 
       {/* Interactive Grid Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 overflow-x-auto shadow-sm">
+      <div className="bg-white rounded-lg border border-slate-200/80 overflow-x-auto shadow-sm">
         <table className="w-full text-left border-collapse min-w-[1200px]">
           <thead>
             <tr className="bg-slate-50/80 text-slate-600 uppercase text-[10px] font-semibold tracking-wider border-b border-slate-200">
@@ -973,7 +973,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                 const lineSubtotal = row.quantity * row.unitPrice;
 
                 return (
-                  <tr key={row.id} className="hover:bg-indigo-50/30 transition-colors">
+                  <tr key={row.id} className="hover:bg-emerald-50/30 transition-colors">
 
                     {/* Index */}
                     <td className="p-2.5 text-center font-semibold text-slate-400">
@@ -986,7 +986,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         type="text"
                         value={row.clientInvoiceNumber}
                         onChange={(e) => handleCellChange(row.id, 'clientInvoiceNumber', e.target.value)}
-                        className={`w-full px-2 py-1 font-semibold text-slate-900 rounded border focus:ring-1 focus:outline-none uppercase text-xs ${getRowErrors(row).some(e=>e.includes('Invoice #')) ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 bg-white'}`}
+                        className={`w-full px-2 py-1 font-semibold text-slate-900 rounded border focus:ring-1 focus:outline-none uppercase text-xs ${getRowErrors(row).some(e=>e.includes('Invoice #')) ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 focus:border-emerald-600 focus:ring-emerald-600 bg-white'}`}
                       />
                     </td>
 
@@ -995,7 +995,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                       <select
                         value={row.invoiceKind}
                         onChange={(e) => handleCellChange(row.id, 'invoiceKind', e.target.value)}
-                        className="w-full px-2 py-1 font-semibold text-slate-800 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white cursor-pointer text-xs"
+                        className="w-full px-2 py-1 font-semibold text-slate-800 rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white cursor-pointer text-xs"
                       >
                         <option value="B2B">B2B</option>
                         <option value="B2C">B2C</option>
@@ -1010,7 +1010,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         type="date"
                         value={row.issueDate}
                         onChange={(e) => handleCellChange(row.id, 'issueDate', e.target.value)}
-                        className="w-full px-2 py-1 font-medium text-slate-800 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs"
+                        className="w-full px-2 py-1 font-medium text-slate-800 rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs"
                       />
                     </td>
 
@@ -1022,7 +1022,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                           value={row.customerName}
                           onChange={(e) => handleCellChange(row.id, 'customerName', e.target.value)}
                           placeholder="Customer Name"
-                          className="w-full px-2 py-1 font-semibold text-slate-900 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs"
+                          className="w-full px-2 py-1 font-semibold text-slate-900 rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs"
                         />
                         <button
                           type="button"
@@ -1045,7 +1045,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
 
                         {isPartyNorm ? (
                           <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-medium text-[9px] rounded-full border border-emerald-200 flex items-center gap-1">
-                            <Check className="w-3 h-3 text-emerald-600" /> Matched
+                            <Check className="w-3 h-3 text-emerald-700" /> Matched
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-medium text-[9px] rounded-full border border-amber-200 flex items-center gap-1">
@@ -1056,8 +1056,8 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
 
                       {/* Dropdown Picker Popup for Customer */}
                       {showDictionaryPicker?.rowId === row.id && showDictionaryPicker.type === 'customer' && (
-                        <div className="p-3 bg-slate-900 text-white rounded-xl shadow-xl space-y-2 mt-1 z-20 relative border border-slate-800">
-                          <span className="text-[10px] text-indigo-400 font-semibold uppercase block">
+                        <div className="p-3 bg-slate-900 text-white rounded-lg shadow-xl space-y-2 mt-1 z-20 relative border border-slate-800">
+                          <span className="text-[10px] text-emerald-400 font-semibold uppercase block">
                             Master Customer Directory:
                           </span>
                           <div className="max-h-36 overflow-y-auto space-y-1">
@@ -1066,7 +1066,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                                 key={c.id}
                                 type="button"
                                 onClick={() => assignCustomerFromMaster(row.id, c.clientCustomerCode)}
-                                className="w-full text-left px-2.5 py-1.5 bg-slate-800 hover:bg-indigo-600 text-white text-[11px] rounded font-medium flex justify-between items-center cursor-pointer transition-colors"
+                                className="w-full text-left px-2.5 py-1.5 bg-slate-800 hover:bg-emerald-700 text-white text-[11px] rounded font-medium flex justify-between items-center cursor-pointer transition-colors"
                               >
                                 <span>{c.name} ({c.clientCustomerCode})</span>
                                 <span className="text-slate-400">{c.tin}</span>
@@ -1083,7 +1083,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         type="text"
                         value={row.customerTin}
                         onChange={(e) => handleCellChange(row.id, 'customerTin', e.target.value)}
-                        className="w-full px-2 py-1 font-mono font-medium text-slate-800 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs uppercase"
+                        className="w-full px-2 py-1 font-mono font-medium text-slate-800 rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs uppercase"
                       />
                     </td>
 
@@ -1094,7 +1094,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                           type="text"
                           value={row.itemCode}
                           onChange={(e) => handleCellChange(row.id, 'itemCode', e.target.value)}
-                          className="w-full px-2 py-1 font-mono font-medium text-slate-900 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs uppercase"
+                          className="w-full px-2 py-1 font-mono font-medium text-slate-900 rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs uppercase"
                         />
                         <button
                           type="button"
@@ -1109,7 +1109,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                       <div className="flex items-center justify-end">
                         {isItemNorm ? (
                           <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-medium text-[9px] rounded-full border border-emerald-200 flex items-center gap-1">
-                            <Check className="w-3 h-3 text-emerald-600" /> SKU Mapped
+                            <Check className="w-3 h-3 text-emerald-700" /> SKU Mapped
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-medium text-[9px] rounded-full border border-amber-200 flex items-center gap-1">
@@ -1120,8 +1120,8 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
 
                       {/* Dropdown Picker Popup for SKU */}
                       {showDictionaryPicker?.rowId === row.id && showDictionaryPicker.type === 'item' && (
-                        <div className="p-3 bg-slate-900 text-white rounded-xl shadow-xl space-y-2 mt-1 z-20 relative border border-slate-800">
-                          <span className="text-[10px] text-indigo-400 font-semibold uppercase block">
+                        <div className="p-3 bg-slate-900 text-white rounded-lg shadow-xl space-y-2 mt-1 z-20 relative border border-slate-800">
+                          <span className="text-[10px] text-emerald-400 font-semibold uppercase block">
                             Master SKU Classification:
                           </span>
                           <div className="max-h-36 overflow-y-auto space-y-1">
@@ -1130,10 +1130,10 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                                 key={m.id}
                                 type="button"
                                 onClick={() => assignItemFromMaster(row.id, m.clientSku)}
-                                className="w-full text-left px-2.5 py-1.5 bg-slate-800 hover:bg-indigo-600 text-white text-[11px] rounded font-medium flex justify-between items-center cursor-pointer transition-colors"
+                                className="w-full text-left px-2.5 py-1.5 bg-slate-800 hover:bg-emerald-700 text-white text-[11px] rounded font-medium flex justify-between items-center cursor-pointer transition-colors"
                               >
                                 <span>{m.description} ({m.clientSku})</span>
-                                <span className="text-indigo-300">{m.hsOrServiceCode}</span>
+                                <span className="text-emerald-300">{m.hsOrServiceCode}</span>
                               </button>
                             ))}
                           </div>
@@ -1147,7 +1147,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         type="text"
                         value={row.description}
                         onChange={(e) => handleCellChange(row.id, 'description', e.target.value)}
-                        className="w-full px-2 py-1 font-medium text-slate-900 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs"
+                        className="w-full px-2 py-1 font-medium text-slate-900 rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs"
                       />
                     </td>
 
@@ -1158,7 +1158,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         min="1"
                         value={row.quantity}
                         onChange={(e) => handleCellChange(row.id, 'quantity', Number(e.target.value))}
-                        className="w-20 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-20 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
 
@@ -1169,7 +1169,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         min="0"
                         value={row.unitPrice}
                         onChange={(e) => handleCellChange(row.id, 'unitPrice', Number(e.target.value))}
-                        className="w-28 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-28 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
 
@@ -1184,7 +1184,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         type="text"
                         value={row.hsOrServiceCode}
                         onChange={(e) => handleCellChange(row.id, 'hsOrServiceCode', e.target.value)}
-                        className="w-full px-2 py-1 font-mono font-medium text-slate-900 rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs uppercase"
+                        className="w-full px-2 py-1 font-mono font-medium text-slate-900 rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs uppercase"
                       />
                     </td>
 
@@ -1194,7 +1194,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
                         type="number"
                         value={row.vatRate}
                         onChange={(e) => handleCellChange(row.id, 'vatRate', Number(e.target.value))}
-                        className="w-16 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-16 px-2 py-1 font-semibold text-slate-900 text-right rounded border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none bg-white text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
 
@@ -1218,9 +1218,9 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
       </div>
 
       {/* Bottom Master Data Sync Banner */}
-      <div className="p-5 bg-slate-900 text-white rounded-xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="p-5 bg-slate-900 text-white rounded-lg shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400 shrink-0 mt-0.5">
+          <div className="p-2 bg-emerald-700/20 rounded-lg text-emerald-400 shrink-0 mt-0.5">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
@@ -1236,9 +1236,9 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
         <button
           onClick={handleNormalizeMasterData}
           disabled={isProcessing}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer shrink-0 flex items-center gap-2 transition-all"
+          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer shrink-0 flex items-center gap-2 transition-all"
         >
-          <Sparkles className="w-4 h-4 text-indigo-200" />
+          <Sparkles className="w-4 h-4 text-emerald-200" />
           <span>Sync Master Dictionary</span>
         </button>
       </div>
@@ -1246,7 +1246,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
       {/* Preview Modal — grouped invoices before gateway send */}
       {showPreview && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-50 max-w-5xl w-full max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-6 my-8">
+          <div className="bg-slate-50 max-w-5xl w-full max-h-[90vh] overflow-y-auto rounded-lg border border-slate-200 shadow-2xl p-6 space-y-6 my-8">
             <div className="flex items-center justify-between sticky top-0 bg-slate-50 pb-3 border-b border-slate-200">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Preview Invoices Before Gateway Submission</h3>

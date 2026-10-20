@@ -1,7 +1,57 @@
 @import "tailwindcss";
 
-/* Ensure full viewport height */
-html, body, #root {
+/* ==========================================================================
+   CittaHub design system — "Charcoal + Emerald"
+   --------------------------------------------------------------------------
+   Two brand colors only: slate (charcoal) neutrals + a single emerald accent.
+   Everything else is a reserved STATUS color and may appear ONLY inside
+   status badges/dots (see StatusBadge.tsx) — never as decoration.
+
+     accent ............ emerald-700 — primary actions, links, active nav.
+                         Chosen so white button labels pass WCAG AA (5.5:1).
+     accent-strong ..... emerald-800 — hover/pressed.
+     accent-bright ..... emerald-400 — accent on dark (slate-900) surfaces.
+     accent-soft/line .. emerald-50/300 — tints for chips and focus hints.
+     ink ............... slate-900 — text and numbers. Hierarchy comes from
+                         weight and size, NOT from extra hues.
+     ink-soft/faint .... slate-600/400 — secondary and tertiary text.
+     surface/line ...... slate-50/200 — page and border.
+
+   Simplified UI rules (applied across components):
+     1. ONE radius scale: rounded-lg (8px) for cards/panels/buttons/inputs;
+        rounded-md for chips; rounded-full only for status pills and avatars.
+     2. Cards are flat: 1px border, no decorative shadows, no colored headers.
+     3. Status badges are solid-filled and reserved (ok / pending / fail /
+        neutral) — the only place amber, rose and slate-as-state appear.
+     4. No gradients, no glows, no decorative brand color on icons.
+     5. Section titles: text-sm font-semibold text-ink.
+        Captions/micro-labels: text-xs text-ink-faint.
+   ========================================================================== */
+
+@theme {
+  --color-ink: #0f172a;
+  --color-ink-soft: #475569;
+  --color-ink-faint: #94a3b8;
+
+  --color-surface: #f8fafc;
+  --color-line: #e2e8f0;
+
+  --color-accent: #047857;
+  --color-accent-strong: #065f46;
+  --color-accent-bright: #34d399;
+  --color-accent-soft: #ecfdf5;
+  --color-accent-line: #a7f3d0;
+}
+
+html,
+body,
+#root {
   min-height: 100vh;
   height: 100%;
+}
+
+/* Single focus treatment everywhere — accent, never a stray hue */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }

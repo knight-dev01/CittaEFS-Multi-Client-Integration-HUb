@@ -126,16 +126,16 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto font-sans text-xs">
-      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-4 rounded-2xl border border-slate-200 shadow-xl relative">
+      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-4 rounded-lg border border-slate-200 shadow-xl relative">
 
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Send className="w-4 h-4 text-indigo-600" />
+              <Send className="w-4 h-4 text-emerald-700" />
               Test Invoice Transmission Gateway
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Dispatches live payload to <code className="bg-slate-100 text-indigo-700 px-1.5 py-0.5 rounded font-mono text-[11px]">POST /api/integration/gen/invoices</code> for {activeTenant.name}
+              Dispatches live payload to <code className="bg-slate-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono text-[11px]">POST /api/integration/gen/invoices</code> for {activeTenant.name}
             </p>
           </div>
           <button
@@ -155,7 +155,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                 type="text"
                 value={invNum}
                 onChange={(e) => setInvNum(e.target.value)}
-                className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${triedSubmit && getFieldErr('invNum') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
+                className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${triedSubmit && getFieldErr('invNum') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-emerald-600 focus:ring-emerald-600/20'}`}
                 required
               />
               {triedSubmit && getFieldErr('invNum') && <span className="text-[11px] text-rose-600 font-medium">{getFieldErr('invNum')}</span>}
@@ -166,7 +166,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
               <select
                 value={kind}
                 onChange={(e) => setKind(e.target.value as any)}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all cursor-pointer"
               >
                 <option value="B2B">B2B (Corporate)</option>
                 <option value="B2C">B2C (Retail)</option>
@@ -179,7 +179,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as any)}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all cursor-pointer"
               >
                 <option value="STANDARD">STANDARD</option>
                 <option value="CREDIT_NOTE">CREDIT NOTE</option>
@@ -195,7 +195,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                 type="text"
                 value={custName}
                 onChange={(e) => setCustName(e.target.value)}
-                className={`w-full px-3.5 py-2 border rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all ${triedSubmit && getFieldErr('custName') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
+                className={`w-full px-3.5 py-2 border rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all ${triedSubmit && getFieldErr('custName') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-emerald-600 focus:ring-emerald-600/20'}`}
                 required
               />
               {triedSubmit && getFieldErr('custName') && <span className="text-[11px] text-rose-600 font-medium">{getFieldErr('custName')}</span>}
@@ -209,7 +209,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                   value={custTin}
                   onChange={(e) => setCustTin(e.target.value)}
                   placeholder="e.g. P019283746Z"
-                  className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${triedSubmit && getFieldErr('custTin') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
+                  className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${triedSubmit && getFieldErr('custTin') ? 'border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 focus:border-emerald-600 focus:ring-emerald-600/20'}`}
                   required
                 />
                 {triedSubmit && getFieldErr('custTin') && <span className="text-[11px] text-rose-600 font-medium">{getFieldErr('custTin')}</span>}
@@ -224,7 +224,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
               <button
                 type="button"
                 onClick={handleAddLine}
-                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold border border-indigo-200 rounded-lg text-xs cursor-pointer inline-flex items-center space-x-1 transition-colors"
+                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300 rounded-lg text-xs cursor-pointer inline-flex items-center space-x-1 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Item Line</span>
@@ -232,7 +232,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
             </div>
 
             {lineItems.map((item, idx) => (
-              <div key={idx} className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2.5">
+              <div key={idx} className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200/80 space-y-2.5">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <div className="sm:col-span-1">
                     <label className="text-[11px] text-slate-500 font-medium block mb-1">Item SKU</label>
@@ -240,7 +240,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                       type="text"
                       value={item.itemCode}
                       onChange={(e) => handleLineChange(idx, 'itemCode', e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 uppercase"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 uppercase"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -249,7 +249,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                       type="text"
                       value={item.description}
                       onChange={(e) => handleLineChange(idx, 'description', e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
                     />
                   </div>
                   <div>
@@ -258,7 +258,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                       type="number"
                       value={item.unitPrice}
                       onChange={(e) => handleLineChange(idx, 'unitPrice', Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
                     />
                   </div>
                 </div>
@@ -270,7 +270,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                       type="number"
                       value={item.quantity}
                       onChange={(e) => handleLineChange(idx, 'quantity', Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
                     />
                   </div>
 
@@ -280,7 +280,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                       <select
                         value={item.hsOrServiceCode}
                         onChange={(e) => handleLineChange(idx, 'hsOrServiceCode', e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 cursor-pointer"
                       >
                         <option value="UNMAPPED">UNMAPPED (Trigger Pre-flight Error)</option>
                         <optgroup label="HS Codes">
@@ -312,10 +312,10 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
           </div>
 
           {responseResult && (
-            <div className={`p-4 rounded-xl border text-xs space-y-1 shadow-sm ${responseResult.success ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-medium' : 'bg-rose-50 text-rose-900 border-rose-200 font-medium'
+            <div className={`p-4 rounded-lg border text-xs space-y-1 shadow-sm ${responseResult.success ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-medium' : 'bg-rose-50 text-rose-900 border-rose-200 font-medium'
               }`}>
               <div className="flex items-center space-x-2 font-semibold">
-                {responseResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+                {responseResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-700" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
                 <span>{responseResult.message || 'Gateway Response Returned'}</span>
               </div>
               {responseResult.cittaResponse?.irn && (
@@ -334,7 +334,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors"
+              className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors"
             >
               <Eye className="w-3.5 h-3.5" />
               <span>Preview Invoice</span>
@@ -346,7 +346,7 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
         {/* Preview Overlay — shows everything before CittaEFS send */}
         {showPreview && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-slate-50 max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4 my-8">
+            <div className="bg-slate-50 max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-lg border border-slate-200 shadow-2xl p-6 space-y-4 my-8">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900">Confirm Invoice Transmission</h3>
                 <button onClick={() => setShowPreview(false)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 cursor-pointer"><X className="w-4 h-4" /></button>
