@@ -3,6 +3,7 @@ import { useHub } from '../lib/store';
 import { ERP_REGISTRY } from '../config/erpRegistry';
 import { Building2, Plus, Trash2, Settings, UserPlus, CheckCircle2, AlertCircle, Plug, Users, Shield } from 'lucide-react';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
+import { PageHeader } from './ui/PageHeader';
 
 export function AdminTenantsTab() {
   const { tenants, tenantErps, activeTenant, addTenantErp, removeTenantErp, createTenantUser, currentUser } = useHub() as any;
@@ -77,13 +78,11 @@ export function AdminTenantsTab() {
 
   return (
     <div className="space-y-6 font-sans text-xs">
-      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800">
-        <div className="flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-slate-400" />
-          <h1 className="text-base font-bold">Companies & ERPs</h1>
-        </div>
-        <p className="text-slate-400 text-xs mt-1">Admin: add companies, attach multiple ERPs per company, and create logins. Each ERP is isolated (own config, own pull, same CittaEFS shared key <span className="font-mono text-slate-300">CITTAEFS_API_KEY</span>).</p>
-      </div>
+      <PageHeader
+        icon={Building2}
+        title="Companies & ERPs"
+        subtitle={<>Admin: add companies, attach multiple ERPs per company, and create logins. Each ERP is isolated (own config, own pull, same CittaEFS shared key <span className="font-mono text-slate-300">CITTAEFS_API_KEY</span>).</>}
+      />
 
       {/* Company selector */}
       <div className="bg-white rounded-lg border border-slate-200 p-4 flex flex-wrap items-center gap-3">

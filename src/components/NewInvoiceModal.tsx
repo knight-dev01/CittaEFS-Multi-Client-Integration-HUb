@@ -1,6 +1,6 @@
 import React, { useState, FormEvent } from 'react';
 import { useHub } from '../lib/store';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
+import { CittaCodeSelect } from './ui/CittaCodeSelect';
 import { InvoicePreview } from './InvoicePreview';
 import { Send, Plus, Trash2, X, AlertCircle, CheckCircle2, Eye } from 'lucide-react';
 
@@ -277,23 +277,11 @@ export function NewInvoiceModal({ isOpen, onClose }: NewInvoiceModalProps) {
                   <div className="sm:col-span-2 flex items-center space-x-2">
                     <div className="flex-1">
                       <label className="text-[11px] text-slate-500 font-medium block mb-1">Compliance Code (hsOrServiceCode)</label>
-                      <select
-                        value={item.hsOrServiceCode}
-                        onChange={(e) => handleLineChange(idx, 'hsOrServiceCode', e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 cursor-pointer"
-                      >
-                        <option value="UNMAPPED">UNMAPPED (Trigger Pre-flight Error)</option>
-                        <optgroup label="HS Codes">
-                          {CITTA_HS_CODES_REFERENCE.map(c => (
-                            <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Service Codes">
-                          {CITTA_SERVICE_CODES_REFERENCE.map(s => (
-                            <option key={s.code} value={s.code}>{s.code} - {s.name}</option>
-                          ))}
-                        </optgroup>
-                      </select>
+                      <CittaCodeSelect
+                        value={item.hsOrServiceCode === 'UNMAPPED' ? '' : item.hsOrServiceCode}
+                        onChange={(code) => handleLineChange(idx, 'hsOrServiceCode', code || 'UNMAPPED')}
+                        hint="Search HS or service code…"
+                      />
                     </div>
 
                     {lineItems.length > 1 && (

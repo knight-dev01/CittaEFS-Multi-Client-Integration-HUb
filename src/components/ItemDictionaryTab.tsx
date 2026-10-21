@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useHub } from '../lib/store';
 import { ItemCodeMapping } from '../types';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, getCittaCodeType } from '../data/referenceData';
 import { 
   BookOpen, 
   Search, 
@@ -16,6 +15,8 @@ import {
 import { OverlaySelect } from './ui/OverlaySelect';
 import { EntityRegistrationQueue } from './EntityRegistrationQueue';
 import { StatusBadge, statusTone } from './ui/StatusBadge';
+import { CittaCodeSelect } from './ui/CittaCodeSelect';
+import { PageHeader } from './ui/PageHeader';
 
 export function ItemDictionaryTab() {
   const { itemMappings, activeTenant, addItemMapping, autoMapItems, deleteItem } = useHub() as any;
@@ -33,6 +34,7 @@ export function ItemDictionaryTab() {
   const [unitCode, setUnitCode] = useState('EA');
   const [category, setCategory] = useState('General Merchandise');
   const [selectedCode, setSelectedCode] = useState('');
+  const [pickedCodeMeta, setPickedCodeMeta] = useState<{ name: string; type: 'HS_CODE' | 'SERVICE_CODE' } | null>(null);
   const [vatRate, setVatRate] = useState(activeTenant?.defaultVatRate ?? 7.5);
 
   const tenantMappings = itemMappings.filter(m => m.tenantId === activeTenant.id);
@@ -52,10 +54,6 @@ export function ItemDictionaryTab() {
   const handleSaveMapping = async () => {
     if (!sku || !selectedCode) return;
 
-    const isService = getCittaCodeType(selectedCode) === 'SERVICE_CODE';
-    const refList = isService ? CITTA_SERVICE_CODES_REFERENCE : CITTA_HS_CODES_REFERENCE;
-    const refObj = refList.find(r => r.code === selectedCode);
-
     await addItemMapping({
       clientSku: sku,
       name: itemName || desc || 'Catalog Item',
@@ -63,8 +61,8 @@ export function ItemDictionaryTab() {
       unitCode: unitCode || 'EA',
       category: category,
       hsOrServiceCode: selectedCode,
-      codeType: isService ? 'SERVICE_CODE' : 'HS_CODE',
-      codeDescription: refObj?.name || 'CittaEFS Mapped Code',
+      codeType: pickedCodeMeta?.type || 'HS_CODE',
+      codeDescription: pickedCodeMeta?.name || 'CittaEFS Mapped Code',
       defaultVatRate: vatRate,
       status: 'MAPPED'
     });
@@ -86,23 +84,11 @@ export function ItemDictionaryTab() {
     <div className="space-y-6 font-sans text-xs">
       
       {/* Top Banner & Actions */}
-      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-emerald-700/20 rounded-lg text-emerald-400 border border-emerald-600/30">
-            <BookOpen className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold tracking-tight text-white">
-              {activeTenant.name} Code Dictionary
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Maps internal client SKUs to official NRS Regulatory Codes (<strong className="text-slate-200 font-medium">hsOrServiceCode</strong>) for tax-code inference — a Gateway-owned lookup, distinct from CittaEFS item registration
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        icon={BookOpen}
+        title={<>{activeTenant.name} Code Dictionary</>}
+        subtitle={<>Maps internal client SKUs to official NRS Regulatory Codes (<strong className="text-slate-200 font-medium">hsOrServiceCode</strong>) for tax-code inference — a Gateway-owned lookup, distinct from CittaEFS item registration</>}
+        actions={<>
           
           {unmappedCount > 0 && (
             <button
@@ -123,9 +109,8 @@ export function ItemDictionaryTab() {
             <span>Add Item Mapping</span>
           </button>
 
-        </div>
-
-      </div>
+        </>}
+      />
 
       {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-lg p-4 border border-slate-200/80 shadow-sm">
@@ -330,14 +315,11 @@ export function ItemDictionaryTab() {
                 <label className="block font-medium text-slate-700 mb-1">
                   Regulatory Compliance Code (HS or Service Code) *
                 </label>
-                <OverlaySelect
+                <CittaCodeSelect
                   value={selectedCode}
                   onChange={setSelectedCode}
-                  options={[
-                    ...CITTA_HS_CODES_REFERENCE.map(c => ({ value: c.code, label: `${c.code} — ${c.name} (HS)` })),
-                    ...CITTA_SERVICE_CODES_REFERENCE.map(s => ({ value: s.code, label: `${s.code} — ${s.name} (Service)` })),
-                  ]}
-                  hint="Select HS/Service Code"
+                  onPick={(m) => setPickedCodeMeta({ name: m.name, type: m.type })}
+                  hint="Search HS or service code…"
                 />
               </div>
 

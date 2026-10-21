@@ -191,17 +191,15 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const refreshAll = async () => {
     return withLoading(async () => {
       try {
-        const fetchOrNull = (url: string) => safeFetchJson(url).catch(() => null);
-
-        const [tenRes, invRes, custRes, itemRes, entityMapRes, errRes, metRes] = await Promise.all([
-          fetchOrNull('/api/tenants'),
-          fetchOrNull('/api/invoices'),
-          fetchOrNull('/api/customers'),
-          fetchOrNull('/api/items/mappings'),
-          fetchOrNull('/api/entity-mappings'),
-          fetchOrNull('/api/validation-errors'),
-          fetchOrNull('/api/metrics')
-        ]);
+        // Single round-trip: GET /api/bootstrap returns all seven datasets
+        // ({ tenants, invoices, customers, itemMappings, entityMappings,
+        // validationErrors, metrics }) instead of seven parallel requests.
+        // Falls back to preserving local state when unavailable.
+        const boot: any = await safeFetchJson('/api/bootstrap').catch(() => null);
+        const has = boot && typeof boot === 'object' && !boot.success;
+        const [tenRes, invRes, custRes, itemRes, entityMapRes, errRes, metRes] = has
+          ? [boot.tenants, boot.invoices, boot.customers, boot.itemMappings, boot.entityMappings, boot.validationErrors, boot.metrics]
+          : [null, null, null, null, null, null, null];
 
         // Avoid resetting current activity: only update state if data actually changed
         const isSameIds = (a: any[], b: any[]) => a.length === b.length && a.every((x, i) => x.id === b[i]?.id && JSON.stringify(x) === JSON.stringify(b[i]));

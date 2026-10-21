@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { StatusBadge } from './ui/StatusBadge';
+import { PageHeader } from './ui/PageHeader';
 
 interface Props {
   entityType: 'CUSTOMER' | 'ITEM';
@@ -88,30 +89,21 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
     <div className="space-y-6 font-sans text-xs">
 
       {/* Header Banner */}
-      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-emerald-700/20 rounded-lg text-emerald-400 border border-emerald-600/30">
-            <Icon className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold tracking-tight text-white">
-              {activeTenant.name} — {title}
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {subtitle}{pendingCount > 0 ? ` — ${pendingCount} awaiting registration` : ''}
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={handleExport}
-          disabled={isExporting || pendingCount === 0}
-          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
-        >
-          <Download className="w-4 h-4 text-emerald-200" />
-          <span>{isExporting ? 'Preparing…' : 'Download EFS Registration File'}</span>
-        </button>
-      </div>
+      <PageHeader
+        icon={Icon}
+        title={<>{activeTenant.name} — {title}</>}
+        subtitle={<>{subtitle}{pendingCount > 0 ? ` — ${pendingCount} awaiting registration` : ''}</>}
+        actions={
+          <button
+            onClick={handleExport}
+            disabled={isExporting || pendingCount === 0}
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center space-x-2 shrink-0"
+          >
+            <Download className="w-4 h-4 text-emerald-200" />
+            <span>{isExporting ? 'Preparing…' : 'Download EFS Registration File'}</span>
+          </button>
+        }
+      />
 
       {/* How this works — collapsed behind dropdown */}
       <details className="bg-white rounded-lg border border-slate-200/80 shadow-sm group">

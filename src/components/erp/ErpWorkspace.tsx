@@ -1,15 +1,12 @@
 import { useHub } from '../../lib/store';
-import { getErpForTenant, ERP_REGISTRY } from '../../config/erpRegistry';
-import { AlertCircle, Plug, Layers, Building2 } from 'lucide-react';
+import { getErpForTenant } from '../../config/erpRegistry';
 import { OverviewTab } from '../OverviewTab';
 import { InvoicesTab } from '../InvoicesTab';
 import { ImportTab } from '../ImportTab';
 import { CustomerSyncTab } from '../CustomerSyncTab';
 import { ItemDictionaryTab } from '../ItemDictionaryTab';
 import { ValidationErrorsTab } from '../ValidationErrorsTab';
-import { StagingTab } from '../StagingTab';
 import { ConnectorsTab } from '../ConnectorsTab';
-import { SuccessfulTab } from '../SuccessfulTab';
 import { CittaGatewayTab } from './CittaGatewayTab';
 import { ErpMappingTab } from './ErpMappingTab';
 import { AdminTenantsTab } from '../AdminTenantsTab';
@@ -29,39 +26,6 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
 
   const erp = getErpForTenant(activeTenant.platformType);
 
-  if (erp.comingSoon) {
-    return (
-      <div className="space-y-6 font-sans text-xs">
-        <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-slate-800 rounded-lg"><erp.icon className="w-5 h-5 text-emerald-400" /></div>
-            <div>
-              <h1 className="text-base font-bold tracking-tight">{erp.label} — Dedicated Workspace</h1>
-              <p className="text-slate-400 text-xs mt-1">{erp.description}</p>
-            </div>
-            <span className="ml-auto px-2.5 py-1 bg-amber-500/20 text-amber-300 rounded-full text-[11px] font-bold border border-amber-500/30">COMING SOON</span>
-          </div>
-        </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 space-y-3">
-          <div className="flex items-center gap-2 font-bold text-amber-900"><AlertCircle className="w-4 h-4" /> This ERP is not yet active</div>
-          <p className="text-amber-800">This tenant is provisioned for {erp.label}. The dedicated connector, field mapping, and resolution UI will appear here when the adapter is enabled. Use the Gateway tab to pre-configure CittaEFS credentials in the meantime.</p>
-          <ul className="list-disc list-inside text-amber-800 space-y-1 mt-2">
-            {erp.matching.map((m, i) => <li key={i} className="font-mono text-[11px]">{m}</li>)}
-          </ul>
-        </div>
-        {activeTab === 'gateway' && <CittaGatewayTab />}
-        {activeTab === 'mapping' && <ErpMappingTab />}
-        {activeTab !== 'gateway' && activeTab !== 'mapping' && (
-          <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500">
-            <Layers className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-            <p>Select <strong>Gateway</strong> or <strong>Mapping</strong> from the sidebar to configure this ERP.</p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Active ERPs — render tab-aware content but always keep ERP chrome
   return (
     <div className="space-y-6">
       {/* ERP chrome banner — shows dedicated UI per tenant */}
@@ -87,9 +51,7 @@ export function ErpWorkspace({ activeTab, setActiveTab, onOpenOnboard }: Props) 
       {activeTab === 'import' && <ImportTab onNavigate={(t) => setActiveTab(t)} />}
       {activeTab === 'customers' && <CustomerSyncTab />}
       {activeTab === 'items' && <ItemDictionaryTab />}
-      {activeTab === 'staging' && <StagingTab onNavigate={setActiveTab} />}
       {activeTab === 'validation' && <ValidationErrorsTab onNavigate={setActiveTab} />}
-      {activeTab === 'successful' && <SuccessfulTab />}
       {activeTab === 'connectors' && <ConnectorsTab onResumeConnect={() => onOpenOnboard(activeTenant)} />}
       {activeTab === 'mapping' && <ErpMappingTab />}
       {activeTab === 'gateway' && <CittaGatewayTab />}

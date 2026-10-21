@@ -1,35 +1,25 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useHub } from '../lib/store';
-import { getErpForTenant, groupTenantsByErp, ERP_REGISTRY } from '../config/erpRegistry';
-import { 
-  Building2, 
-  Plug, 
-  Download, 
-  FileText, 
-  AlertCircle, 
-  Layers, 
-  RotateCcw, 
-  ShieldCheck, 
-  Users, 
-  Tag, 
-  Sliders, 
-  Radio, 
-  Menu, 
-  X, 
-  LogOut, 
-  RefreshCw, 
-  Plus, 
-  User, 
-  Zap, 
-  ChevronDown,
+import { getErpForTenant, groupTenantsByErp } from '../config/erpRegistry';
+import {
+  Building2,
+  Plug,
+  Download,
+  FileText,
+  AlertCircle,
+  Layers,
+  Users,
+  Tag,
+  Sliders,
+  Menu,
+  X,
+  LogOut,
+  RefreshCw,
+  Plus,
   Globe,
-  Database,
-  Cloud,
   Trash2,
   PanelLeftClose,
-  CheckCircle2,
-  PanelLeftOpen,
-  ChevronsLeft
+  PanelLeftOpen
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -40,15 +30,15 @@ interface NavbarProps {
 }
 
 export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenOnboardModal }: NavbarProps) {
-  const { 
-    activeTenantId, 
-    setActiveTenantId, 
-    activeTenant, 
-    tenants, 
+  const {
+    activeTenantId,
+    setActiveTenantId,
+    activeTenant,
+    tenants,
     invoices,
-    validationErrors, 
-    refreshAll, 
-    currentUser, 
+    validationErrors,
+    refreshAll,
+    currentUser,
     logout,
     deleteTenant
   } = useHub() as any;
@@ -61,9 +51,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const erp = getErpForTenant(activeTenant?.platformType);
   const erpTabs = erp.tabs;
   const openErrorCount = tenants.length > 0 && activeTenant ? validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
-  const pendingStagingCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(i.status)).length : 0;
-  const failedInvoiceCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['REJECTED','FAILED'].includes(i.status)).length : 0;
-  const successfulInvoiceCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['APPROVED','SIGNED'].includes(i.status)).length : 0;
+  const attentionCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['PENDING_NRS_STAMP','PENDING','QUEUED','REJECTED','FAILED'].includes(i.status)).length : 0;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -74,8 +62,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem('citta_sidebar_collapsed') === '1'; } catch { return false; }
   });
-  const hoverExpandedRef = useRef(false);
-  const sidebarRef = useRef<HTMLElement>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef<number>(0);
   useEffect(() => {
@@ -83,56 +69,19 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     if (el) el.scrollTop = scrollTopRef.current;
   }, [activeTab, tenants.length, userRole, isCollapsed]);
 
-  const toggleCollapsed = (opts?: { fromHover?: boolean }) => {
+  const toggleCollapsed = () => {
     if (navScrollRef.current) scrollTopRef.current = navScrollRef.current.scrollTop;
     setIsCollapsed(v => {
       const nv = !v;
-      if (!opts?.fromHover) hoverExpandedRef.current = false;
       try { localStorage.setItem('citta_sidebar_collapsed', nv ? '1' : '0'); } catch {}
       try { window.dispatchEvent(new CustomEvent('citta_sidebar_collapsed', { detail: nv })); } catch {}
       return nv;
     });
   };
-  const handleHoverEnter = () => {
-    if (isCollapsed && !hoverExpandedRef.current) {
-      hoverExpandedRef.current = true;
-      toggleCollapsed({ fromHover: true });
-    }
-  };
-  const handleHoverLeave = () => {
-    if (hoverExpandedRef.current && !isCollapsed) {
-      hoverExpandedRef.current = false;
-      toggleCollapsed({ fromHover: true });
-    }
-  };
   const handleNavClick = (tabId: string) => {
     setActiveTab(tabId);
     setIsMobileMenuOpen(false);
-    if (hoverExpandedRef.current) {
-      // close after interaction — slight delay so click registers
-      setTimeout(() => {
-        if (hoverExpandedRef.current && !isCollapsed) {
-          hoverExpandedRef.current = false;
-          toggleCollapsed({ fromHover: true });
-        }
-      }, 300);
-    }
   };
-
-  // close hover-expanded sidebar when clicking anywhere outside it
-  useEffect(() => {
-    if (!hoverExpandedRef.current || isCollapsed) return;
-    const onDocClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (sidebarRef.current && !sidebarRef.current.contains(target)) {
-        hoverExpandedRef.current = false;
-        toggleCollapsed({ fromHover: true });
-      }
-    };
-    // slight delay so the same hover-enter click doesn't immediately close
-    const id = setTimeout(() => document.addEventListener('mousedown', onDocClick), 100);
-    return () => { clearTimeout(id); document.removeEventListener('mousedown', onDocClick); };
-  }, [isCollapsed]);
 
   const handleDeleteActiveTenant = async () => {
     if (!activeTenant) return;
@@ -164,22 +113,15 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   ];
 
   const allTabs = [
-    // Main tabs (Available to all roles)
     { id: 'clients', label: 'Overview', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: pendingStagingCount + failedInvoiceCount },
+    { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: attentionCount },
     { id: 'import', label: 'Import', icon: Download, category: 'erp', requiredRoles: ['ADMIN', 'OPERATOR'], erpOnly: true },
-    { id: 'staging', label: 'Staging', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: pendingStagingCount }, // pre-transmission holding area
     { id: 'customers', label: 'Customer Registrations', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'items', label: 'Items', icon: Tag, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'successful', label: 'Successful', icon: CheckCircle2, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: successfulInvoiceCount }, // APPROVED/SIGNED invoices
-
-    // ERP-dedicated
     { id: 'connectors', label: erp.id === 'qbo' ? 'QBO Connect' : 'Connectors', icon: Plug, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
-    { id: 'mapping', label: 'Field Mapping', icon: Sliders, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
+    { id: 'mapping', label: 'ERP Config', icon: Sliders, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
     { id: 'gateway', label: 'CittaEFS Gateway', icon: Globe, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
-
-    // Admin tabs
     { id: 'companies', label: 'Companies', icon: Building2, category: 'admin', requiredRoles: ['ADMIN'] }
   ];
 
@@ -189,15 +131,13 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     return true;
   });
 
-  const filteredTenantsForSidebar = useMemo(() => (tenants as any[]).filter((t:any) => t.platformType !== 'Excel & CSV Import'), [tenants]);
-  const grouped = useMemo(() => groupTenantsByErp(filteredTenantsForSidebar as any), [filteredTenantsForSidebar]);
+  const grouped = useMemo(() => groupTenantsByErp(tenants as any), [tenants]);
 
   const canOnboard = userRole === 'ADMIN';
   const canIngest = userRole === 'ADMIN' || userRole === 'OPERATOR';
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full max-h-screen bg-slate-900 text-slate-100 font-sans border-r border-slate-800 shadow-xl overflow-hidden">
-      {/* Brand Title */}
       <div className="p-5 border-b border-slate-800/80 shrink-0">
         <div className="flex items-center space-x-3">
           <div className="bg-emerald-700 p-2 rounded-lg text-white flex items-center justify-center shrink-0">
@@ -214,11 +154,9 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       </div>
 
-      {/* Tenant Selector — grouped by ERP */}
       <div className="p-4 border-b border-slate-800/80 shrink-0 bg-slate-950/30">
-        <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider flex items-center justify-between">
-          <span>Active Workspace ERP:</span>
-          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border bg-slate-700 text-slate-200 border-slate-600`}>{erp.shortLabel} MODE</span>
+        <label className="block text-[10px] text-slate-400 font-semibold uppercase mb-1.5 tracking-wider">
+          Active Workspace:
         </label>
         <div className="relative flex items-center gap-2">
           <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-2 space-x-2 flex-1 focus-within:ring-2 focus-within:ring-emerald-600 transition-all">
@@ -250,7 +188,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
                 ))
               )}
             </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />
+            <X className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />
           </div>
           {userRole === 'ADMIN' && activeTenant && (
             <button
@@ -264,14 +202,13 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           )}
         </div>
         <div className="text-[10px] text-slate-400 font-medium mt-2 px-0.5">
-          <span>{activeTenant?.platformType || 'QuickBooks / Excel'}</span>
+          <span>{activeTenant?.platformType || 'QuickBooks'}</span>
         </div>
         {userRole === 'ADMIN' && activeTenant && (
-          <p className="text-[10px] text-slate-500 mt-1">ADMIN: use trash icon to remove this workspace (cascades all data).</p>
+          <p className="text-[10px] text-slate-500 mt-1">ADMIN: trash icon removes this workspace (cascades all data).</p>
         )}
       </div>
 
-      {/* Main navigation section grouped by categories — scrollable, position persists */}
       <div
         ref={navScrollRef}
         onScroll={e => { scrollTopRef.current = (e.target as HTMLDivElement).scrollTop; }}
@@ -321,7 +258,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         })}
       </div>
 
-      {/* Quick Action Button Section */}
       <div className="p-4 border-t border-slate-800/80 bg-slate-950/30 shrink-0 space-y-2">
         {canOnboard && (
           <button
@@ -349,7 +285,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         )}
       </div>
 
-      {/* User profile footer section */}
       <div className="p-4 border-t border-slate-800/80 bg-slate-950/50 shrink-0 flex items-center justify-between text-xs gap-2">
         <div className="flex items-center space-x-2.5 shrink-0 truncate max-w-[140px]">
           <div className="w-8 h-8 bg-emerald-700/20 border border-emerald-600/30 rounded-full flex items-center justify-center font-bold text-emerald-400 text-xs shrink-0">
@@ -362,7 +297,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {/* Sync Button */}
           <button
             onClick={handleRefresh}
             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition-colors"
@@ -371,7 +305,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
 
-          {/* Logout */}
           <button
             onClick={logout}
             className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white cursor-pointer transition-colors"
@@ -386,7 +319,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
 
   return (
     <>
-      {/* Mobile Top Header (Fixed only on Mobile) */}
       <header className="lg:hidden bg-slate-900 border-b border-slate-800 text-white font-sans sticky top-0 z-40 h-14 flex items-center justify-between px-4 shadow-sm">
         <div className="flex items-center space-x-2.5">
           <button
@@ -404,7 +336,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Active Tenant Code Badge */}
           <span className="text-[11px] bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700 font-medium text-slate-200 max-w-[120px] truncate">
             {activeTenant?.name || 'No Workspace'}
           </span>
@@ -417,15 +348,12 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       </header>
 
-      {/* Mobile Sidebar Slide Drawer */}
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-slate-950/85" 
+          <div
+            className="fixed inset-0 bg-slate-950/85"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          {/* Sliding Menu */}
           <div className="relative flex-1 flex flex-col max-w-xs w-full bg-slate-900 h-full shadow-xl">
             <div className="absolute top-0 right-0 -mr-12 pt-2">
               <button
@@ -442,13 +370,11 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         </div>
       )}
 
-      {/* Desktop Persistent Sidebar — hover to expand, click anywhere outside to close */}
-      <aside ref={sidebarRef} onMouseEnter={handleHoverEnter} className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
+      <aside className={`hidden lg:flex lg:flex-shrink-0 fixed inset-y-0 left-0 z-30 transition-all duration-200 ${isCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}`}>
         <div className="flex flex-col w-full h-full relative">
-          {/* Single collapse toggle — top-right */}
           <button
-            onClick={() => toggleCollapsed()}
-            title={isCollapsed ? 'Expand sidebar (also hover to expand)' : 'Collapse sidebar'}
+            onClick={toggleCollapsed}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             className="absolute -right-3 top-5 z-40 w-6 h-6 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center text-slate-600 hover:text-slate-900 hover:border-slate-300 cursor-pointer"
           >
             {isCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
@@ -459,10 +385,10 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           {isCollapsed && (
             <div className="flex flex-col h-full bg-slate-900 text-slate-100 border-r border-slate-800">
               <div className="p-3 border-b border-slate-800 flex flex-col items-center gap-2">
-                <div className="bg-gradient-to-tr from-slate-600 to-emerald-600 p-2 rounded-lg text-white"><Layers className="w-4 h-4" /></div>
+                <div className="bg-emerald-700 p-2 rounded-lg text-white"><Layers className="w-4 h-4" /></div>
               </div>
               <div className="flex-1 overflow-y-auto py-3 space-y-1">
-                {visibleTabs.slice(0,8).map(tab => {
+                {visibleTabs.map(tab => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
                   return (
@@ -483,8 +409,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           )}
         </div>
       </aside>
-      {/* Clicking anywhere outside hover-expanded sidebar now collapses it (mousedown outside handler) */}
-
     </>
   );
 }

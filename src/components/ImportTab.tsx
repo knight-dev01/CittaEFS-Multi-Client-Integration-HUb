@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { useHub } from '../lib/store';
 import { ExcelDocumentViewer } from './ExcelDocumentViewer';
+import { PageHeader } from './ui/PageHeader';
 import {
   FileSpreadsheet,
   Zap,
@@ -195,62 +196,53 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
     <div className="space-y-6 font-sans text-xs">
       
       {/* Admin Executive Summary Banner */}
-      <div className="bg-slate-900 text-white rounded-lg p-6 shadow-sm border border-slate-800">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 bg-emerald-700/20 text-emerald-300 rounded-full text-xs font-semibold border border-emerald-600/30">
-                Workspace: {activeTenant.name}
+      <PageHeader
+        title={<>
+          <span className="px-2.5 py-0.5 bg-emerald-700/20 text-emerald-300 rounded-full text-xs font-semibold border border-emerald-600/30 align-middle">
+            Workspace: {activeTenant.name}
+          </span>
+          <span className="block mt-1">Invoice Ingestion & Master Data</span>
+        </>}
+        subtitle="Admin control panel for QuickBooks Online / Odoo automated sync and interactive Excel/CSV document editing."
+        actions={
+          <button
+            onClick={() => refreshAll()}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-semibold text-xs flex items-center gap-2 cursor-pointer transition-colors"
+          >
+            <RefreshCw className="w-4 h-4 text-emerald-400" />
+            <span>Refresh Metrics</span>
+          </button>
+        }
+        footer={
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-800 text-xs">
+            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Active Integration</span>
+              <span className="font-semibold text-emerald-300 mt-0.5 block">
+                {selectedSource === 'excel' ? 'Excel & CSV Uploads' : selectedSource === 'odoo' ? 'Odoo ERP' : 'QuickBooks Online'}
               </span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-white mt-1">
-              Invoice Ingestion & Master Data
-            </h1>
-            <p className="text-slate-400 text-xs mt-1">
-              Admin control panel for QuickBooks Online / Odoo automated sync and interactive Excel/CSV document editing.
-            </p>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => refreshAll()}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-semibold text-xs flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <RefreshCw className="w-4 h-4 text-emerald-400" />
-              <span>Refresh Metrics</span>
-            </button>
-          </div>
-        </div>
+            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Client TIN</span>
+              <span className="font-semibold text-white mt-0.5 block">{activeTenant.tin}</span>
+            </div>
 
-        {/* Executive Action Summary Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-xs">
-          <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase block">Active Integration</span>
-            <span className="font-semibold text-emerald-300 mt-0.5 block">
-              {selectedSource === 'excel' ? 'Excel & CSV Uploads' : selectedSource === 'odoo' ? 'Odoo ERP' : 'QuickBooks Online'}
-            </span>
-          </div>
+            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Master Directory</span>
+              <span className="font-semibold text-emerald-400 mt-0.5 block">
+                {syncedCustomers} Parties / {syncedProducts} SKUs
+              </span>
+            </div>
 
-          <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase block">Client TIN</span>
-            <span className="font-semibold text-white mt-0.5 block">{activeTenant.tin}</span>
+            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Gateway Compliance</span>
+              <span className="font-semibold text-emerald-400 flex items-center gap-1 mt-0.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" /> NRS Verified
+              </span>
+            </div>
           </div>
-
-          <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase block">Master Directory</span>
-            <span className="font-semibold text-emerald-400 mt-0.5 block">
-              {syncedCustomers} Parties / {syncedProducts} SKUs
-            </span>
-          </div>
-
-          <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase block">Gateway Compliance</span>
-            <span className="font-semibold text-emerald-400 flex items-center gap-1 mt-0.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" /> NRS Verified
-            </span>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
        {/* Tenant-aware Mode Banner */}
       <div className={`rounded-lg p-3.5 border flex items-center gap-2.5 text-xs font-medium ${isQboTenant ? 'bg-amber-50 border-amber-200 text-amber-900' : isOdooTenant ? 'bg-slate-50 border-slate-200 text-slate-900' : isExcelTenant ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>

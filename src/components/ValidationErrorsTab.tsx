@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useHub } from '../lib/store';
 import { ValidationErrorItem } from '../types';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, searchCittaCodes } from '../data/referenceData';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -15,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { StatusBadge, statusTone } from './ui/StatusBadge';
+import { CittaCodeSelect } from './ui/CittaCodeSelect';
 
 /**
  * The raw gateway rejection is a large JSON blob (one entry per invoice line,
@@ -47,58 +47,6 @@ function summarizeErrorMessage(msg: string): { summary: string; raw: string | nu
     return { summary: msg.slice(0, 220) + '…', raw: msg };
   }
   return { summary: msg, raw: null };
-}
-
-/** Searchable code picker — a plain <select> is unusable across 6,000+ real HS/Service codes. */
-function CodePicker({ value, onChange }: { value: string; onChange: (code: string) => void }) {
-  const [query, setQuery] = useState('');
-  const selected = useMemo(
-    () => [...CITTA_HS_CODES_REFERENCE, ...CITTA_SERVICE_CODES_REFERENCE].find(c => c.code === value),
-    [value]
-  );
-
-  const results = useMemo(() => {
-    if (query.trim().length < 2) return [];
-    return searchCittaCodes(query).slice(0, 50);
-  }, [query]);
-
-  return (
-    <div className="space-y-2">
-      {selected && (
-        <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-xs">
-          <span className="font-mono font-bold text-emerald-900">{selected.code} — {selected.name}</span>
-          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-semibold">{selected.type === 'HS_CODE' ? 'HS' : 'Service'}</span>
-        </div>
-      )}
-      <div className="relative">
-        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Type a code or keyword (e.g. 8471 or laptop)…"
-          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all"
-        />
-      </div>
-      {query.trim().length >= 2 && (
-        <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
-          {results.length === 0 ? (
-            <div className="px-3 py-2 text-[11px] text-slate-400">No matching codes.</div>
-          ) : results.map(c => (
-            <button
-              key={c.code}
-              type="button"
-              onClick={() => { onChange(c.code); setQuery(''); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-slate-50 cursor-pointer flex items-center justify-between gap-2"
-            >
-              <span className="text-slate-800"><span className="font-mono font-bold">{c.code}</span> — {c.name}</span>
-              <span className="shrink-0 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">{c.type === 'HS_CODE' ? 'HS' : 'Svc'}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) => void } = {}) {
@@ -301,7 +249,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
                 <label className="block font-medium text-slate-700">
                   Select Official CittaEFS Code Mapping:
                 </label>
-                <CodePicker value={selectedHsCode} onChange={setSelectedHsCode} />
+                <CittaCodeSelect value={selectedHsCode} onChange={setSelectedHsCode} hint="Type a code or keyword (e.g. 8471 or laptop)…" />
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Resolving will automatically register this code in the Item Dictionary and re-transmit invoice {selectedError.clientInvoiceNumber} to CittaEFS.
                 </p>

@@ -1,26 +1,21 @@
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useHub } from '../lib/store';
 import { fetchWithAuth, parseJsonResponse, getApiBaseUrl } from '../lib/api';
-import { ExcelDocumentViewer } from './ExcelDocumentViewer';
 import {
   Building2,
   ShieldCheck,
   CheckCircle2,
-  Sparkles,
   Zap,
   Layers,
   AlertCircle,
-  RefreshCw,
-  ArrowRight,
-  ArrowLeft
+  RefreshCw
 } from 'lucide-react';
 
 interface OnboardClientModalProps {
   onClose: () => void;
   // An existing tenant whose ingestion channel was never authenticated
   // (e.g. they closed the OAuth popup, or clicked "Finish Later" during
-  // onboarding) — jumps straight to step 2's connect flow for it instead of
-  // starting a fresh onboarding at step 1.
+  // onboarding) — shows its connect UI directly instead of a fresh onboarding.
   resumeTenant?: any;
 }
 
@@ -60,22 +55,19 @@ function validateTin(value: string): string | null {
 
 export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModalProps) {
   const { onboardTenant, updateTenant, refreshAll, addTenantErp } = useHub() as any;
-  const isResuming = !!resumeTenant;
 
-  const [step, setStep] = useState<1 | 2>(isResuming ? 2 : 1);
-
-  // Step 1 fields — pre-filled from resumeTenant so "Previous" from step 2 shows real data
+  // Company fields — pre-filled when resuming
   const [companyName, setCompanyName] = useState(resumeTenant?.companyName || resumeTenant?.name || '');
   const [tin, setTin] = useState(resumeTenant?.tin || '');
   const [platformType, setPlatformType] = useState<'QuickBooks Online' | 'Odoo ERP'>(resumeTenant?.platformType === 'Excel & CSV Import' ? 'QuickBooks Online' : (resumeTenant?.platformType as any) || 'QuickBooks Online');
   const [marketTier, setMarketTier] = useState(resumeTenant?.marketTier || 'Enterprise');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({ companyName: false, tin: false });
+  const [companySaved, setCompanySaved] = useState(!!resumeTenant);
 
-  // Result of step 1 — pre-populated with the existing tenant when resuming
+  // Tenant record — created/updated on first connect attempt
   const [tenant, setTenant] = useState<any | null>(resumeTenant || null);
 
-  // Step 2: QuickBooks OAuth + initial sync state
+  // QBO connect state
   const [qboState, setQboState] = useState<QboConnectState>('idle');
   const [qboError, setQboError] = useState<string | null>(null);
   const [qboSyncStats, setQboSyncStats] = useState<{ totalFound: number; newSynced: number; alreadySynced: number } | null>(null);
@@ -83,22 +75,63 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
   const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qboSyncStartedRef = useRef(false);
 
-  // Step 2: Odoo ERP connect form + initial sync state
+  // Odoo connect state
   const [odooState, setOdooState] = useState<OdooConnectState>('idle');
   const [odooError, setOdooError] = useState<string | null>(null);
   const [odooSyncStats, setOdooSyncStats] = useState<{ totalFound: number; newSynced: number; alreadySynced: number } | null>(null);
   const [odooForm, setOdooForm] = useState({ odooUrl: '', odooDatabase: '', odooUsername: '', odooApiKey: '' });
 
+  const isQbo = platformType === 'QuickBooks Online';
+
+  // Ensures the tenant record exists (create or update) before connecting.
+  // Returns the tenant, or null if validation failed (errors are set inline).
+  const ensureTenant = async (): Promise<any | null> => {
+    const nameErr = validateCompanyName(companyName);
+    const tinErr = validateTin(tin);
+    if (nameErr || tinErr) {
+      setTouched({ companyName: true, tin: true });
+      return null;
+    }
+    try {
+      if (tenant) {
+        const updated = await updateTenant(tenant.id, {
+          companyName: companyName.trim(),
+          tin: tin.trim().toUpperCase(),
+          platformType,
+          marketTier
+        });
+        setTenant(updated);
+        setCompanySaved(true);
+        return updated;
+      }
+      const newTenant = await onboardTenant({
+        companyName: companyName.trim(),
+        tin: tin.trim().toUpperCase(),
+        platformType,
+        marketTier
+      });
+      try { await addTenantErp(newTenant.id, platformType, platformType); } catch (e:any) { if (!String(e.message || '').toLowerCase().includes('already')) console.warn('addTenantErp:', e.message); }
+      try { await refreshAll(); } catch {}
+      setTenant(newTenant);
+      setCompanySaved(true);
+      return newTenant;
+    } catch (err: any) {
+      alert(`Failed to save client organization: ${err?.message || 'Please check details and try again.'}`);
+      return null;
+    }
+  };
+
   const handleConnectOdoo = async (e: FormEvent) => {
     e.preventDefault();
-    if (!tenant) return;
+    const t = tenant || await ensureTenant();
+    if (!t) return;
     setOdooError(null);
     setOdooState('connecting');
     try {
       const res = await fetchWithAuth('/api/integrations/odoo/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId: tenant.id, ...odooForm })
+        body: JSON.stringify({ tenantId: t.id, ...odooForm })
       });
       const data = await parseJsonResponse(res);
       if (!data.success) throw new Error(data.error || 'Failed to connect to Odoo.');
@@ -107,7 +140,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
       const syncRes = await fetchWithAuth('/api/integrations/odoo/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId: tenant.id })
+        body: JSON.stringify({ tenantId: t.id })
       });
       const syncData = await parseJsonResponse(syncRes);
       setOdooSyncStats({
@@ -173,7 +206,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
 
   // Listen for the OAuth bridge page through message, BroadcastChannel, and storage.
   useEffect(() => {
-    if (step !== 2 || platformType !== 'QuickBooks Online' || !tenant) return;
+    if (platformType !== 'QuickBooks Online' || !tenant) return;
 
     const handler = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -210,10 +243,10 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
       clearPopupPoll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, platformType, tenant]);
+  }, [platformType, tenant]);
 
   useEffect(() => {
-    if (step !== 2 || platformType !== 'QuickBooks Online' || !tenant || qboState !== 'connecting') return;
+    if (platformType !== 'QuickBooks Online' || !tenant || qboState !== 'connecting') return;
 
     const pollStatus = async () => {
       try {
@@ -234,17 +267,18 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
     const statusPoll = setInterval(pollStatus, 1500);
     return () => clearInterval(statusPoll);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, platformType, tenant, qboState]);
+  }, [tenant, qboState]);
 
-  const handleConnectQuickBooks = () => {
-    if (!tenant) return;
+  const handleConnectQuickBooks = async () => {
+    const t = tenant || await ensureTenant();
+    if (!t) return;
     setQboError(null);
     setQboSyncStats(null);
     qboSyncStartedRef.current = false;
     setQboState('connecting');
 
     const base = getApiBaseUrl();
-    const url = `${base}/api/integrations/qbo/connect?tenantId=${encodeURIComponent(tenant.id)}`;
+    const url = `${base}/api/integrations/qbo/connect?tenantId=${encodeURIComponent(t.id)}`;
     const popup = window.open(url, 'qbo_oauth', 'width=600,height=750');
     popupRef.current = popup;
 
@@ -263,75 +297,35 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
     }, 700);
   };
 
-  const handleSubmitStep1 = async (e: FormEvent) => {
-    e.preventDefault();
-
-    setTouched({ companyName: true, tin: true });
-    const nameErr = validateCompanyName(companyName);
-    const tinErr = validateTin(tin);
-    if (nameErr || tinErr) return;
-
-    setIsSubmitting(true);
-    try {
-      if (tenant) {
-        // Already onboarded earlier in this session (user came back via Previous) —
-        // update the existing tenant instead of creating a duplicate.
-        const updated = await updateTenant(tenant.id, {
-          companyName: companyName.trim(),
-          tin: tin.trim().toUpperCase(),
-          platformType,
-          marketTier
-        });
-        setTenant(updated);
-      } else {
-        const newTenant = await onboardTenant({
-          companyName: companyName.trim(),
-          tin: tin.trim().toUpperCase(),
-          platformType,
-          marketTier
-        });
-        // Company first — then attach initial ERP (so ERPs live under the company, as in Admin → Companies & ERPs)
-        try { await addTenantErp(newTenant.id, platformType, platformType); } catch (e:any) { if (!String(e.message || '').toLowerCase().includes('already')) console.warn('addTenantErp:', e.message); }
-        try { await refreshAll(); } catch {}
-        setTenant(newTenant);
-      }
-      setIsSubmitting(false);
-      setStep(2);
-    } catch (err: any) {
-      setIsSubmitting(false);
-      const action = tenant ? 'update' : 'onboard';
-      alert(`Failed to ${action} client organization: ${err?.message || 'Please check details and try again.'}`);
-    }
-  };
-
-  const isQbo = platformType === 'QuickBooks Online';
-  const isOdoo = platformType === 'Odoo ERP';
   const nameError = touched.companyName ? validateCompanyName(companyName) : null;
   const tinError = touched.tin ? validateTin(tin) : null;
 
+  const pickPlatform = async (opt: 'QuickBooks Online' | 'Odoo ERP') => {
+    if (opt === platformType) return;
+    setPlatformType(opt);
+    if (tenant?.id) {
+      try {
+        const updated = await updateTenant(tenant.id, { platformType: opt });
+        setTenant(updated);
+      } catch (e:any) { console.warn('updateTenant platformType:', e.message); }
+      try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
+      await refreshAll();
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto font-sans text-xs">
-      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-5 rounded-lg border border-slate-200 shadow-xl relative">
+      <div className="bg-white max-w-2xl w-full p-6 text-slate-900 space-y-5 rounded-lg border border-slate-200 shadow-xl relative my-8">
 
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-emerald-700" />
-              {step === 1 ? 'Onboard ERP Connection' : isResuming ? `Reconnect ${platformType}` : `Connect ${platformType}`}
+              Onboard ERP Connection
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              {step === 1
-                ? 'Register an ERP connection — choose QBO or Odoo. Gateway will normalize and push invoices to CittaEFS.'
-                : isQbo
-                  ? isResuming
-                    ? 'This tenant was never authorized. Complete QuickBooks Online authorization to start syncing invoices.'
-                    : 'Authorize QuickBooks Online and pull the initial historical invoice sync.'
-                  : isOdoo
-                    ? isResuming
-                      ? 'This tenant was never connected. Enter Odoo instance credentials to start syncing invoices.'
-                      : 'Enter Odoo instance credentials and pull the initial historical invoice sync.'
-                    : 'Upload a spreadsheet and normalize it against Master Data to complete onboarding.'}
+              Register the company, pick a channel (QBO or Odoo), and connect — all in one step.
             </p>
           </div>
           <button
@@ -342,163 +336,104 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
           </button>
         </div>
 
-        {/* Step indicator */}
-        <div className="flex items-center gap-2 text-[11px] font-semibold">
-          <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500'}`}>
-            {step > 1 ? <CheckCircle2 className="w-3.5 h-3.5" /> : '1'}
-          </span>
-          <span className={step >= 1 ? 'text-emerald-700' : 'text-slate-400'}>ERP & Channel</span>
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className={`w-5 h-5 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
-          <span className={step >= 2 ? 'text-emerald-700' : 'text-slate-400'}>Connect ERP</span>
+        {/* Company */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-slate-700 mb-1">ERP Entity Name *</label>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                onBlur={() => setTouched(prev => ({ ...prev, companyName: true }))}
+                placeholder="e.g. Acme Logistics Ltd"
+                className={`w-full px-3.5 py-2 border rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all ${
+                  nameError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-emerald-600/20 focus:border-emerald-600'
+                }`}
+                required
+              />
+              {nameError && <p className="text-rose-600 text-[11px] mt-1">{nameError}</p>}
+            </div>
+
+            <div>
+              <label className="block font-medium text-slate-700 mb-1">Tax Identification Number (TIN) *</label>
+              <input
+                type="text"
+                value={tin}
+                onChange={(e) => setTin(e.target.value.toUpperCase())}
+                onBlur={() => setTouched(prev => ({ ...prev, tin: true }))}
+                placeholder="e.g. P099112233X"
+                maxLength={11}
+                className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${
+                  tinError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-emerald-600/20 focus:border-emerald-600'
+                }`}
+                required
+              />
+              {tinError && <p className="text-rose-600 text-[11px] mt-1">{tinError}</p>}
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-medium text-slate-700 mb-1">Market Tier / Processing Allowance *</label>
+            <select
+              value={marketTier}
+              onChange={(e) => setMarketTier(e.target.value)}
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all cursor-pointer"
+            >
+              <option value="Enterprise">Enterprise (10,000 monthly invoices)</option>
+              <option value="Mid-Market">Mid-Market (5,000 monthly invoices)</option>
+              <option value="SMB Tier">SMB Tier (1,000 monthly invoices)</option>
+            </select>
+          </div>
         </div>
 
-        {step === 1 ? (
-          <form onSubmit={handleSubmitStep1} className="space-y-4 text-xs">
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">ERP Entity Name *</label>
-                <input
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, companyName: true }))}
-                  placeholder="e.g. Acme Logistics Ltd"
-                  className={`w-full px-3.5 py-2 border rounded-lg font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all ${
-                    nameError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-emerald-600/20 focus:border-emerald-600'
-                  }`}
-                  required
-                />
-                {nameError && <p className="text-rose-600 text-[11px] mt-1">{nameError}</p>}
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Tax Identification Number (TIN) *</label>
-                <input
-                  type="text"
-                  value={tin}
-                  onChange={(e) => setTin(e.target.value.toUpperCase())}
-                  onBlur={() => setTouched(prev => ({ ...prev, tin: true }))}
-                  placeholder="e.g. P099112233X"
-                  maxLength={11}
-                  className={`w-full px-3.5 py-2 border rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 transition-all uppercase ${
-                    tinError ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200 focus:ring-emerald-600/20 focus:border-emerald-600'
-                  }`}
-                  required
-                />
-                {tinError && <p className="text-rose-600 text-[11px] mt-1">{tinError}</p>}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Market Tier / Processing Allowance *</label>
-                <select
-                  value={marketTier}
-                  onChange={(e) => setMarketTier(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all cursor-pointer"
-                >
-                  <option value="Enterprise">Enterprise (10,000 monthly invoices)</option>
-                  <option value="Mid-Market">Mid-Market (5,000 monthly invoices)</option>
-                  <option value="SMB Tier">SMB Tier (1,000 monthly invoices)</option>
-                </select>
-              </div>
-              <div />
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-800">
-              Company will be created first — you’ll configure ERPs on the next step. Existing multi-ERP setup (“Companies & ERPs” admin) remains unchanged.
-            </div>
-
-            <div className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200/80 space-y-1">
-              <div className="flex items-center gap-1.5 font-semibold text-slate-900">
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                <span>ERP Onboarding Protocol:</span>
-              </div>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                1. Dedicated Row-Level Security (RLS) tenant isolated.<br />
-                2. CittaEFS Gateway API Key generated & mapped.<br />
-                3. Next step connects the live ingestion channel selected above.
-              </p>
-            </div>
-
-            <div className="pt-3 flex justify-between items-center">
+        {/* Platform */}
+        <div>
+          <label className="block font-medium text-slate-700 mb-2 text-xs">Channel — pick the client's ERP *</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
               <button
+                key={opt}
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg cursor-pointer transition-colors"
+                onClick={() => pickPlatform(opt)}
+                className={`p-3 rounded-lg border-2 text-left cursor-pointer ${platformType===opt ? 'bg-emerald-50 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
               >
-                Cancel
+                <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <Layers className="w-3.5 h-3.5 text-slate-900"/>}{opt}</span>
+                <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'API key + auto sync'}</span>
               </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center space-x-2 transition-colors disabled:opacity-50"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
-                <span>{isSubmitting ? (tenant ? 'Saving Changes...' : 'Onboarding ERP...') : 'Continue'}</span>
-                {!isSubmitting && <ArrowRight className="w-3.5 h-3.5 text-emerald-200" />}
-              </button>
-            </div>
-          </form>
-        ) : isQbo ? (
-          <div className="space-y-4">
-            <div className="bg-slate-50/80 p-4 rounded-lg border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-slate-500 font-medium text-[11px] block">Tenant ID</span>
-                <span className="font-mono font-bold text-slate-900">{tenant?.id}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 font-medium text-[11px] block">Client Entity</span>
-                <span className="font-bold text-slate-900">{tenant?.name}</span>
-              </div>
-            </div>
-            {/* Company first, then ERPs — selector lives in step 2 (not step 1) */}
-            <div className="p-3 bg-white rounded-lg border border-slate-200">
-              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={async () => {
-                      if (opt === platformType) return;
-                      setPlatformType(opt);
-                      if (tenant?.id) {
-                        // Persist the chosen channel as the tenant's primary platformType —
-                        // without this, the workspace stays whatever Step 1 defaulted to
-                        // (QuickBooks Online) regardless of what's picked here.
-                        try {
-                          const updated = await updateTenant(tenant.id, { platformType: opt });
-                          setTenant(updated);
-                        } catch (e:any) { console.warn('updateTenant platformType:', e.message); }
-                        try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
-                        await refreshAll();
-                      }
-                    }}
-                    className={`p-3 rounded-lg border-2 text-left cursor-pointer ${platformType===opt ? 'bg-emerald-50 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
-                  >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <Layers className="w-3.5 h-3.5 text-slate-900"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'API key + auto sync'}</span>
-                  </button>
-                ))}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-2">You can add more ERPs later in Admin → Companies & ERPs. Each ERP keeps isolated config & pull.</p>
-            </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-400 mt-2">You can add more ERPs later in Admin → Companies & ERPs. Each ERP keeps isolated config & pull.</p>
+        </div>
 
+        {tenant && (
+          <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-slate-500 font-medium text-[11px] block">Tenant ID</span>
+              <span className="font-mono font-bold text-slate-900">{tenant?.id}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 font-medium text-[11px] block">Client Entity</span>
+              <span className="font-bold text-slate-900">{tenant?.name}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Connect — QBO */}
+        {isQbo && (
+          <div className="space-y-3">
             {qboState === 'idle' && (
-              <div className="p-5 bg-white rounded-lg border border-slate-200/80 text-center space-y-3">
+              <div className="p-5 bg-slate-50/80 rounded-lg border border-slate-200/80 text-center space-y-3">
                 <Zap className="w-8 h-8 text-amber-500 mx-auto" />
                 <p className="text-slate-600 text-xs leading-relaxed max-w-sm mx-auto">
-                  Click below to open the ERP in a secure popup and authorize CittaEFS to read invoices, customers, and items.
+                  Click connect to open QuickBooks in a secure popup and authorize Citta Gateway to read invoices, customers, and items.
                 </p>
                 <button
                   onClick={handleConnectQuickBooks}
                   className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center gap-2 transition-colors"
                 >
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Connect ERP</span>
+                  <span>Connect QuickBooks</span>
                 </button>
               </div>
             )}
@@ -546,71 +481,14 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                 </button>
               </div>
             )}
-
-            <div className="pt-3 flex justify-between items-center">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg cursor-pointer inline-flex items-center gap-1.5 transition-colors"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Previous</span>
-              </button>
-              <button
-                onClick={onClose}
-                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                <span>{qboState === 'synced' ? `Go to ${tenant?.name}` : 'Finish Later & Close'}</span>
-              </button>
-            </div>
           </div>
-        ) : isOdoo ? (
-          <div className="space-y-4">
-            <div className="bg-slate-50/80 p-4 rounded-lg border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-slate-500 font-medium text-[11px] block">Tenant ID</span>
-                <span className="font-mono font-bold text-slate-900">{tenant?.id}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 font-medium text-[11px] block">Client Entity</span>
-                <span className="font-bold text-slate-900">{tenant?.name}</span>
-              </div>
-            </div>
-            <div className="p-3 bg-white rounded-lg border border-slate-200">
-              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel (adds to Companies & ERPs)</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={async () => {
-                      if (opt === platformType) return;
-                      setPlatformType(opt);
-                      if (tenant?.id) {
-                        // Persist the chosen channel as the tenant's primary platformType —
-                        // without this, the workspace stays whatever Step 1 defaulted to
-                        // (QuickBooks Online) regardless of what's picked here.
-                        try {
-                          const updated = await updateTenant(tenant.id, { platformType: opt });
-                          setTenant(updated);
-                        } catch (e:any) { console.warn('updateTenant platformType:', e.message); }
-                        try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
-                        await refreshAll();
-                      }
-                    }}
-                    className={`p-3 rounded-lg border-2 text-left cursor-pointer ${platformType===opt ? 'bg-emerald-50 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
-                  >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <Layers className="w-3.5 h-3.5 text-slate-900"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'API key + auto sync'}</span>
-                  </button>
-                ))}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-2">You can add more ERPs later in Admin → Companies & ERPs. Each ERP keeps isolated config & pull.</p>
-            </div>
+        )}
 
+        {/* Connect — Odoo */}
+        {!isQbo && (
+          <div className="space-y-3">
             {(odooState === 'idle' || odooState === 'error') && (
-              <form onSubmit={handleConnectOdoo} className="p-5 bg-white rounded-lg border border-slate-200/80 space-y-3">
+              <form onSubmit={handleConnectOdoo} className="p-5 bg-slate-50/80 rounded-lg border border-slate-200/80 space-y-3">
                 <div className="flex items-center gap-2 text-slate-700 font-semibold">
                   <Layers className="w-5 h-5 text-slate-900" />
                   <span>Connect Odoo Instance</span>
@@ -642,7 +520,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                 )}
                 <button type="submit" className="w-full px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm cursor-pointer inline-flex items-center justify-center gap-2 transition-colors">
                   <Layers className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Connect & Sync Odoo</span>
+                  <span>{companySaved ? 'Connect & Sync Odoo' : 'Save Company & Connect Odoo'}</span>
                 </button>
               </form>
             )}
@@ -667,77 +545,22 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
                 </p>
               </div>
             )}
-
-            <div className="pt-3 flex justify-between items-center">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg cursor-pointer inline-flex items-center gap-1.5 transition-colors"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Previous</span>
-              </button>
-              <button
-                onClick={onClose}
-                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                <span>{odooState === 'synced' ? `Go to ${tenant?.name}` : 'Finish Later & Close'}</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="p-3 bg-white rounded-lg border border-slate-200">
-              <label className="block font-medium text-slate-700 mb-2 text-xs">ERPs for this company — select channel</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(['QuickBooks Online','Odoo ERP'] as const).map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={async () => {
-                      if (opt === platformType) return;
-                      setPlatformType(opt);
-                      if (tenant?.id) {
-                        // Persist the chosen channel as the tenant's primary platformType —
-                        // without this, the workspace stays whatever Step 1 defaulted to
-                        // (QuickBooks Online) regardless of what's picked here.
-                        try {
-                          const updated = await updateTenant(tenant.id, { platformType: opt });
-                          setTenant(updated);
-                        } catch (e:any) { console.warn('updateTenant platformType:', e.message); }
-                        try { await addTenantErp(tenant.id, opt, opt); } catch (e:any) { if (!String(e.message).includes('already')) console.warn(e.message); }
-                        await refreshAll();
-                      }
-                    }}
-                    className={`p-3 rounded-lg border-2 text-left cursor-pointer ${platformType===opt ? 'bg-emerald-50 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
-                  >
-                    <span className="font-bold text-xs flex items-center gap-2">{opt==='QuickBooks Online' ? <Zap className="w-3.5 h-3.5 text-amber-500"/> : <Layers className="w-3.5 h-3.5 text-slate-900"/>}{opt}</span>
-                    <span className="text-[11px] text-slate-500">{opt==='QuickBooks Online' ? 'OAuth + auto sync' : 'API key + auto sync'}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <ExcelDocumentViewer tenantId={tenant?.id} startEmpty />
-            <div className="pt-1 flex justify-between items-center">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg cursor-pointer inline-flex items-center gap-1.5 transition-colors"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Previous</span>
-              </button>
-              <button
-                onClick={onClose}
-                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer flex items-center gap-2 transition-colors"
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                <span>Finish Onboarding</span>
-              </button>
-            </div>
           </div>
         )}
+
+        {/* Footer */}
+        <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Row-level tenant isolation · CittaEFS key mapped on create</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg cursor-pointer transition-colors"
+          >
+            {(qboState === 'synced' || odooState === 'synced') ? `Done — go to ${tenant?.name}` : 'Finish Later & Close'}
+          </button>
+        </div>
 
       </div>
     </div>

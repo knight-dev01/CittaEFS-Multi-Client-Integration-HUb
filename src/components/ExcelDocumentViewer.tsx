@@ -2,7 +2,7 @@ import { useState, ChangeEvent } from 'react';
 import * as XLSX from 'xlsx';
 import { useHub } from '../lib/store';
 import { getRowErrors as sharedGetRowErrors } from '../lib/invoiceValidation';
-import { getCittaCodeType } from '../data/referenceData';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { InvoicePreview } from './InvoicePreview';
 import {
   FileSpreadsheet,
@@ -25,6 +25,19 @@ import {
   SlidersHorizontal,
   ArrowRight
 } from 'lucide-react';
+
+async function classifyCittaCode(code: string | null | undefined): Promise<'HS_CODE' | 'SERVICE_CODE'> {
+  const bare = String(code || '').trim();
+  if (!bare || bare === 'UNMAPPED') return 'HS_CODE';
+  try {
+    const res = await fetchWithAuth(`/api/items/codes/search?q=${encodeURIComponent(bare)}&limit=8`);
+    const hits = await parseJsonResponse<any[]>(res);
+    const exact = Array.isArray(hits) ? hits.find((h) => h.code === bare) : null;
+    return exact?.type === 'SERVICE_CODE' ? 'SERVICE_CODE' : 'HS_CODE';
+  } catch {
+    return 'HS_CODE';
+  }
+}
 
 export interface SpreadsheetRow {
   id: string;
@@ -494,7 +507,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
               unitCode: String(r.UnitCode || r['UnitCode'] || 'EA').trim(),
               hsOrServiceCode: String(hs).trim(),
               category: 'General Goods',
-              codeType: getCittaCodeType(String(hs)) || 'HS_CODE',
+              codeType: await classifyCittaCode(String(hs)),
               codeDescription: String(r.ItemDescription || r['ItemDescription'] || '').trim(),
               defaultVatRate: taxCat === 'EXEMPT' ? 0 : (activeTenant?.defaultVatRate || 7.5),
               status: 'MAPPED'
@@ -532,7 +545,7 @@ export function ExcelDocumentViewer({ tenantId, startEmpty = false }: ExcelDocum
             unitCode: (row as any).unitCode || 'EA',
             hsOrServiceCode: row.hsOrServiceCode || 'UNMAPPED',
             category: 'General Goods',
-            codeType: getCittaCodeType(row.hsOrServiceCode) || 'HS_CODE',
+            codeType: await classifyCittaCode(row.hsOrServiceCode),
             codeDescription: row.description,
             defaultVatRate: row.vatRate || activeTenant?.defaultVatRate || 7.5,
             status: 'MAPPED'

@@ -22,19 +22,12 @@ import {
 import { OverlaySelect } from './ui/OverlaySelect';
 import { toastGlobal } from './ui/Toast';
 import { StatusBadge, statusTone, writebackTone } from './ui/StatusBadge';
-import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE } from '../data/referenceData';
+import { CittaCodeSelect } from './ui/CittaCodeSelect';
 
 export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void } = {}) {
   const { invoices, activeTenant, customers, itemMappings, cancelInvoice, transmitInvoice, currentUser, updateInvoice, deleteInvoice, refreshAll, retryInvoice, retryBulkInvoices, isBgRefreshing } = useHub() as any;
   const tenantCustomers = (customers || []).filter((c:any) => c.tenantId === activeTenant?.id);
   const tenantItems = (itemMappings || []).filter((m:any) => m.tenantId === activeTenant?.id);
-  const navigateToStaging = () => {
-    if (onNavigate) onNavigate('staging');
-    else {
-      try { localStorage.setItem('citta_active_tab', 'staging'); window.dispatchEvent(new CustomEvent('citta_navigate_staging')); window.location.hash = '#staging'; } catch {}
-      window.location.search = '?tab=staging';
-    }
-  };
 
   // Both Admin and Operator have access here.
 
@@ -61,7 +54,12 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
       inv.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (inv.irn && inv.irn.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      (statusFilter === 'ATTENTION' && ['REJECTED','FAILED'].includes(inv.status)) ||
+      (statusFilter === 'PENDING' && ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status)) ||
+      (statusFilter === 'APPROVED' && ['APPROVED','SIGNED'].includes(inv.status)) ||
+      inv.status === statusFilter;
     const matchesType = typeFilter === 'ALL' || inv.invoiceType === typeFilter;
 
     return matchesSearch && matchesStatus && matchesType;
@@ -174,22 +172,34 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
           />
         </div>
 
+        {/* Quick views */}
+        <div className="flex flex-wrap items-center gap-1.5 font-sans">
+          {[
+            { id: 'ALL', label: 'All' },
+            { id: 'ATTENTION', label: 'Needs attention' },
+            { id: 'PENDING', label: 'Pending' },
+            { id: 'APPROVED', label: 'Approved' },
+          ].map(v => {
+            const isActive = statusFilter === v.id;
+            const count = v.id === 'ALL' ? tenantInvoices.length
+              : v.id === 'ATTENTION' ? tenantInvoices.filter(i => ['REJECTED','FAILED'].includes(i.status)).length
+              : v.id === 'PENDING' ? tenantInvoices.filter(i => ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(i.status)).length
+              : tenantInvoices.filter(i => ['APPROVED','SIGNED'].includes(i.status)).length;
+            return (
+              <button
+                key={v.id}
+                onClick={() => setStatusFilter(v.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors ${isActive ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+              >
+                {v.label} <span className={isActive ? 'text-slate-300' : 'text-slate-400'}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-3 font-sans">
 
-          <OverlaySelect
-            label="Status:"
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={[
-              { value: 'ALL', label: 'All Statuses' },
-              { value: 'SIGNED', label: 'SIGNED (NRS Stamped)' },
-              { value: 'APPROVED', label: 'APPROVED' },
-              { value: 'PENDING_NRS_STAMP', label: 'PENDING STAMP' },
-              { value: 'REJECTED', label: 'REJECTED / ERROR' },
-              { value: 'CANCELLED', label: 'CANCELLED' },
-            ]}
-          />
           <OverlaySelect
             label="Type:"
             value={typeFilter}
@@ -288,10 +298,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                   <StatusBadge tone="pending">{stagingPending} pending</StatusBadge>
                   <span className="text-[11px] text-slate-600 hidden sm:inline">Total <strong className="text-slate-900">{totalStaging}</strong> • <span className="text-emerald-700">✓ {stagingApproved}</span>{stagingFailed>0 && <span className="text-rose-700"> • ✗ {stagingFailed}</span>}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={()=>setShowStagingDetails(v=>!v)} className="px-2.5 py-1 text-[11px] font-semibold text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer flex items-center gap-1">Details <ChevronDown className={`w-3 h-3 transition ${showStagingDetails?'rotate-180':''}`} /></button>
-                  <button onClick={navigateToStaging} className="px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer bg-white text-slate-900 border-slate-200 hover:bg-slate-50 font-sans">View staging →</button>
-                </div>
+                <button onClick={()=>setShowStagingDetails(v=>!v)} className="px-2.5 py-1 text-[11px] font-semibold text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer flex items-center gap-1">Details <ChevronDown className={`w-3 h-3 transition ${showStagingDetails?'rotate-180':''}`} /></button>
               </div>
               {showStagingDetails && (
                 <div className="px-4 py-2 bg-white/60 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
@@ -349,10 +356,6 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                     </div>
                     <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600"><span className="truncate">{inv.irn ? inv.irn.slice(0,22)+'…' : 'Pending Stamp'}</span>{inv.irn && <button onClick={()=>setQrModalInvoice(inv)} className="p-1 text-slate-400 hover:text-emerald-700"><QrCode className="w-4 h-4" /></button>}<button onClick={()=>setExpandedInvoiceId(inv.id)} className="ml-auto px-2 py-1 bg-slate-900 text-white rounded-lg text-[11px]">Details</button></div>
                     {hasErr && <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 leading-relaxed">{errs[0]} {errs.length>1 && <button onClick={()=>setShowVerboseErrors(true)} className="underline font-semibold">+{errs.length-1} more</button>}</div>}
-                    <div className="flex items-center gap-2 pt-1">
-                      {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && <button onClick={()=>{ setEditError(null); const copy=JSON.parse(JSON.stringify(inv)); const master=tenantCustomers.find((c:any)=> c.clientCustomerCode===copy.customerCode); if((!copy.customerTin||copy.customerTin==='N/A')&&master?.tin) copy.customerTin=master.tin; setEditingInvoice(copy); }} className="flex-1 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 min-h-[44px]"><Pencil className="w-4 h-4" /> Edit</button>}
-                      {inv.status === 'APPROVED' || inv.status === 'SIGNED' ? <span className="flex-1 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 flex items-center justify-center gap-1 min-h-[44px]"><CheckCircle2 className="w-4 h-4" /> Done</span> : ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status) ? <span className="flex-1 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-700 flex items-center justify-center gap-1 min-h-[44px]"><Clock className="w-4 h-4 animate-pulse" /> Pending</span> : ['REJECTED','FAILED'].includes(inv.status) ? <button disabled={isAnyPropagating} onClick={()=>handleRetry(inv)} className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><RotateCcw className="w-4 h-4" /> Retry</button> : ['CANCELLED'].includes(inv.status) ? <span className="flex-1 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 min-h-[44px]">Cancelled — edit & re-send</span> : <button disabled={isAnyPropagating} onClick={async()=>{ if(sendingId) return; const e=getInvoiceErrors(inv); if(e.length){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${e.join('; ')}`}); return;} setSendingId(inv.id); try{ const tin=resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))}); } finally{ setSendingId(null); } }} className="flex-1 py-2.5 bg-slate-600 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 min-h-[44px] disabled:opacity-40"><Send className="w-4 h-4" /> Send</button>}
-                    </div>
                   </div>
                 );
               })}
@@ -457,86 +460,12 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && (
-                            <button
-                              onClick={() => { setEditError(null); const copy = JSON.parse(JSON.stringify(inv)); // auto-pull missing hub data: TIN from Customers hub, no manual fill
-                                const master = tenantCustomers.find((c:any)=> c.clientCustomerCode===copy.customerCode || c.clientSystemCustId===copy.customerCode);
-                                if ((!copy.customerTin || copy.customerTin==='N/A') && master?.tin) copy.customerTin = master.tin;
-                                if ((!copy.customerTin || copy.customerTin==='N/A') && master?.taxId) copy.customerTin = master.taxId;
-                                if (!copy.customerName && master?.name) copy.customerName = master.name;
-                                copy.lineItems = (copy.lineItems||[]).map((li:any)=>{ const m = tenantItems.find((x:any)=> x.clientSku===li.itemCode); if ((!li.hsOrServiceCode || li.hsOrServiceCode==='UNMAPPED') && m?.hsOrServiceCode) return {...li, hsOrServiceCode: m.hsOrServiceCode, vatRate: li.vatRate ?? m.defaultVatRate}; return li; });
-                                setEditingInvoice(copy);
-                              }}
-                              className="p-1.5 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-200 rounded-lg cursor-pointer"
-                              title="Edit invoice — pre-filled from the Gateway"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && (
-                            <button
-                              onClick={async () => {
-                                if (!confirm(`Delete invoice ${inv.clientInvoiceNumber}? This cannot be undone.`)) return;
-                                try { await deleteInvoice(inv.id); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); }
-                              }}
-                              className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-lg cursor-pointer"
-                              title="Delete invoice"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {(inv.status === 'APPROVED' || inv.status === 'SIGNED') ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-900 border border-slate-200 rounded-full text-[11px] font-semibold"><CheckCircle2 className="w-3 h-3" /> Process — Done</span>
-                          ) : ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status) ? (
-                            <StatusBadge tone="pending"><Clock className="w-3 h-3 mr-1 animate-pulse" /> Pending — awaiting NRS</StatusBadge>
-                          ) : ['REJECTED','FAILED'].includes(inv.status) ? (
-                            <button
-                              disabled={isAnyPropagating}
-                              onClick={() => handleRetry(inv as any)}
-                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${retryingId===inv.id ? 'bg-amber-400 text-white border-amber-300 cursor-wait' : 'bg-amber-600 hover:bg-amber-700 text-white border-transparent cursor-pointer'}`}
-                              title={`Retry — will re-queue with 5 attempts (5s/30s/2m/10m/30m). Last status: ${inv.status}`}
-                            >
-                              <RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id ? 'animate-spin' : ''}`} /> {retryingId===inv.id ? 'Retrying…' : 'Retry'}
-                            </button>
-                          ) : ['CANCELLED'].includes(inv.status) ? (
-                            <StatusBadge tone="neutral"><Clock className="w-3 h-3 mr-1" /> Cancelled — edit & re-send</StatusBadge>
-                          ) : (
-                            <button
-                              disabled={isAnyPropagating}
-                              onClick={async () => {
-                                if (sendingId) return;
-                                const errs = getInvoiceErrors(inv);
-                                if (errs.length>0) { setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted red fields first (use Edit).`}); toastGlobal('error', 'Fix before sending', errs[0]); return; }
-                                setSendingId(inv.id);
-                                toastGlobal('info', `Queuing ${inv.clientInvoiceNumber}…`, 'Idempotent — duplicate clicks ignored');
-                                try {
-                                  const tin = resolveTin(inv);
-                                  await transmitInvoice({
-                                    clientInvoiceNumber: inv.clientInvoiceNumber,
-                                    invoiceKind: inv.invoiceKind,
-                                    invoiceType: inv.invoiceType,
-                                    issueDate: inv.issueDate,
-                                    customerCode: inv.customerCode,
-                                    customerName: inv.customerName,
-                                    customerTin: tin,
-                                    lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate }))
-                                  });
-                                  setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`});
-                                } catch (e:any) {
-                                  const msg = e.message || 'Send failed';
-                                  if (msg.includes('Duplicate') || msg.toLowerCase().includes('already queued') || msg.toLowerCase().includes('idempotent')) {
-                                    setBulkMsg({type:'success', text: `${inv.clientInvoiceNumber} already queued — staging.`});
-                                  } else if (msg.includes('customerTin') || msg.includes('TIN')) setBulkMsg({type:'error', text:`${msg} — open Customers tab or Edit to set ${inv.customerCode} TIN to 10-14 alphanum (e.g. P051123456Z), postcode, then retry.`});
-                                  else setBulkMsg({type:'error', text: msg});
-                                } finally { setSendingId(null); }
-                              }}
-                              className={`px-3 py-1.5 font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 border font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${sendingId===inv.id ? 'bg-slate-400 text-white border-slate-300 cursor-wait opacity-80 backdrop-blur-sm' : 'bg-slate-600 hover:bg-slate-700 text-white border-transparent cursor-pointer'}`}
-                            >
-                              <Send className={`w-3.5 h-3.5 ${sendingId===inv.id ? 'animate-pulse' : ''}`} /> {sendingId===inv.id ? 'Queuing…' : 'Send'}
-                            </button>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => setExpandedInvoiceId(inv.id)}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer"
+                        >
+                          Details
+                        </button>
                       </td>
                     </tr>
                   );
@@ -594,11 +523,39 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                   </table>
                 </div>
                 {inv.errorMessage && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-lg"><strong>Pre-flight:</strong> {inv.errorMessage}</div>}
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 flex-wrap">
                   <button onClick={() => setExpandedInvoiceId(null)} className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer">Close</button>
+                  {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && (
+                    <button
+                      onClick={() => {
+                        setEditError(null);
+                        const copy = JSON.parse(JSON.stringify(inv));
+                        const master = tenantCustomers.find((c:any)=> c.clientCustomerCode===copy.customerCode || c.clientSystemCustId===copy.customerCode);
+                        if ((!copy.customerTin || copy.customerTin==='N/A') && master?.tin) copy.customerTin = master.tin;
+                        if ((!copy.customerTin || copy.customerTin==='N/A') && master?.taxId) copy.customerTin = master.taxId;
+                        if (!copy.customerName && master?.name) copy.customerName = master.name;
+                        copy.lineItems = (copy.lineItems||[]).map((li:any)=>{ const m = tenantItems.find((x:any)=> x.clientSku===li.itemCode); if ((!li.hsOrServiceCode || li.hsOrServiceCode==='UNMAPPED') && m?.hsOrServiceCode) return {...li, hsOrServiceCode: m.hsOrServiceCode, vatRate: li.vatRate ?? m.defaultVatRate}; return li; });
+                        setExpandedInvoiceId(null);
+                        setEditingInvoice(copy);
+                      }}
+                      className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
+                  )}
+                  {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED') && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Delete invoice ${inv.clientInvoiceNumber}? This cannot be undone.`)) return;
+                        try { await deleteInvoice(inv.id); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); }
+                      }}
+                      className="px-4 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
+                  )}
                   {(inv.status === 'REJECTED' || inv.status === 'FAILED') && <button disabled={isAnyPropagating} onClick={async()=>{ setExpandedSending(true); try{ await retryInvoice(inv.id); setBulkMsg({type:'success', text:`Retry queued for ${inv.clientInvoiceNumber}`}); setExpandedInvoiceId(null);} catch(e:any){ setBulkMsg({type:'error', text:e.message});} finally{ setExpandedSending(false);}}} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${retryingId===inv.id ? 'bg-amber-400 cursor-wait' : 'bg-amber-600 hover:bg-amber-700'}`}><RotateCcw className={`w-3.5 h-3.5 ${retryingId===inv.id?'animate-spin':''}`} /> {retryingId===inv.id?'Retrying…':'Retry — re-queue to CittaEFS'}</button>}
-                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING' || inv.status==='CANCELLED') && <button disabled={isAnyPropagating} onClick={async () => { if(expandedSending) return; const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); toastGlobal('error','Fix before sending', errs[0]); return; } setExpandedSending(true); toastGlobal('info',`Queuing ${inv.clientInvoiceNumber}…`,'Idempotent'); try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } finally{ setExpandedSending(false);} }} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${expandedSending ? 'bg-slate-400 cursor-wait opacity-80' : 'bg-slate-600 hover:bg-slate-700'}`}><Send className={`w-3.5 h-3.5 ${expandedSending ? 'animate-pulse' : ''}`} /> {expandedSending ? 'Queuing…' : 'Send to CittaEFS'}</button>}
-                  {(inv.status === 'PENDING_NRS_STAMP' || (inv.status as any)==='PENDING') && <button disabled={retryingId===inv.id} onClick={async()=>{ try{ await retryInvoice(inv.id); setBulkMsg({type:'success', text:`Forced retry for ${inv.clientInvoiceNumber}`}); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } }} className="px-3 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1"><RotateCcw className="w-3.5 h-3.5" /> Force Retry</button>}
+                  {(inv.status !== 'APPROVED' && inv.status !== 'SIGNED' && inv.status !== 'REJECTED' && inv.status !== 'FAILED') && <button disabled={isAnyPropagating} onClick={async () => { if(expandedSending) return; const errs=getInvoiceErrors(inv); if(errs.length>0){ setBulkMsg({type:'error', text:`${inv.clientInvoiceNumber}: ${errs.join('; ')} — fix highlighted fields.`}); toastGlobal('error','Fix before sending', errs[0]); return; } setExpandedSending(true); toastGlobal('info',`Queuing ${inv.clientInvoiceNumber}…`,'Idempotent'); try { const tin = resolveTin(inv); await transmitInvoice({ clientInvoiceNumber: inv.clientInvoiceNumber, invoiceKind: inv.invoiceKind, invoiceType: inv.invoiceType, issueDate: inv.issueDate, customerCode: inv.customerCode, customerName: inv.customerName, customerTin: tin, lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, hsOrServiceCode: li.hsOrServiceCode, vatRate: li.vatRate })) }); setBulkMsg({type:'success', text:`Queued ${inv.clientInvoiceNumber} for NRS stamping.`}); setExpandedInvoiceId(null); } catch(e:any){ setBulkMsg({type:'error', text:e.message}); } finally{ setExpandedSending(false);} }} className={`px-4 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale ${expandedSending ? 'bg-slate-400 cursor-wait opacity-80' : 'bg-slate-600 hover:bg-slate-700'}`}><Send className={`w-3.5 h-3.5 ${expandedSending ? 'animate-pulse' : ''}`} /> {expandedSending ? 'Queuing…' : 'Send to CittaEFS'}</button>}
                   {(inv.status === 'APPROVED' || inv.status === 'SIGNED') && <span className="px-3 py-2 bg-slate-50 text-slate-900 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Process — Approved</span>}
                 </div>
               </div>
@@ -708,17 +665,11 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                         <input type="number" step="0.1" value={li.vatRate ?? ''} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, vatRate: e.target.value==='' ? 0 : Number(e.target.value)} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} placeholder="7.5" className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs text-right" />
                       </div>
                       <div className="col-span-2">
-                        <label className="block text-[9px] font-semibold text-slate-500 mb-1">HS/Service Code — general list</label>
-                        <select value={li.hsOrServiceCode || ''} onChange={e=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, hsOrServiceCode:e.target.value} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs font-mono bg-white">
-                          <option value="">— select HS/Service —</option>
-                          <optgroup label="HS Codes">
-                            {CITTA_HS_CODES_REFERENCE.map(c=> (<option key={c.code} value={c.code}>{c.code} — {c.name}</option>))}
-                          </optgroup>
-                          <optgroup label="Service Codes">
-                            {CITTA_SERVICE_CODES_REFERENCE.map(s=> (<option key={s.code} value={s.code}>{s.code} — {s.name}</option>))}
-                          </optgroup>
-                          {li.hsOrServiceCode && ![...CITTA_HS_CODES_REFERENCE, ...CITTA_SERVICE_CODES_REFERENCE].some(x=>x.code===li.hsOrServiceCode) && <option value={li.hsOrServiceCode}>{li.hsOrServiceCode} — current</option>}
-                        </select>
+                        <label className="block text-[9px] font-semibold text-slate-500 mb-1">HS/Service Code</label>
+                        <CittaCodeSelect
+                          value={li.hsOrServiceCode || ''}
+                          onChange={(code)=>{ setEditError(null); const n=editingInvoice.lineItems.map((x:any,i:number)=> i===idx ? {...x, hsOrServiceCode:code} : {...x}); setEditingInvoice({...editingInvoice, lineItems:n}); }}
+                        />
                       </div>
                       <div className="col-span-1 flex items-center justify-center pb-0.5">
                         <button onClick={()=>{ const n=editingInvoice.lineItems.filter((_:any,i:number)=>i!==idx); if(n.length===0) { setEditError('At least one line required'); return; } setEditingInvoice({...editingInvoice, lineItems:n}); }} className="p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 rounded-lg"><Trash2 className="w-3 h-3" /></button>

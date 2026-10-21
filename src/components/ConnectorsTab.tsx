@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { QboStagingInbox } from './QboStagingInbox';
 import { StatusBadge } from './ui/StatusBadge';
+import { PageHeader } from './ui/PageHeader';
 
 interface ConnectorStatus {
   qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null; environment?: 'sandbox' | 'production' };
@@ -201,20 +202,11 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
     <div className="space-y-6 font-sans text-xs">
 
       {/* Header Banner */}
-      <div className="bg-slate-900 text-white rounded-lg p-6 border border-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Plug className="w-5 h-5 text-emerald-400" />
-            QuickBooks, Odoo & Excel Connectors
-            <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              QBO + ODOO + EXCEL ACTIVE
-            </span>
-          </h2>
-          <p className="text-slate-400 text-xs mt-1">
-            Active Connectors: QuickBooks Online (OAuth2), Odoo ERP (JSON-RPC) & Excel/CSV Upload • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong>
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Plug}
+        title={<>QuickBooks, Odoo & Excel Connectors <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 align-middle">QBO + ODOO + EXCEL ACTIVE</span></>}
+        subtitle={<>Active Connectors: QuickBooks Online (OAuth2), Odoo ERP (JSON-RPC) & Excel/CSV Upload • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong></>}
+      />
 
       {/* QuickBooks OAuth Callback Result */}
       {qboRedirectStatus === 'success' && (

@@ -1,7 +1,7 @@
-import { Zap, FileSpreadsheet, Layers } from 'lucide-react';
+import { Zap, Layers } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-export type ErpId = 'qbo' | 'excel' | 'odoo' | 'generic';
+export type ErpId = 'qbo' | 'odoo' | 'generic';
 
 export interface ErpDefinition {
   id: ErpId;
@@ -11,7 +11,6 @@ export interface ErpDefinition {
   icon: LucideIcon;
   color: string;
   description: string;
-  comingSoon?: boolean;
   // Which hub tabs this ERP shows (subset of global tabs)
   tabs: string[];
   // Config keys this ERP needs (rendered in ERP Config panel)
@@ -36,19 +35,6 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
     ],
     matching: ['QBO DocNumber ↔ clientInvoiceNumber', 'CustomerRef ↔ customerCode', 'ItemRef ↔ clientSku', 'HS code auto-fill when UNMAPPED'],
   },
-  'Excel & CSV Import': {
-    id: 'excel',
-    platformType: 'Excel & CSV Import',
-    label: 'Excel & CSV',
-    shortLabel: 'Excel',
-    icon: FileSpreadsheet,
-    color: 'indigo',
-    description: 'Legacy drag-drop .xlsx/.csv — removed in ERP gateway (QBO | Odoo only).',
-    comingSoon: true,
-    tabs: ['overview'],
-    configFields: [],
-    matching: [],
-  },
   'Odoo ERP': {
     id: 'odoo',
     platformType: 'Odoo ERP',
@@ -67,8 +53,6 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
     matching: ['name ↔ clientInvoiceNumber', 'partner_id ↔ customerCode/TIN (via res.partner.vat)', 'product_id display name ↔ clientSku', 'price_total − price_subtotal ↔ vatAmount'],
   },
 };
-
-export const ALL_ERPS = Object.values(ERP_REGISTRY);
 
 export function getErpForTenant(platformType?: string): ErpDefinition {
   if (!platformType) return ERP_REGISTRY['QuickBooks Online'];

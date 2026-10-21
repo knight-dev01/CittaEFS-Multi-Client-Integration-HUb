@@ -1,5 +1,6 @@
 import { FileText, ShieldCheck, QrCode, AlertCircle, Building2, Calendar, Hash, Tag } from 'lucide-react';
 import { StatusBadge } from './ui/StatusBadge';
+import { PageHeader } from './ui/PageHeader';
 
 interface PreviewLineItem {
   itemCode: string;
@@ -73,16 +74,12 @@ export function InvoicePreview({
 
   return (
     <div className="space-y-4 font-sans text-xs">
-      <div className="bg-slate-900 text-white rounded-lg p-5 border border-slate-800 flex flex-col sm:flex-row items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-sm font-bold tracking-tight">{title}</h3>
-          </div>
-          <p className="text-slate-400 text-xs mt-1">How this invoice will be normalized and sent to <span className="text-emerald-300 font-semibold">CittaEFS / NRS Gateway</span> — review before transmitting.</p>
-          {tenantName && <p className="text-[11px] text-slate-500 mt-1">Tenant: <span className="text-slate-200 font-medium">{tenantName}</span></p>}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
+      <PageHeader
+        icon={FileText}
+        title={title}
+        subtitle={<>How this invoice will be normalized and sent to <span className="text-emerald-300 font-semibold">CittaEFS / NRS Gateway</span> — review before transmitting.</>}
+        actions={<>
+          {tenantName && <span className="text-[11px] text-slate-500 mr-1">Tenant: <span className="text-slate-200 font-medium">{tenantName}</span></span>}
           {onEdit && (
             <button onClick={onEdit} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-semibold text-xs cursor-pointer">Edit</button>
           )}
@@ -92,8 +89,8 @@ export function InvoicePreview({
               <span>{isProcessing ? 'Transmitting...' : confirmLabel}</span>
             </button>
           )}
-        </div>
-      </div>
+        </>}
+      />
 
       {allWarnings.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 space-y-1.5">

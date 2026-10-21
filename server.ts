@@ -18,7 +18,9 @@ import tenantsRouter from "./src/routes/tenants";
 import invoicesRouter from "./src/routes/invoices";
 import customersRouter from "./src/routes/customers";
 import itemsRouter from "./src/routes/items";
+import codesRouter from "./src/routes/codes";
 import validationRouter from "./src/routes/validation";
+import bootstrapRouter from "./src/routes/bootstrap";
 import qboRouter from "./src/routes/qbo";
 import odooRouter from "./src/routes/odoo";
 import webhooksRouter from "./src/routes/webhooks";
@@ -121,7 +123,10 @@ async function startServer() {
   app.use(invoicesRouter);
   app.use(customersRouter);
   app.use(itemsRouter);
+  app.use(codesRouter);
   app.use(validationRouter);
+  // Single round-trip for the store's initial load — must be before systemRouter's catch-all
+  app.use(bootstrapRouter);
   app.use(qboRouter);
   app.use(odooRouter);
   app.use(webhooksRouter);
