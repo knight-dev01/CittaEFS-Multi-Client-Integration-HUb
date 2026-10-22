@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import {
   getScopedTenantWhere,
@@ -224,7 +225,7 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
         // Also patch customer master if exists
         try {
           const cust = await prisma.customer.findFirst({ where: { tenantId: errRecord.tenantId, clientSystemCustId: invoice?.customerCode } });
-          if (cust) await prisma.customer.update({ where: { id: cust.id }, data: { taxId: cleanTin, tinValidationStatus: "VALIDATED" } });
+          if (cust) await prisma.customer.update({ where: { id: cust.id }, data: { taxId: cleanTin } });
         } catch {}
       }
     } catch (patchErr:any) {
@@ -260,7 +261,7 @@ router.post("/api/validation-errors/bulk-resolve", async (req: any, res) => {
 router.get("/api/metrics", async (req: any, res) => {
   try {
     const scoped = getScopedTenantWhere(req, req.query.tenantId as string | undefined);
-    const invWhere: any = scoped.tenantId ? { tenantId: scoped.tenantId } : {};
+    const invWhere: Prisma.InvoiceWhereInput = scoped.tenantId ? { tenantId: scoped.tenantId } : {};
     const totalInvoices = await prisma.invoice.count({ where: Object.keys(invWhere).length ? invWhere : undefined });
     // successRate includes SIGNED (NRS signed) as well as APPROVED — both are verified states
     const approvedInvoices = await prisma.invoice.count({ where: { ...invWhere, status: { in: ["APPROVED", "SIGNED"] } } });
@@ -286,7 +287,8 @@ router.get("/api/metrics", async (req: any, res) => {
     let byErp: any[] = [];
     let timeseries: any[] = [];
     try {
-      const erpGroups: any[] = await prisma.invoice.groupBy({ by: ["sourceErp"], where: Object.keys(invWhere).length ? invWhere : undefined, _count: { _all: true } });
+      const groupByInvoice = prisma.invoice.groupBy as any;
+      const erpGroups: any[] = await groupByInvoice({ by: ["sourceErp"], where: Object.keys(invWhere).length ? invWhere : undefined, _count: { _all: true } });
       for (const g of erpGroups) {
         const erp = g.sourceErp || "unknown";
         const [t, a, p, r] = await Promise.all([
