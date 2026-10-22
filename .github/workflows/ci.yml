@@ -22,6 +22,9 @@ jobs:
           cache: npm
       - run: npm install --ignore-scripts
       - run: npx prisma generate
+      - name: Generate Prisma Client (retry)
+        run: npx prisma generate
+        if: failure()
       - run: npm run lint --if-present
         continue-on-error: false
       - run: node scripts/checkNoFallbacks.js
@@ -29,6 +32,8 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     needs: lint-and-guardrails
+    env:
+      DATABASE_URL: postgresql://citta:citta@localhost:5432/citta_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,6 +42,9 @@ jobs:
           cache: npm
       - run: npm install --ignore-scripts
       - run: npx prisma generate
+      - name: Generate Prisma Client (retry)
+        run: npx prisma generate
+        if: failure()
       - name: Unit tests (HS bare, normalize, invoice schema, adapters)
         run: npx vitest run --coverage --reporter=verbose
       - uses: actions/upload-artifact@v4
@@ -79,6 +87,9 @@ jobs:
           cache: npm
       - run: npm install --ignore-scripts
       - run: npx prisma generate
+      - name: Generate Prisma Client (retry)
+        run: npx prisma generate
+        if: failure()
       - run: npx prisma migrate deploy
       - name: Full gateway audit (verifyAll — audit beyond logs)
         run: npx tsx src/test/verifyAll.ts
@@ -98,6 +109,9 @@ jobs:
           cache: npm
       - run: npm install --ignore-scripts
       - run: npx prisma generate
+      - name: Generate Prisma Client (retry)
+        run: npx prisma generate
+        if: failure()
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:
