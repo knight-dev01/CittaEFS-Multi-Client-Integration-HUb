@@ -204,8 +204,8 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
       {/* Header Banner */}
       <PageHeader
         icon={Plug}
-        title={<>QuickBooks, Odoo & Excel Connectors <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 align-middle">QBO + ODOO + EXCEL ACTIVE</span></>}
-        subtitle={<>Active Connectors: QuickBooks Online (OAuth2), Odoo ERP (JSON-RPC) & Excel/CSV Upload • Workspace: <strong className="text-white font-medium">{activeTenant.name}</strong></>}
+        title="Connectors"
+        subtitle={<>QuickBooks Online, Odoo ERP & Excel/CSV — <strong className="text-white font-medium">{activeTenant.name}</strong></>}
       />
 
       {/* QuickBooks OAuth Callback Result */}
@@ -303,10 +303,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
             </div>
 
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Auth Scheme:</span>
-                <span className="font-medium text-slate-900">OAuth 2.0 (Auto-Refresh)</span>
-              </div>
               <div className="flex justify-between text-slate-500">
                 <span>Realm / Company ID:</span>
                 <span className="font-mono font-medium text-slate-900">{status?.qbo.companyId || 'N/A'}</span>
@@ -431,16 +427,9 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
                 <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
                 <span className="font-semibold text-slate-900 text-sm">Excel & CSV Import</span>
               </div>
-              <StatusBadge tone="ok">
-                ACTIVE
-              </StatusBadge>
             </div>
 
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Protocol:</span>
-                <span className="font-medium text-slate-900">SheetJS / Direct Upload</span>
-              </div>
               <div className="flex justify-between text-slate-500">
                 <span>Total Invoices (Tenant):</span>
                 <span className="font-mono font-medium text-slate-900">{status?.excelCsv.totalInvoices ?? 0}</span>
@@ -450,10 +439,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
                 <span className="font-medium text-slate-900">{formatWhen(status?.excelCsv.lastInvoiceAt ?? null)}</span>
               </div>
             </div>
-
-            <p className="pt-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
-              Reflects all invoices on this tenant's ledger, across every ingestion channel — spreadsheet upload has no standing connection to test independently.
-            </p>
           </div>
 
           {/* CittaEFS Gateway — real stamping outcomes from the signing queue */}
@@ -463,9 +448,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
                 <ShieldCheck className="w-4 h-4 text-emerald-700" />
                 <span className="font-semibold text-slate-900 text-sm">CittaEFS Gateway</span>
               </div>
-              <StatusBadge tone="ok">
-                ACTIVE
-              </StatusBadge>
             </div>
 
             <div className="space-y-2 text-xs">
@@ -482,10 +464,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
                 <span className="font-mono font-medium text-rose-600">{status?.cittaGateway.totalRejected ?? 0}</span>
               </div>
             </div>
-
-            <p className="pt-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
-              Live counts from the invoice signing queue's real outcomes for this tenant — not a synthetic endpoint ping.
-            </p>
           </div>
 
         </div>
@@ -494,17 +472,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
       {/* QBO Staging Inbox — preview before CittaEFS (DocNumber truth + autoEnqueue toggle) */}
       <div className="bg-white rounded-lg border border-slate-200/80 p-5 shadow-sm">
         <QboStagingInbox tenantId={activeTenant.id} />
-      </div>
-
-      {/* Adapter Architecture Summary */}
-      <div className="bg-emerald-50/60 rounded-lg border border-emerald-200/80 p-5 space-y-2">
-        <div className="flex items-center gap-2 font-bold text-emerald-800">
-          <Globe className="w-4 h-4 text-emerald-700" />
-          <span>Active: QuickBooks Online, Odoo ERP & Excel/CSV Connectors</span>
-        </div>
-        <p className="text-emerald-700 text-xs leading-relaxed">
-          <strong>Currently Active:</strong> QuickBooks Online (OAuth2 REST/Webhook), Odoo ERP (JSON-RPC), and Excel/CSV File Upload adapters are fully operational.
-        </p>
       </div>
 
     </div>

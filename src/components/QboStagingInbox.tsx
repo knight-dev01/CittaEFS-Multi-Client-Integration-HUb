@@ -79,7 +79,7 @@ export function QboStagingInbox({ tenantId }: { tenantId: string }) {
         <>
           <div className="flex items-center gap-2">
             <button onClick={approve} disabled={approving} className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50"><Play className="w-3.5 h-3.5"/> {selected.size ? `Approve Selected (${selected.size})` : `Approve All (${invoices.length})`}</button>
-            <span className="text-xs text-slate-500">{invoices.length} pending • DocNumber is source of truth • qboId preserved for writeback</span>
+            <span className="text-xs text-slate-500">{invoices.length} pending</span>
           </div>
           <div className="overflow-x-auto border border-slate-200 rounded-lg">
             <table className="w-full text-xs">

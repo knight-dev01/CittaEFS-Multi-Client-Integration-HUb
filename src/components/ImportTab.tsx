@@ -195,96 +195,43 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
   return (
     <div className="space-y-6 font-sans text-xs">
       
-      {/* Admin Executive Summary Banner */}
+      {/* Ingestion header */}
       <PageHeader
-        title={<>
-          <span className="px-2.5 py-0.5 bg-emerald-700/20 text-emerald-300 rounded-full text-xs font-semibold border border-emerald-600/30 align-middle">
-            Workspace: {activeTenant.name}
-          </span>
-          <span className="block mt-1">Invoice Ingestion & Master Data</span>
-        </>}
-        subtitle="Admin control panel for QuickBooks Online / Odoo automated sync and interactive Excel/CSV document editing."
+        icon={FileSpreadsheet}
+        title="Invoice Ingestion"
+        subtitle="Sync from QuickBooks Online / Odoo or upload Excel/CSV documents."
         actions={
           <button
             onClick={() => refreshAll()}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-semibold text-xs flex items-center gap-2 cursor-pointer transition-colors"
           >
             <RefreshCw className="w-4 h-4 text-emerald-400" />
-            <span>Refresh Metrics</span>
+            <span>Refresh</span>
           </button>
-        }
-        footer={
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-800 text-xs">
-            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Active Integration</span>
-              <span className="font-semibold text-emerald-300 mt-0.5 block">
-                {selectedSource === 'excel' ? 'Excel & CSV Uploads' : selectedSource === 'odoo' ? 'Odoo ERP' : 'QuickBooks Online'}
-              </span>
-            </div>
-
-            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Client TIN</span>
-              <span className="font-semibold text-white mt-0.5 block">{activeTenant.tin}</span>
-            </div>
-
-            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Master Directory</span>
-              <span className="font-semibold text-emerald-400 mt-0.5 block">
-                {syncedCustomers} Parties / {syncedProducts} SKUs
-              </span>
-            </div>
-
-            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase block">Gateway Compliance</span>
-              <span className="font-semibold text-emerald-400 flex items-center gap-1 mt-0.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" /> NRS Verified
-              </span>
-            </div>
-          </div>
         }
       />
 
-       {/* Tenant-aware Mode Banner */}
-      <div className={`rounded-lg p-3.5 border flex items-center gap-2.5 text-xs font-medium ${isQboTenant ? 'bg-amber-50 border-amber-200 text-amber-900' : isOdooTenant ? 'bg-slate-50 border-slate-200 text-slate-900' : isExcelTenant ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${isQboTenant ? 'bg-slate-200 text-slate-700 border-slate-300' : isOdooTenant ? 'bg-slate-600 text-white border-slate-700' : isExcelTenant ? 'bg-emerald-700 text-white border-emerald-800' : 'bg-slate-200 text-slate-700 border-slate-300'}`}>
-          {isQboTenant ? 'QBO TENANT' : isOdooTenant ? 'ODOO TENANT' : isExcelTenant ? 'EXCEL TENANT' : 'HYBRID'}
-        </span>
-        <span>
-          {isQboTenant ? `This workspace is QBO-only. Other channels are disabled — switch workspace in the sidebar to use them.` : isOdooTenant ? `This workspace is Odoo-only. Other channels are disabled — switch workspace in the sidebar to use them.` : isExcelTenant ? `This workspace is Excel-only. Other channels are disabled — switch workspace to use them.` : `This workspace can use any channel. Choose below.`}
-        </span>
-      </div>
-
       {/* Ingestion Source Switcher — tenant-locked */}
-      <div className="bg-white rounded-lg border border-slate-200/80 p-5 space-y-4 shadow-sm">
-        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Select Ingestion Channel:</h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="bg-white rounded-lg border border-slate-200/80 p-4 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
           {/* Excel & CSV Import Option */}
           <button
             onClick={() => setSelectedSource('excel')}
             disabled={isChannelLocked('excel')}
-            className={`p-5 rounded-lg border-2 text-left flex flex-col justify-between transition-all ${isChannelLocked('excel') ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
+            className={`px-4 py-3 rounded-lg border-2 text-left flex items-center justify-between gap-2 transition-all ${isChannelLocked('excel') ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
               selectedSource === 'excel'
                 ? 'bg-emerald-50/60 border-emerald-700 ring-2 ring-emerald-600/20 shadow-sm'
                 : 'bg-white border-slate-200 hover:border-slate-300'
             }`}
             title={isChannelLocked('excel') ? 'Switch to an Excel tenant to use this' : undefined}
           >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-700" />
-                Excel & CSV Document Viewer
-              </span>
-              <span className={`px-2.5 py-0.5 font-semibold text-[10px] rounded-full ${selectedSource==='excel' && !isChannelLocked('excel') ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                {isChannelLocked('excel') ? 'LOCKED' : selectedSource==='excel' ? 'ACTIVE' : 'Available'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 my-3 leading-relaxed">
-              Upload, edit, and normalize Excel (.xlsx/.xls) and CSV documents directly in the interactive spreadsheet grid.
-            </p>
-            <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
-              Interactive Spreadsheet Grid <ChevronRight className="w-3.5 h-3.5" />
+            <span className="font-bold text-xs text-slate-900 flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+              Excel / CSV
+            </span>
+            <span className={`px-2 py-0.5 font-semibold text-[10px] rounded-full shrink-0 ${selectedSource==='excel' && !isChannelLocked('excel') ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+              {isChannelLocked('excel') ? 'LOCKED' : selectedSource==='excel' ? 'ACTIVE' : 'Available'}
             </span>
           </button>
 
@@ -292,27 +239,19 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
           <button
             onClick={() => setSelectedSource('qbo')}
             disabled={isChannelLocked('qbo')}
-            className={`p-5 rounded-lg border-2 text-left flex flex-col justify-between transition-all ${isChannelLocked('qbo') ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
+            className={`px-4 py-3 rounded-lg border-2 text-left flex items-center justify-between gap-2 transition-all ${isChannelLocked('qbo') ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
               selectedSource === 'qbo'
                 ? 'bg-emerald-50/60 border-emerald-700 ring-2 ring-emerald-600/20 shadow-sm'
                 : 'bg-white border-slate-200 hover:border-slate-300'
             }`}
             title={isChannelLocked('qbo') ? 'Switch to a QBO tenant to use this' : undefined}
           >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-500" />
-                QuickBooks Online Direct Sync
-              </span>
-              <span className={`px-2.5 py-0.5 font-semibold text-[10px] rounded-full ${selectedSource==='qbo' && !isChannelLocked('qbo') ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                {isChannelLocked('qbo') ? 'LOCKED' : selectedSource==='qbo' ? 'ACTIVE' : 'Available'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 my-3 leading-relaxed">
-              Automated OAuth 2.0 API connection to pull customers, SKU catalogs, and transmit fiscal invoices directly.
-            </p>
-            <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
-              OAuth2 API Sync <ChevronRight className="w-3.5 h-3.5" />
+            <span className="font-bold text-xs text-slate-900 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-500" />
+              QuickBooks Online
+            </span>
+            <span className={`px-2 py-0.5 font-semibold text-[10px] rounded-full shrink-0 ${selectedSource==='qbo' && !isChannelLocked('qbo') ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+              {isChannelLocked('qbo') ? 'LOCKED' : selectedSource==='qbo' ? 'ACTIVE' : 'Available'}
             </span>
           </button>
 
@@ -320,27 +259,19 @@ export function ImportTab({ onNavigate }: { onNavigate?: (tab: string) => void }
           <button
             onClick={() => setSelectedSource('odoo')}
             disabled={isChannelLocked('odoo')}
-            className={`p-5 rounded-lg border-2 text-left flex flex-col justify-between transition-all ${isChannelLocked('odoo') ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
+            className={`px-4 py-3 rounded-lg border-2 text-left flex items-center justify-between gap-2 transition-all ${isChannelLocked('odoo') ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200' : 'cursor-pointer'} ${
               selectedSource === 'odoo'
                 ? 'bg-slate-50/60 border-slate-600 ring-2 ring-slate-500/20 shadow-sm'
                 : 'bg-white border-slate-200 hover:border-slate-300'
             }`}
             title={isChannelLocked('odoo') ? 'Switch to an Odoo tenant to use this' : undefined}
           >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <Layers className="w-5 h-5 text-slate-900" />
-                Odoo ERP Direct Sync
-              </span>
-              <span className={`px-2.5 py-0.5 font-semibold text-[10px] rounded-full ${selectedSource==='odoo' && !isChannelLocked('odoo') ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                {isChannelLocked('odoo') ? 'LOCKED' : selectedSource==='odoo' ? 'ACTIVE' : 'Available'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 my-3 leading-relaxed">
-              Stateless JSON-RPC API-key connection to pull posted invoices, customers, and items directly.
-            </p>
-            <span className="text-xs font-semibold text-slate-900 flex items-center gap-1">
-              JSON-RPC API Sync <ChevronRight className="w-3.5 h-3.5" />
+            <span className="font-bold text-xs text-slate-900 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-slate-900" />
+              Odoo
+            </span>
+            <span className={`px-2 py-0.5 font-semibold text-[10px] rounded-full shrink-0 ${selectedSource==='odoo' && !isChannelLocked('odoo') ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+              {isChannelLocked('odoo') ? 'LOCKED' : selectedSource==='odoo' ? 'ACTIVE' : 'Available'}
             </span>
           </button>
 

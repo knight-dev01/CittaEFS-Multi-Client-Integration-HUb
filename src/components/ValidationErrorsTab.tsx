@@ -100,10 +100,10 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
           </div>
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              Pre-Flight Validation Errors Queue ({openErrors.length} Open)
+              Validation Errors
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Automated pre-flight guard catching unmapped SKUs, missing HS/Service codes, and malformed TINs before sending to CittaEFS.
+              Fix unmapped SKUs, HS/Service codes and TINs before sending to CittaEFS.
             </p>
           </div>
         </div>
@@ -133,10 +133,9 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
 
       {/* Simplified — grouped dropdowns to reduce cognitive overload */}
       {tenantErrors.length === 0 ? (
-        <div className="bg-white border border-slate-200/80 rounded-lg shadow-sm p-10 text-center text-slate-800">
-          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-          <p className="text-base font-bold text-slate-900">Zero Validation Errors</p>
-          <p className="text-xs text-slate-500 mt-1">All transactions comply with CittaEFS & NRS — verbose errors hidden.</p>
+        <div className="bg-white border border-slate-200/80 rounded-lg shadow-sm p-8 text-center text-slate-800">
+          <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+          <p className="text-sm font-bold text-slate-900">No validation errors</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -148,8 +147,7 @@ export function ValidationErrorsTab({ onNavigate }: { onNavigate?: (t: string) =
             );
             return (
               <>
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-[11px] text-slate-500">Grouped by category — click dropdown to expand verbose details</span>
+                <div className="flex items-center justify-end px-1">
                   <button onClick={()=>setShowResolved(v=>!v)} className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1">{showResolved?'Hide':'Show'} resolved ({resolvedErrors.length}) <ChevronDown className={`w-3 h-3 transition ${showResolved?'rotate-180':''}`} /></button>
                 </div>
                 {cats.map(cat=>{

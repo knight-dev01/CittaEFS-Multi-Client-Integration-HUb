@@ -181,25 +181,6 @@ function HubMainContent() {
           </div>
 
         </main>
-
-        {/* Footer */}
-        <footer className="bg-white text-slate-500 border-t border-slate-200 text-xs py-6 mt-12 font-sans shrink-0">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-5 h-5 rounded bg-slate-100 text-slate-900 flex items-center justify-center font-bold text-xs">
-                C
-              </div>
-              <span className="font-semibold text-slate-700">Citta Gateway</span>
-            </div>
-            <div className="flex items-center space-x-4 text-[11px] text-slate-400">
-              <span>PostgreSQL</span>
-              <span>•</span>
-              <span>QuickBooks + Odoo</span>
-              <span>•</span>
-              <span className="text-slate-900 font-semibold">CittaEFS Gateway</span>
-            </div>
-          </div>
-        </footer>
       </div>
 
       {/* Modals */}

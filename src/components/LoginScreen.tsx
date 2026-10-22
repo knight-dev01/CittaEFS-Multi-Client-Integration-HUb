@@ -130,10 +130,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </button>
         </form>
 
-        <div className="text-center text-[11px] text-slate-500 pt-2 border-t border-slate-800/60">
-          Role-based access control
-        </div>
-
       </div>
     </div>
   );

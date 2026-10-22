@@ -72,7 +72,6 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
   };
 
   const [bulkMsg, setBulkMsg] = useState<{type:'success'|'error', text:string} | null>(null);
-  const [showStagingDetails, setShowStagingDetails] = useState(false);
   const [showVerboseErrors, setShowVerboseErrors] = useState(false);
   // Sequential: pending locked until NRS settles — Send/Retry not allowed for PENDING
   const pendingBulk = filteredInvoices.filter(inv => ['PENDING_NRS_STAMP','PENDING','QUEUED'].includes(inv.status));
@@ -84,11 +83,6 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
   const isAnyPropagating = !!sendingId || !!retryingId || expandedSending || isBulkRetrying || isBgRefreshing;
   const [propagatingSince, setPropagatingSince] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const tableScrollRef = useRef<HTMLDivElement>(null);
-  const scrollTable = (dir: 'left' | 'right') => {
-    if (!tableScrollRef.current) return;
-    tableScrollRef.current.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
-  };
   useEffect(() => {
     if (isAnyPropagating && propagatingSince === null) setPropagatingSince(Date.now());
     if (!isAnyPropagating) { setPropagatingSince(null); setElapsedSec(0); }
@@ -226,9 +220,6 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-300 hidden sm:inline">
-              Format: <strong className="text-slate-300">{activeTenant.platformType}</strong>
-            </span>
             {hasRetryable && (
               <button onClick={handleBulkRetry} disabled={isAnyPropagating} title={hasRetryable ? 'Retry pending — Bulk Send dulled until failures cleared (Send → Retry sequential)' : ''} className={`px-4 py-2 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale bg-amber-600 hover:bg-amber-700 text-white`}>
                 <RotateCcw className={`w-3.5 h-3.5 ${isBulkRetrying?'animate-spin':''}`} />
@@ -252,7 +243,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
           return (
             <div className="mx-5 mt-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs overflow-hidden">
               <button onClick={()=>setShowVerboseErrors(v=>!v)} className="w-full flex items-center justify-between p-3 text-left cursor-pointer hover:bg-amber-100/50">
-                <span className="font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4 text-amber-600" /> {invalid.length} invoice(s) need fixing — verbose errors hidden</span>
+                <span className="font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4 text-amber-600" /> {invalid.length} invoice(s) need fixing</span>
                 <span className="flex items-center gap-1 text-amber-700 font-semibold">{showVerboseErrors ? 'Hide' : 'Show'} <ChevronDown className={`w-3.5 h-3.5 transition ${showVerboseErrors?'rotate-180':''}`} /></span>
               </button>
               {showVerboseErrors && (
@@ -268,64 +259,13 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
         })()}
 
         {isAnyPropagating && (
-          <div className="mx-5 mt-3 p-3 rounded-lg border border-slate-300 bg-slate-600 text-white flex items-center justify-between gap-3 font-sans shadow-sm">
-            <div className="flex items-center gap-2.5">
-              <Clock className="w-4 h-4 animate-spin text-slate-200" />
-              <span className="text-xs font-bold tracking-tight">Propagating to CittaEFS…</span>
-              <span className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] font-mono font-bold">{elapsedSec}s elapsed</span>
-              <span className="hidden sm:inline text-[11px] text-slate-100">Send / Retry dulled until feedback — do not close</span>
-            </div>
-            <span className="text-[11px] font-mono bg-white/15 px-2 py-1 rounded">Citta Gateway → ei-api.azurewebsites.net</span>
+          <div className="mx-5 mt-3 p-3 rounded-lg border border-slate-300 bg-slate-600 text-white flex items-center gap-2.5 font-sans shadow-sm">
+            <Clock className="w-4 h-4 animate-spin text-slate-200" />
+            <span className="text-xs font-bold tracking-tight">Propagating to CittaEFS…</span>
+            <span className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] font-mono font-bold">{elapsedSec}s</span>
           </div>
         )}
 
-        {/* Staging Area — simplified, details hidden behind dropdown */}
-        {(() => {
-          const stagingPending = tenantInvoices.filter((inv:any) => inv.status === 'PENDING_NRS_STAMP' || inv.status === 'PENDING' || inv.status === 'QUEUED').length;
-          const stagingApproved = tenantInvoices.filter((inv:any) => inv.status === 'APPROVED' || inv.status === 'SIGNED').length;
-          const stagingFailed = tenantInvoices.filter((inv:any) => inv.status === 'REJECTED' || inv.status === 'FAILED').length;
-          const totalStaging = tenantInvoices.length;
-          const gw = (activeTenant as any)?.cittaGatewayUrl || 'https://ei-api.azurewebsites.net';
-          const hasKey = !!(activeTenant as any)?.cittaApiKey || !!((activeTenant as any)?.tenantErps?.length);
-          const writeback = (activeTenant as any)?.cittaWritebackTarget || 'HUB';
-          const gatewayOk = hasKey && !!gw;
-          return (
-            <div className="mx-5 mt-4 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
-              <div className="p-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className={`w-2 h-2 rounded-full ${stagingPending>0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
-                  <span className="text-xs font-bold text-slate-800">Staging</span>
-                  <StatusBadge tone="pending">{stagingPending} pending</StatusBadge>
-                  <span className="text-[11px] text-slate-600 hidden sm:inline">Total <strong className="text-slate-900">{totalStaging}</strong> • <span className="text-emerald-700">✓ {stagingApproved}</span>{stagingFailed>0 && <span className="text-rose-700"> • ✗ {stagingFailed}</span>}</span>
-                </div>
-                <button onClick={()=>setShowStagingDetails(v=>!v)} className="px-2.5 py-1 text-[11px] font-semibold text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer flex items-center gap-1">Details <ChevronDown className={`w-3 h-3 transition ${showStagingDetails?'rotate-180':''}`} /></button>
-              </div>
-              {showStagingDetails && (
-                <div className="px-4 py-2 bg-white/60 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
-                  <div className="flex items-center gap-3 flex-wrap font-mono">
-                    <span className={gatewayOk ? 'text-emerald-700' : 'text-amber-700'}>Gateway: {gw.replace(/^https?:\/\//,'')}</span>
-                    <span className="text-slate-400">•</span>
-                    <span className={hasKey ? 'text-emerald-700' : 'text-rose-700'}>Key: {hasKey ? 'set' : 'missing'}</span>
-                    <span className="text-slate-400">•</span>
-                    <span className="text-slate-600">Writeback: <strong className={writeback==='BOTH'?'text-slate-900': writeback==='CITTAEFS'?'text-emerald-700':'text-amber-700'}>{writeback}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {!gatewayOk && <span className="text-rose-700 font-semibold">Configure in Admin → Citta Gateway</span>}
-                    {stagingFailed>0 && <span className="text-amber-700 font-medium flex items-center gap-1"><RotateCcw className="w-3 h-3"/> Retry: 5× 5s/30s/2m/10m/30m</span>}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
-        <div className="flex items-center justify-between px-1 py-1">
-          <span className="text-[11px] text-slate-500 font-medium">Scroll table →</span>
-          <div className="flex items-center gap-1">
-            <button onClick={() => scrollTable('left')} className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 cursor-pointer" title="Scroll left"><ChevronDown className="w-4 h-4 rotate-90" /></button>
-            <button onClick={() => scrollTable('right')} className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 cursor-pointer" title="Scroll right"><ChevronRight className="w-4 h-4" /></button>
-          </div>
-        </div>
         {filteredInvoices.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-sans">
             <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
@@ -360,7 +300,7 @@ export function InvoicesTab({ onNavigate }: { onNavigate?: (tab: string) => void
                 );
               })}
             </div>
-            <div ref={tableScrollRef} className={`hidden lg:block overflow-x-auto transition-all scroll-smooth ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
+            <div className={`hidden lg:block overflow-x-auto transition-all scroll-smooth ${isAnyPropagating ? 'opacity-60 blur-[0.5px] pointer-events-none select-none' : ''}`}>
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-100">

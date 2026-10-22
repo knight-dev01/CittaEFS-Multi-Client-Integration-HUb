@@ -147,9 +147,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             <h1 className="text-sm font-bold text-white tracking-tight leading-none">
               Citta Gateway
             </h1>
-            <p className="text-[11px] text-slate-400 font-normal mt-1">
-              Integration &amp; tax compliance
-            </p>
           </div>
         </div>
       </div>
@@ -201,12 +198,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
             </button>
           )}
         </div>
-        <div className="text-[10px] text-slate-400 font-medium mt-2 px-0.5">
-          <span>{activeTenant?.platformType || 'QuickBooks'}</span>
-        </div>
-        {userRole === 'ADMIN' && activeTenant && (
-          <p className="text-[10px] text-slate-500 mt-1">ADMIN: trash icon removes this workspace (cascades all data).</p>
-        )}
       </div>
 
       <div

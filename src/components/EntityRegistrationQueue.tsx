@@ -19,7 +19,6 @@ interface Props {
   subtitle: string;
   searchHint: string;
   emptyMessage: string;
-  howItWorks: [string, string, string];
   detailLine: (m: any) => string;
 }
 
@@ -30,7 +29,7 @@ interface Props {
 // Both entity types drive off the same generic EntityMapping model/API
 // (see src/routes/entityMappings.ts), so this one component serves both
 // CustomerSyncTab and ItemDictionaryTab's registration section.
-export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitle, searchHint, emptyMessage, howItWorks, detailLine }: Props) {
+export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitle, searchHint, emptyMessage, detailLine }: Props) {
   const { entityMappings, activeTenant, exportEntityRegistrations, confirmEntityRegistration } = useHub() as any;
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -104,19 +103,6 @@ export function EntityRegistrationQueue({ entityType, icon: Icon, title, subtitl
           </button>
         }
       />
-
-      {/* How this works — collapsed behind dropdown */}
-      <details className="bg-white rounded-lg border border-slate-200/80 shadow-sm group">
-        <summary className="list-none px-5 py-3 flex items-center justify-between cursor-pointer text-xs font-semibold text-slate-700">
-          <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-amber-500" /> How registration works — click for details</span>
-          <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition" />
-        </summary>
-        <div className="px-5 pb-4 text-xs text-slate-600 space-y-1.5">
-          <p>1. {howItWorks[0]}</p>
-          <p>2. {howItWorks[1]}</p>
-          <p>3. {howItWorks[2]}</p>
-        </div>
-      </details>
 
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-lg p-4 border border-slate-200/80 shadow-sm">

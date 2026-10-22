@@ -222,11 +222,6 @@ export function ItemDictionaryTab() {
             subtitle="Non-blocking: invoices still send with full item details inline while items await registration."
             searchHint="Search item code or name..."
             emptyMessage="No items seen yet. They appear here once an invoice references them."
-            howItWorks={[
-              'A new item appears here as Pending the first time any invoice references it.',
-              "Download the EFS registration file (pre-filled with everything the Gateway knows) and upload it through CittaEFS's own portal — there is no registration API today.",
-              'Enter the CittaEFS reference code EFS returns, using Confirm Registered below. This never blocks invoices — they already sent with full item details inline.',
-            ]}
             detailLine={(m) => `${m.sourceErpId} • via ${m.sourceErp}`}
           />
         </div>
