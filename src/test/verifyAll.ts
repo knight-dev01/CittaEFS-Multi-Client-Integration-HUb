@@ -1800,6 +1800,16 @@ async function runAllTests() {
   );
   console.log("====================================================\n");
 
+  const esc = (s: string) =>
+    s.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  results
+    .filter((r) => !r.passed)
+    .forEach((r) => {
+      console.log(
+        `::error title=verifyAll ${esc(r.module)} — ${esc(r.testName)}::expected: ${esc(r.expected)} | actual: ${esc(r.actual)}${r.details ? " | details: " + esc(r.details) : ""}`,
+      );
+    });
+
   if (passedCount !== results.length) {
     process.exit(1);
   }
