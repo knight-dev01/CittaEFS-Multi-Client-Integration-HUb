@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { generateSha256, safeAuditLogCreate } from "../lib/serverHelpers";
 import { logger } from "../lib/logger";
 import { fetchAndIngestSpecificQboInvoice } from "../services/qboService";
+import { cittaEfsClient } from "../services/cittaEfsClient";
 
 const router = Router();
 
@@ -65,6 +66,35 @@ async function handleCittaEfsWebhook(req: any, res: any) {
       if (Object.keys(updateData).length) {
         if (updateData.status) updateData.ledgerWritebackStatus = "SYNCED";
         await prisma.invoice.update({ where: { id: inv.id }, data: updateData });
+      }
+
+      // The current CittaEFS submit contract returns no inline IRN; the stamp
+      // arrives here asynchronously. Complete the ERP writeback + merchant
+      // callback on the first signed/transmitted event (the reconciliation
+      // cron performs the same recovery if this webhook never arrives).
+      const stampedNow =
+        Boolean(irn) &&
+        inv.status !== "APPROVED" &&
+        (event === "invoice.signed" ||
+          event === "invoice.transmitted" ||
+          status === "SIGNED" ||
+          status === "TRANSMITTED");
+      if (stampedNow) {
+        const qr =
+          (qrCode &&
+            (qrCode.startsWith("data:")
+              ? qrCode
+              : `data:image/png;base64,${qrCode}`)) ||
+          `https://nrs.portal.gov/verify?irn=${irn}`;
+        await cittaEfsClient
+          .executeClientLedgerWriteback(inv.tenantId, inv.clientInvoiceId, irn, qr)
+          .catch(() => {});
+        const { dispatchMerchantWebhook } = await import(
+          "../services/merchantWebhook"
+        );
+        dispatchMerchantWebhook(inv.tenantId, inv.id, "invoice.authorized").catch(
+          () => {},
+        );
       }
 
       await safeAuditLogCreate(prisma, {

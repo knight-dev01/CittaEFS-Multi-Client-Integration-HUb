@@ -14,6 +14,7 @@ export interface ProcessingResult {
   error?: string;
   movedToDLQ?: boolean;
   needsRegistration?: boolean;
+  accepted?: boolean;
 }
 
 /**
@@ -224,6 +225,23 @@ export async function processInvoiceJob(
 
       await invoiceQueue.removeJob(job.id);
       return { jobId: job.id, success: true, irn: response.irn };
+    } else if (response.success && response.accepted) {
+      // Current CittaEFS contract: the batch was accepted, but the IRN/QR
+      // stamp arrives asynchronously via invoice.signed / invoice.transmitted
+      // webhooks or the archive reconciliation cron.
+      job.status = 'COMPLETED';
+      job.updatedAt = new Date().toISOString();
+      await prisma.invoice.update({
+        where: { id: job.data.dbInvoiceId },
+        data: {
+          status: 'PENDING_NRS_STAMP',
+          rawPayloadHash: job.data.rawPayloadHash || null,
+        },
+      }).catch((e: any) => {
+        console.error(`[Worker] Failed to mark invoice ${job.data.dbInvoiceId} PENDING_NRS_STAMP:`, e.message);
+      });
+      await invoiceQueue.removeJob(job.id);
+      return { jobId: job.id, success: true, accepted: true };
     } else {
       throw new Error(response.message || 'Gateway returned non-success status');
     }

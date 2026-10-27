@@ -133,13 +133,173 @@ export interface CittaEfsResponse {
   nrsStampTimestamp?: string;
   message?: string;
   rawPayloadHash?: string;
+  // Current CittaEFS contract: submission is accepted, IRN/QR arrive later
+  // via the invoice.signed / invoice.transmitted webhook or archive poll.
+  accepted?: boolean;
+  validInvoices?: string[];
+  invalidInvoices?: string[];
+  errors?: any[];
 }
 
 export interface BulkEInvoiceResultDto {
-  totalInvoices: number;
-  successCount: number;
-  failedCount: number;
+  // Legacy response shape (pre-2026-10 gateway): stamp returned inline.
+  successCount?: number;
+  failedCount?: number;
+  items?: any[];
+  invoices?: any[];
+  irn?: string;
+  csid?: string;
+  qrCodeUrl?: string;
+  // Current documented shape: batch validation summary, no inline stamp.
+  success?: boolean;
+  totalInvoices?: number;
+  validCount?: number;
+  invalidCount?: number;
+  validInvoices?: string[];
+  invalidInvoices?: string[];
+  validDocumentNumbers?: string[];
+  metadata?: Record<string, any>;
+  errors?: any[];
+}
+
+export interface ParsedBulkSubmitResponse {
+  irn: string;
+  csid: string;
+  qrCodeUrl: string;
+  accepted: boolean;
+  validInvoices: string[];
+  invalidInvoices: string[];
   errors: any[];
+}
+
+function pickInlineStamp(resData: any): {
+  irn: string;
+  csid: string;
+  qrCodeUrl: string;
+} {
+  const item =
+    (Array.isArray(resData?.items) && resData.items[0]) ||
+    (Array.isArray(resData?.invoices) && resData.invoices[0]) ||
+    null;
+  const irn =
+    item?.irn || item?.Irn || resData?.irn || resData?.Irn || "";
+  const csid =
+    item?.csid || item?.Csid || resData?.csid || resData?.Csid || "";
+  const qrCodeUrl =
+    item?.qrCodeUrl ||
+    item?.QrCodeUrl ||
+    item?.qrUrl ||
+    resData?.qrCodeUrl ||
+    resData?.QrCodeUrl ||
+    resData?.qrUrl ||
+    "";
+  return {
+    irn: String(irn || ""),
+    csid: String(csid || ""),
+    qrCodeUrl: String(qrCodeUrl || ""),
+  };
+}
+
+/**
+ * Parses both CittaEFS bulk-submit response contracts:
+ *  - Current (documented): success/totalInvoices/validCount/invalidCount/
+ *    validInvoices/invalidInvoices/validDocumentNumbers/errors — no stamp.
+ *  - Legacy: successCount/failedCount/items[] with the IRN inline.
+ */
+export function parseBulkSubmitResponse(
+  resData: any,
+): ParsedBulkSubmitResponse {
+  if (!resData || typeof resData !== "object") {
+    throw new Error("CittaEFS Gateway returned an empty or non-JSON response");
+  }
+
+  const stamp = pickInlineStamp(resData);
+  const validInvoices = Array.isArray(resData.validInvoices)
+    ? resData.validInvoices.map(String)
+    : [];
+  const invalidInvoices = Array.isArray(resData.invalidInvoices)
+    ? resData.invalidInvoices.map(String)
+    : [];
+  const errors = Array.isArray(resData.errors) ? resData.errors : [];
+
+  const hasCurrentShape =
+    typeof resData.validCount === "number" ||
+    typeof resData.invalidCount === "number" ||
+    Array.isArray(resData.validInvoices) ||
+    Array.isArray(resData.invalidInvoices) ||
+    Array.isArray(resData.validDocumentNumbers);
+
+  if (hasCurrentShape) {
+    const validCount =
+      typeof resData.validCount === "number"
+        ? resData.validCount
+        : validInvoices.length;
+    if (validCount === 0) {
+      const details = errors.length
+        ? JSON.stringify(errors)
+        : JSON.stringify({ invalidInvoices });
+      throw new Error(
+        `CittaEFS Gateway rejected the invoice batch: ${details.slice(0, 2000)}`,
+      );
+    }
+    return {
+      ...stamp,
+      accepted: !stamp.irn,
+      validInvoices,
+      invalidInvoices,
+      errors,
+    };
+  }
+
+  // Legacy shape — retain strict inline-stamp behaviour so an old gateway
+  // response that silently stops returning an IRN is still surfaced.
+  const successCount = Number(resData.successCount ?? 0);
+  const failedCount = Number(resData.failedCount ?? 0);
+  if (failedCount > 0 || successCount === 0) {
+    const errorDetails = errors.length
+      ? JSON.stringify(errors)
+      : "Bulk processing failed";
+    throw new Error(`CittaEFS Gateway processing failed: ${errorDetails}`);
+  }
+  if (!stamp.irn) {
+    throw new Error(
+      `CittaEFS Gateway reported success but returned no recognizable IRN in its response — refusing to fabricate one. Raw response: ${JSON.stringify(resData).slice(0, 500)}`,
+    );
+  }
+  return { ...stamp, accepted: false, validInvoices, invalidInvoices, errors };
+}
+
+export interface BulkPaymentStatusItem {
+  irn: string;
+  paymentStatus?: string;
+  payment_status?: string;
+  reference?: string;
+}
+
+/**
+ * Builds the documented bulk payment body:
+ *   { items: [{ irn, paymentStatus, reference? }] }
+ * The single PATCH /api/einvoice/update/{irn} endpoint uses snake_case
+ * (payment_status); the bulk endpoint's .NET DTO serializes camelCase.
+ */
+export function buildBulkPaymentUpdateBody(items: BulkPaymentStatusItem[]): {
+  items: Array<{ irn: string; paymentStatus: string; reference?: string }>;
+} {
+  return {
+    items: items.map((item) => {
+      const paymentStatus = item.paymentStatus ?? item.payment_status;
+      if (!paymentStatus) {
+        throw new Error(
+          `Payment status is required for bulk payment update (IRN ${item.irn})`,
+        );
+      }
+      return {
+        irn: item.irn,
+        paymentStatus,
+        ...(item.reference ? { reference: item.reference } : {}),
+      };
+    }),
+  };
 }
 
 /**
@@ -293,55 +453,27 @@ export class CittaEfsClient {
       );
     }
 
-    const result = res.json<BulkEInvoiceResultDto>();
-
-    if (result.failedCount > 0 || result.successCount === 0) {
-      const errorDetails = result.errors
-        ? JSON.stringify(result.errors)
-        : "Bulk processing failed";
-      throw new Error(`CittaEFS Gateway processing failed: ${errorDetails}`);
-    }
-
-    // Extract IRN / CSID / QR URL if available inside the response body
-    const resData: any = result;
-    let irn = "";
-    let qrCodeUrl = "";
-    let csid = "";
-
-    if (resData.items && resData.items[0]) {
-      irn = resData.items[0].irn || resData.items[0].Irn || "";
-      qrCodeUrl =
-        resData.items[0].qrCodeUrl ||
-        resData.items[0].QrCodeUrl ||
-        resData.items[0].qrUrl ||
-        "";
-      csid = resData.items[0].csid || resData.items[0].Csid || "";
-    } else if (resData.invoices && resData.invoices[0]) {
-      irn = resData.invoices[0].irn || resData.invoices[0].Irn || "";
-      qrCodeUrl =
-        resData.invoices[0].qrCodeUrl || resData.invoices[0].QrCodeUrl || "";
-      csid = resData.invoices[0].csid || resData.invoices[0].Csid || "";
-    }
-
-    // successCount > 0 but no irn found in either known response shape — the
-    // gateway's response schema has drifted from what this client expects.
-    // Never fabricate a tax-compliance stamp: a made-up IRN/CSID would be
-    // written back to the client's ERP as if NRS had genuinely issued it.
-    if (!irn) {
-      throw new Error(
-        `CittaEFS Gateway reported success but returned no recognizable IRN in its response — refusing to fabricate one. Raw response: ${JSON.stringify(resData).slice(0, 500)}`,
-      );
-    }
+    const result = res.json<any>();
+    const parsed = parseBulkSubmitResponse(result);
 
     return {
       success: true,
       statusCode: 200,
-      irn,
-      csid,
-      qrCodeUrl,
+      irn: parsed.irn || undefined,
+      csid: parsed.csid || undefined,
+      qrCodeUrl: parsed.qrCodeUrl || undefined,
+      accepted: parsed.accepted,
+      validInvoices: parsed.validInvoices.length
+        ? parsed.validInvoices
+        : undefined,
+      invalidInvoices: parsed.invalidInvoices.length
+        ? parsed.invalidInvoices
+        : undefined,
+      errors: parsed.errors.length ? parsed.errors : undefined,
       nrsStampTimestamp: new Date().toISOString(),
-      message:
-        "Invoice successfully registered and stamped by NRS Gateway via CittaEFS.",
+      message: parsed.irn
+        ? "Invoice successfully registered and stamped by NRS Gateway via CittaEFS."
+        : "Invoice accepted by CittaEFS — awaiting NRS stamp via webhook or archive reconciliation.",
     };
   }
 
@@ -482,11 +614,12 @@ export class CittaEfsClient {
   }
 
   /**
-   * Bulk updates payment status of multiple invoices
+   * Bulk updates payment status of multiple invoices.
+   * Documented body: { items: [{ irn, paymentStatus, reference? }] }
    */
   public async bulkUpdatePaymentStatus(
     tenantId: string,
-    items: Array<{ irn: string; payment_status: string; reference?: string }>,
+    items: BulkPaymentStatusItem[],
   ): Promise<any> {
     const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
     const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/bulk/update`;
@@ -496,12 +629,50 @@ export class CittaEfsClient {
         Authorization: `Bearer ${decryptedApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ items }),
+      body: JSON.stringify(buildBulkPaymentUpdateBody(items)),
     });
     if (!res.ok) {
       throw new Error(`Failed to bulk update payment status (${res.status})`);
     }
     return res.json();
+  }
+
+  /**
+   * Fetches a public CittaEFS resource catalogue. These endpoints require no
+   * authentication (documented in the CittaEFS API guide).
+   */
+  private async fetchResource(resource: string): Promise<any[]> {
+    const gatewayUrl = getGlobalGatewayBaseUrl(null);
+    const url = `${gatewayUrl.replace(/\/$/, "")}/api/resources/${resource}`;
+    const res = await httpsRequest(url, { method: "GET", headers: {} });
+    if (!res.ok) {
+      throw new Error(
+        `Failed to fetch CittaEFS resource '${resource}' (${res.status})`,
+      );
+    }
+    const body = res.json<any>();
+    const data = Array.isArray(body) ? body : body?.data;
+    return Array.isArray(data) ? data : [];
+  }
+
+  public getResourceCountries(): Promise<any[]> {
+    return this.fetchResource("countries");
+  }
+
+  public getResourceInvoiceTypes(): Promise<any[]> {
+    return this.fetchResource("invoice-types");
+  }
+
+  public getResourceTaxCategories(): Promise<any[]> {
+    return this.fetchResource("tax-categories");
+  }
+
+  public getResourceHsCodes(): Promise<any[]> {
+    return this.fetchResource("hs-codes");
+  }
+
+  public getResourceServiceCodes(): Promise<any[]> {
+    return this.fetchResource("service-codes");
   }
 
   /**
