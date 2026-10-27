@@ -84,6 +84,37 @@ async function runAllTests() {
   console.log("CITTA-EFS PRODUCTION SYSTEM VERIFICATION TEST SUITE");
   console.log("====================================================\n");
 
+  // Provision the tenants this suite references. CI runs against a freshly
+  // migrated database with no tenant rows (production onboarding creates
+  // them via the API), so dependent invoice/integration/entity_mapping
+  // inserts would otherwise fail on tenant_id foreign keys.
+  for (const tenant of [
+    {
+      id: "tenant_qbo",
+      name: "VerifyAll QBO Tenant",
+      companyName: "VerifyAll QBO Ltd",
+      tin: "P000000000X",
+      platformType: "QuickBooks Online",
+      marketTier: "Enterprise",
+      onboardingStatus: "VERIFIED_READY",
+    },
+    {
+      id: "tenant_test",
+      name: "VerifyAll Test Tenant",
+      companyName: "VerifyAll Test Ltd",
+      tin: "P000000001X",
+      platformType: "QuickBooks Online",
+      marketTier: "Enterprise",
+      onboardingStatus: "VERIFIED_READY",
+    },
+  ]) {
+    await prisma.tenant.upsert({
+      where: { id: tenant.id },
+      update: {},
+      create: tenant,
+    });
+  }
+
   // ------------------------------------------------------------------
   // MODULE 1: Security & Encryption Engine (AES-256-GCM)
   // ------------------------------------------------------------------
