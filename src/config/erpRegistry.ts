@@ -28,7 +28,7 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
     icon: Zap,
     color: 'amber',
     description: 'OAuth2 REST API, CDC webhooks, sparse writeback of IRN/QR to QBO invoice custom fields.',
-    tabs: ['overview', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'mapping', 'gateway'],
+    tabs: ['connections', 'invoices'],
     configFields: [
       { key: 'realmId', label: 'QBO Company ID (Realm)', type: 'text', hint: '913035...' },
       { key: 'environment', label: 'Environment', type: 'select', options: ['sandbox', 'production'] },
@@ -43,7 +43,7 @@ export const ERP_REGISTRY: Record<string, ErpDefinition> = {
     icon: Layers,
     color: 'violet',
     description: 'JSON-RPC (execute_kw) — pulls posted invoices from account.move, writes IRN/QR back via chatter.',
-    tabs: ['overview', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'mapping', 'gateway'],
+    tabs: ['connections', 'invoices'],
     configFields: [
       { key: 'odooUrl', label: 'Odoo URL', type: 'url', hint: 'https://odoo.example.com' },
       { key: 'database', label: 'Database', type: 'text', hint: 'odoo_prod' },
@@ -64,7 +64,7 @@ export function getErpForTenant(platformType?: string): ErpDefinition {
     icon: Layers,
     color: 'slate',
     description: 'Generic ERP adapter.',
-    tabs: ['overview', 'invoices', 'import', 'customers', 'items', 'validation', 'mapping', 'gateway'],
+    tabs: ['connections', 'invoices'],
     configFields: [],
     matching: [],
   };

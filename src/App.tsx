@@ -3,7 +3,6 @@ import { HubProvider, useHub } from './lib/store';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
 import { ErpWorkspace } from './components/erp/ErpWorkspace';
-import { NewInvoiceModal } from './components/NewInvoiceModal';
 import { OnboardClientModal } from './components/OnboardClientModal';
 import { Layers } from 'lucide-react';
 import { ToastProvider, useToast, setGlobalToast } from './components/ui/Toast';
@@ -22,8 +21,7 @@ function HubMainContent() {
   const [isInitializing, setIsInitializing] = useState(true);
 
   // All useState calls must be at the top (React Rules of Hooks)
-  const [activeTab, setActiveTabState] = useState<string>('clients');
-  const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
+  const [activeTab, setActiveTabState] = useState<string>('connections');
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
   const [onboardResumeTenant, setOnboardResumeTenant] = useState<any | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -40,13 +38,14 @@ function HubMainContent() {
       const params = new URLSearchParams(window.location.search);
       const path = window.location.pathname;
       if (
-        path === '/connect-quickbooks' || 
-        params.get('tab') === 'connectors' || 
+        path === '/connect-quickbooks' ||
+        params.get('tab') === 'connectors' ||
+        params.get('tab') === 'connections' ||
         params.has('qbo') ||
-        params.get('qbo') === 'disconnected' || 
+        params.get('qbo') === 'disconnected' ||
         params.get('connect') === 'qbo'
       ) {
-        setActiveTabState('connectors');
+        setActiveTabState('connections');
       }
     }
     // Small delay to ensure smooth transition
@@ -113,15 +112,14 @@ function HubMainContent() {
     return <LoginScreen onLogin={login} />;
   }
 
-  // Enforce role-based tab routing restrictions
+  // Enforce role-based tab routing restrictions without setState-during-render
   const userRole = currentUser?.role || 'OPERATOR';
   const allowedTabs = userRole === 'ADMIN'
-    ? ['clients', 'invoices', 'import', 'customers', 'items', 'validation', 'connectors', 'gateway', 'mapping', 'companies']
-    : ['clients', 'invoices', 'import', 'customers', 'items', 'validation'];
-
-  if (!allowedTabs.includes(activeTab)) {
-    setActiveTab(userRole === 'ADMIN' ? 'clients' : 'invoices');
-  }
+    ? ['connections', 'invoices']
+    : ['invoices'];
+  const effectiveTab = allowedTabs.includes(activeTab)
+    ? activeTab
+    : (userRole === 'ADMIN' ? 'connections' : 'invoices');
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col selection:bg-slate-400 selection:text-white">
@@ -145,9 +143,8 @@ function HubMainContent() {
 
       {/* Responsive Sidebar component */}
       <Navbar
-        activeTab={activeTab}
+        activeTab={effectiveTab}
         setActiveTab={setActiveTab}
-        onOpenNewInvoiceModal={() => setIsNewInvoiceModalOpen(true)}
         onOpenOnboardModal={() => openOnboardModal()}
       />
 
@@ -164,19 +161,19 @@ function HubMainContent() {
                 <div className="p-12 text-center bg-white rounded-lg border border-slate-200/80 shadow-sm space-y-4">
                   <Layers className="w-10 h-10 text-slate-300 mx-auto" />
                   <div>
-                    <p className="text-sm font-semibold text-slate-700">No clients onboarded yet</p>
-                    <p className="text-xs text-slate-400 mt-1">Onboard a client to connect their ERP and start pulling invoices.</p>
+                    <p className="text-sm font-semibold text-slate-700">No ERP connections yet</p>
+                    <p className="text-xs text-slate-400 mt-1">Connect a client ERP to start normalising invoices for CittaEFS.</p>
                   </div>
                   <button
                     onClick={() => openOnboardModal()}
                     className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-semibold text-xs rounded-lg cursor-pointer"
                   >
-                    + Onboard Client
+                    + Connect ERP
                   </button>
                 </div>
               )
             ) : (
-              <ErpWorkspace activeTab={activeTab} setActiveTab={setActiveTab} onOpenOnboard={() => openOnboardModal()} />
+              <ErpWorkspace activeTab={effectiveTab} onOpenOnboard={() => openOnboardModal()} />
             )}
           </div>
 
@@ -187,11 +184,6 @@ function HubMainContent() {
       {isOnboardModalOpen && (
         <OnboardClientModal onClose={closeOnboardModal} resumeTenant={onboardResumeTenant} />
       )}
-
-      <NewInvoiceModal
-        isOpen={isNewInvoiceModalOpen}
-        onClose={() => setIsNewInvoiceModalOpen(false)}
-      />
 
     </div>
   );

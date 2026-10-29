@@ -4,19 +4,13 @@ import { getErpForTenant, groupTenantsByErp } from '../config/erpRegistry';
 import {
   Building2,
   Plug,
-  Download,
   FileText,
-  AlertCircle,
   Layers,
-  Users,
-  Tag,
-  Sliders,
   Menu,
   X,
   LogOut,
   RefreshCw,
   Plus,
-  Globe,
   Trash2,
   PanelLeftClose,
   PanelLeftOpen
@@ -25,18 +19,16 @@ import {
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onOpenNewInvoiceModal: () => void;
   onOpenOnboardModal: () => void;
 }
 
-export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenOnboardModal }: NavbarProps) {
+export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarProps) {
   const {
     activeTenantId,
     setActiveTenantId,
     activeTenant,
     tenants,
     invoices,
-    validationErrors,
     refreshAll,
     currentUser,
     logout,
@@ -48,9 +40,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
   const [isDeletingTenant, setIsDeletingTenant] = useState(false);
 
   const userRole = currentUser?.role || 'OPERATOR';
-  const erp = getErpForTenant(activeTenant?.platformType);
-  const erpTabs = erp.tabs;
-  const openErrorCount = tenants.length > 0 && activeTenant ? validationErrors.filter(e => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
   const attentionCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['PENDING_NRS_STAMP','PENDING','QUEUED','REJECTED','FAILED'].includes(i.status)).length : 0;
 
   const handleRefresh = async () => {
@@ -103,38 +92,16 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
     }
   };
 
-  const categories = userRole === 'ADMIN' ? [
-    { id: 'main', label: 'Main' },
-    { id: 'erp', label: `${erp.shortLabel} Workspace` },
-    { id: 'admin', label: 'Administration' }
-  ] : [
-    { id: 'main', label: 'Main' },
-    { id: 'erp', label: `${erp.shortLabel} Workspace` }
-  ];
-
   const allTabs = [
-    { id: 'clients', label: 'Overview', icon: Layers, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'invoices', label: 'Invoices', icon: FileText, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'], count: attentionCount },
-    { id: 'import', label: 'Import', icon: Download, category: 'erp', requiredRoles: ['ADMIN', 'OPERATOR'], erpOnly: true },
-    { id: 'customers', label: 'Customer Registrations', icon: Users, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'items', label: 'Items', icon: Tag, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'validation', label: 'Validation', icon: AlertCircle, count: openErrorCount, category: 'main', requiredRoles: ['ADMIN', 'OPERATOR'] },
-    { id: 'connectors', label: erp.id === 'qbo' ? 'QBO Connect' : 'Connectors', icon: Plug, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
-    { id: 'mapping', label: 'ERP Config', icon: Sliders, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
-    { id: 'gateway', label: 'CittaEFS Gateway', icon: Globe, category: 'erp', requiredRoles: ['ADMIN'], erpOnly: true },
-    { id: 'companies', label: 'Companies', icon: Building2, category: 'admin', requiredRoles: ['ADMIN'] }
+    { id: 'connections', label: 'Connections', icon: Plug, requiredRoles: ['ADMIN'] },
+    { id: 'invoices', label: 'Invoices', icon: FileText, requiredRoles: ['ADMIN', 'OPERATOR'], count: attentionCount }
   ];
 
-  const visibleTabs = allTabs.filter(tab => {
-    if (!tab.requiredRoles.includes(userRole)) return false;
-    if ((tab as any).erpOnly && !erpTabs.includes(tab.id)) return false;
-    return true;
-  });
+  const visibleTabs = allTabs.filter(tab => tab.requiredRoles.includes(userRole));
 
   const grouped = useMemo(() => groupTenantsByErp(tenants as any), [tenants]);
 
   const canOnboard = userRole === 'ADMIN';
-  const canIngest = userRole === 'ADMIN' || userRole === 'OPERATOR';
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full max-h-screen bg-slate-900 text-slate-100 font-sans border-r border-slate-800 shadow-xl overflow-hidden">
@@ -205,48 +172,36 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
         onScroll={e => { scrollTopRef.current = (e.target as HTMLDivElement).scrollTop; }}
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-5 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600"
       >
-        {categories.map((category) => {
-          const categoryTabs = visibleTabs.filter(tab => tab.category === category.id);
-          if (categoryTabs.length === 0) return null;
+        <div className="space-y-1">
+          {visibleTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
 
-          return (
-            <div key={category.id} className="space-y-1">
-              <h3 className="px-2 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
-                {category.label}
-              </h3>
-              <div className="space-y-1">
-                {categoryTabs.map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = activeTab === tab.id;
-
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => handleNavClick(tab.id)}
-                      className={`flex items-center justify-between w-full px-3 py-2 rounded-lg font-medium text-xs transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-emerald-700 text-white shadow-sm shadow-emerald-700/30'
-                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2.5">
-                        <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                        <span>{tab.label}</span>
-                      </div>
-                      {tab.count !== undefined && tab.count > 0 && (
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                          isActive ? 'bg-white/20 text-white' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                        }`}>
-                          {tab.count}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleNavClick(tab.id)}
+                className={`flex items-center justify-between w-full px-3 py-2 rounded-lg font-medium text-xs transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-emerald-700 text-white shadow-sm shadow-emerald-700/30'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </div>
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  }`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="p-4 border-t border-slate-800/80 bg-slate-950/30 shrink-0 space-y-2">
@@ -260,18 +215,6 @@ export function Navbar({ activeTab, setActiveTab, onOpenNewInvoiceModal, onOpenO
           >
             <Plus className="w-4 h-4 text-white" />
             <span>Onboard ERP</span>
-          </button>
-        )}
-        {canIngest && (
-          <button
-            onClick={() => {
-              onOpenNewInvoiceModal();
-              setIsMobileMenuOpen(false);
-            }}
-            className="flex items-center justify-center space-x-2 w-full py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg border border-slate-700 cursor-pointer transition-all"
-          >
-            <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Ingest Transaction</span>
           </button>
         )}
       </div>

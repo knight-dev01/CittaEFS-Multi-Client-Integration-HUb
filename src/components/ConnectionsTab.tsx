@@ -8,21 +8,18 @@ import {
   CheckCircle2,
   RefreshCw,
   ShieldCheck,
-  FileSpreadsheet,
   Globe,
   Layers,
   Zap,
   ToggleLeft,
   ToggleRight
 } from 'lucide-react';
-import { QboStagingInbox } from './QboStagingInbox';
 import { StatusBadge } from './ui/StatusBadge';
 import { PageHeader } from './ui/PageHeader';
 
 interface ConnectorStatus {
   qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null; environment?: 'sandbox' | 'production' };
   odoo: { connected: boolean; status: string; database: string | null; lastSyncAt: string | null };
-  excelCsv: { totalInvoices: number; lastInvoiceAt: string | null };
   cittaGateway: { totalStamped: number; totalPending: number; totalRejected: number };
 }
 
@@ -31,7 +28,7 @@ function formatWhen(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
-export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => void } = {}) {
+export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => void } = {}) {
   const { activeTenant } = useHub();
 
   const [status, setStatus] = useState<ConnectorStatus | null>(null);
@@ -204,8 +201,8 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
       {/* Header Banner */}
       <PageHeader
         icon={Plug}
-        title="Connectors"
-        subtitle={<>QuickBooks Online, Odoo ERP & Excel/CSV — <strong className="text-white font-medium">{activeTenant.name}</strong></>}
+        title="Connections"
+        subtitle={<>ERP connections and CittaEFS gateway status — <strong className="text-white font-medium">{activeTenant.name}</strong></>}
       />
 
       {/* QuickBooks OAuth Callback Result */}
@@ -420,27 +417,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
             </div>
           </div>
 
-          {/* Excel & CSV Import — real tenant invoice counts (all channels, honestly labeled) */}
-          <div className="bg-white rounded-lg border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-                <span className="font-semibold text-slate-900 text-sm">Excel & CSV Import</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Total Invoices (Tenant):</span>
-                <span className="font-mono font-medium text-slate-900">{status?.excelCsv.totalInvoices ?? 0}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Last Invoice Ingested:</span>
-                <span className="font-medium text-slate-900">{formatWhen(status?.excelCsv.lastInvoiceAt ?? null)}</span>
-              </div>
-            </div>
-          </div>
-
           {/* CittaEFS Gateway — real stamping outcomes from the signing queue */}
           <div className="bg-white rounded-lg border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -451,6 +427,19 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
             </div>
 
             <div className="space-y-2 text-xs">
+              <div className="flex justify-between text-slate-500">
+                <span>Endpoint:</span>
+                <span
+                  className="font-mono font-medium text-slate-900 truncate max-w-[170px]"
+                  title={activeTenant.cittaGatewayUrl || 'https://ei-api.azurewebsites.net'}
+                >
+                  {activeTenant.cittaGatewayUrl || 'https://ei-api.azurewebsites.net'}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>Auth:</span>
+                <span className="font-medium text-slate-900">Bearer (shared key)</span>
+              </div>
               <div className="flex justify-between text-slate-500">
                 <span>NRS Stamped (Approved):</span>
                 <span className="font-mono font-medium text-emerald-700">{status?.cittaGateway.totalStamped ?? 0}</span>
@@ -468,11 +457,6 @@ export function ConnectorsTab({ onResumeConnect }: { onResumeConnect?: () => voi
 
         </div>
       )}
-
-      {/* QBO Staging Inbox — preview before CittaEFS (DocNumber truth + autoEnqueue toggle) */}
-      <div className="bg-white rounded-lg border border-slate-200/80 p-5 shadow-sm">
-        <QboStagingInbox tenantId={activeTenant.id} />
-      </div>
 
     </div>
   );
