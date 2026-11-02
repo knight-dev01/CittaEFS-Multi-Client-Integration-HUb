@@ -100,19 +100,19 @@ Invoices remain the fiscal unit pushed to EFS/NRS — `clientInvoiceNumber` (`Do
 
 ## 🖥️ Dashboard Modules — ERP-Scoped From Onset
 
-Onboarding an ERP immediately creates its workspace, queue and messages — no client selection:
+Onboarding an ERP immediately creates its workspace, queue and messages — no client selection. These three tabs are what the UI actually renders today (`src/components/erp/ErpWorkspace.tsx`):
 
-| Tab Module | Key Capabilities | ERP Scope |
-| :--- | :--- | :--- |
-| 📊 **Overview** | Health, `byErp[qbo,odoo]` `total|approved|pending|rejected` `successRate` `timeseries 30d`, `erpHealth lastSyncAt lag`, `cittaGatewayStatus` | Per ERP `companyId` |
-| 🔌 **Integrations** | QBO OAuth connect/sync + test-live, Odoo form + test-live, per-connection `displayName` editable, `status CONNECTED` `lastSyncAt`, `Open ERP Dashboard` | QBO / Odoo per `companyId` |
-| 📄 **Invoices** | `PENDING_NRS_STAMP → APPROVED|SIGNED|REJECTED` `irn|qrCodeUrl`, `ledgerWriteback SYNCED|FAILED`, `Open in QBO txnId` `Odoo web#id=` | All ERPs filter `sourceErp` |
-| 👥 **Customers** | Read-only directory from ERP `qbo CustomerRef` `odoo res.partner vat` `B2B TIN` — `403` on hub edit | All |
-| 📑 **Items** | Read-only HS/Service `bare 8130` `UOM EA` `defaultVatRate 7.5` — `403` except `Validation resolve` | All |
-| ⚠️ **Validation** | `MISSING_HS_CODE 8130` `INVALID_TIN` `GATEWAY_REJECTED` `TRANSMIT_FAILED` `OPEN→RESOLVED` `Fix|Bulk Fix` → `PENDING` → thrown back `memo` | Per ERP `sourceErp` |
-| ⚙️ **Settings** | Global `VAT 7.5` `retry 5s|30s|2m|10m|30m` `cittaApiKey` implicit | ADMIN |
-| 🔍 **Audit Log** | `PAYLOAD_GENERATED|CODE_MAPPED|CONNECTOR_AUTHENTICATED|QBO_SYNC|ODOO_SYNC|WEBHOOK_RECEIVED` | Per ERP |
-| 🌐 **Citta Gateway (implicit)** | Global `cittaApiKey` `cittaGatewayUrl` `cittaWritebackTarget BOTH` — no per-tenant tab | — |
+| Tab Module | Key Capabilities | ERP Scope | Role |
+| :--- | :--- | :--- | :--- |
+| 🔌 **Connections** | QBO OAuth connect/sync + test-live, Odoo form + test-live, per-connection `status CONNECTED` `lastSyncAt`, sandbox/production toggle | QBO / Odoo per `companyId` | ADMIN |
+| 📄 **Invoices** | `PENDING_NRS_STAMP → APPROVED|SIGNED|REJECTED` `irn|qrCodeUrl`, `ledgerWriteback SYNCED|FAILED`, line-item drill-down | All ERPs, read-only | ADMIN, OPERATOR |
+| ⚠️ **Validation** | `MISSING_HS_CODE` / `INVALID_TIN_FORMAT` / `MISSING_B2B_TIN` take an inline fix and re-queue the invoice; other categories (`INVALID_DATE`, `TAX_MISMATCH`, `DUPLICATE_INVOICE`) only mark resolved — the backend never applies a correction for those (`src/routes/validation.ts`). `Auto-map items` and `Dismiss all open` are bulk actions | Per ERP `sourceErp` | ADMIN, OPERATOR |
+
+**PLANNED — backend exists, no UI yet.** The server already supports these; nothing renders them:
+- **Overview / metrics** — `GET /api/metrics` returns `byErp` totals, success rate, `timeseries 30d`, `erpHealth` lag, `cittaGatewayStatus`.
+- **Customers** and **Items** directories — `GET /api/customers`, `GET /api/items/mappings` (read-only ERP data, `403` on hub edit).
+- **Settings** — global VAT rate, retry backoff, shared `cittaApiKey` (`/api/system/citta-config`).
+- **Audit Log** — every mutation writes an `AuditLog` row (`safeAuditLogCreate`), but there's no `GET` route or screen to read them back yet.
 
 ---
 
@@ -199,7 +199,7 @@ curl -H "Authorization: Bearer <CITTAEFS_API_KEY>" https://ei-api.azurewebsites.
 ├── scripts/checkNoFallbacks.js
 ├── src/
 │   ├── adapters/connectorAdapters.ts    # QuickBooksAdapter + OdooAdapter (CsvAdapter frozen)
-│   ├── components/erp/ErpWorkspace.tsx # ERP-scoped router (Overview|Invoices|Customers|Items|Validation|Connectors)
+│   ├── components/erp/ErpWorkspace.tsx # ERP-scoped router (Connections|Invoices|Validation)
 │   ├── components/OnboardClientModal.tsx # Onboard ERP (QBO|Odoo) not Client
 │   ├── config/erpRegistry.ts         # ERP_REGISTRY qbo|odoo active
 │   ├── crons/reconciliation.ts       # runQbReconciliationCron runNrsReconciliationCron recoverOrphans/Stale

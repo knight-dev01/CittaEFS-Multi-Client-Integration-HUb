@@ -5,11 +5,7 @@ import {
   Tenant,
   TenantErp,
   Invoice,
-  CustomerProfile,
-  ItemCodeMapping,
-  EntityMapping,
   ValidationErrorItem,
-  SystemMetrics,
   TenantId,
   UserSession
 } from '../types';
@@ -23,11 +19,7 @@ interface HubContextType {
   activeTenant: Tenant | null;
   tenants: Tenant[];
   invoices: Invoice[];
-  customers: CustomerProfile[];
-  itemMappings: ItemCodeMapping[];
-  entityMappings: EntityMapping[];
   validationErrors: ValidationErrorItem[];
-  metrics: SystemMetrics;
   isBgRefreshing: boolean;
   isInitialized: boolean;
   
@@ -36,9 +28,8 @@ interface HubContextType {
   transmitInvoice: (payload: any, tenantIdOverride?: TenantId) => Promise<any>;
   cancelInvoice: (invoiceId: string, reason: string) => Promise<any>;
   resolveValidationError: (errorId: string, hsOrServiceCode?: string, correctedTin?: string) => Promise<any>;
+  bulkResolveValidationErrors: (tenantId?: string) => Promise<any>;
   autoMapItems: () => Promise<any>;
-  addCustomer: (cust: Partial<CustomerProfile>, tenantIdOverride?: TenantId) => Promise<any>;
-  addItemMapping: (mapping: Partial<ItemCodeMapping>, tenantIdOverride?: TenantId) => Promise<any>;
   ingestCsvInvoices: (parsedInvoices: any[], tenantIdOverride?: TenantId) => Promise<any>;
   onboardTenant: (tenantData: any) => Promise<Tenant>;
   updateTenant: (tenantId: string, tenantData: any) => Promise<Tenant>;
@@ -51,10 +42,6 @@ interface HubContextType {
   createTenantUser: (userData: { email: string; password: string; name: string; role?: string; organization?: string; tenantId: string }) => Promise<any>;
   updateInvoice: (invoiceId: string, data: any) => Promise<any>;
   deleteInvoice: (invoiceId: string) => Promise<any>;
-  deleteCustomer: (customerId: string) => Promise<any>;
-  deleteItem: (itemId: string) => Promise<any>;
-  exportEntityRegistrations: (entityType: 'CUSTOMER' | 'ITEM', tenantIdOverride?: TenantId) => Promise<void>;
-  confirmEntityRegistration: (mappingId: string, cittaReferenceCode: string) => Promise<any>;
   purgeDemoData: () => Promise<any>;
   retryInvoice: (invoiceId: string) => Promise<any>;
   retryBulkInvoices: (tenantId?: string, invoiceIds?: string[]) => Promise<any>;
@@ -151,11 +138,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [customers, setCustomers] = useState<CustomerProfile[]>([]);
-  const [itemMappings, setItemMappings] = useState<ItemCodeMapping[]>([]);
-  const [entityMappings, setEntityMappings] = useState<EntityMapping[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationErrorItem[]>([]);
-  const [metrics, setMetrics] = useState<SystemMetrics>({ totalInvoicesProcessed: 0, nrsStampSuccessRate: 0, averageLatencyMs: 0, activeTenantsCount: 0, pendingValidationCount: 0, reconciliationCronStatus: 'IDLE' as any, cittaGatewayStatus: 'UNKNOWN' as any });
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Auto-select first tenant if none selected and tenants exist
@@ -192,14 +175,17 @@ export function HubProvider({ children }: { children: ReactNode }) {
     return withLoading(async () => {
       try {
         // Single round-trip: GET /api/bootstrap returns all seven datasets
-        // ({ tenants, invoices, customers, itemMappings, entityMappings,
-        // validationErrors, metrics }) instead of seven parallel requests.
+        // (tenants, invoices, customers, itemMappings, entityMappings,
+        // validationErrors, metrics) instead of seven parallel requests.
+        // The UI only consumes tenants/invoices/validationErrors today; the
+        // rest are still fetched server-side (cheap, shared handler) but
+        // dropped here since nothing renders them.
         // Falls back to preserving local state when unavailable.
         const boot: any = await safeFetchJson('/api/bootstrap').catch(() => null);
         const has = boot && typeof boot === 'object' && !boot.success;
-        const [tenRes, invRes, custRes, itemRes, entityMapRes, errRes, metRes] = has
-          ? [boot.tenants, boot.invoices, boot.customers, boot.itemMappings, boot.entityMappings, boot.validationErrors, boot.metrics]
-          : [null, null, null, null, null, null, null];
+        const [tenRes, invRes, errRes] = has
+          ? [boot.tenants, boot.invoices, boot.validationErrors]
+          : [null, null, null];
 
         // Avoid resetting current activity: only update state if data actually changed
         const isSameIds = (a: any[], b: any[]) => a.length === b.length && a.every((x, i) => x.id === b[i]?.id && JSON.stringify(x) === JSON.stringify(b[i]));
@@ -223,18 +209,10 @@ export function HubProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-        const updateIfChanged = (setter: any, prev: any[], next: any) => {
-          if (!Array.isArray(next)) return;
-          setter((p: any[]) => (isSameIds(p, next) ? p : next));
-        };
         // Use functional updates to avoid resetting local UI state (search, expanded rows) when data unchanged
         const unwrap = (r: any) => Array.isArray(r) ? r : (r?.data && Array.isArray(r.data) ? r.data : null);
         const invArr = unwrap(invRes); if (invArr) setInvoices(prev => (isSameIds(prev as any, invArr as any) ? prev : invArr));
-        const custArr = unwrap(custRes); if (custArr) setCustomers(prev => (isSameIds(prev as any, custArr as any) ? prev : custArr));
-        const itemArr = unwrap(itemRes); if (itemArr) setItemMappings(prev => (isSameIds(prev as any, itemArr as any) ? prev : itemArr));
-        const entityMapArr = unwrap(entityMapRes); if (entityMapArr) setEntityMappings(prev => (isSameIds(prev as any, entityMapArr as any) ? prev : entityMapArr));
         const errArr = unwrap(errRes); if (errArr) setValidationErrors(prev => (isSameIds(prev as any, errArr as any) ? prev : errArr));
-        if (metRes && typeof metRes === 'object') setMetrics(prev => JSON.stringify(prev) === JSON.stringify(metRes) ? prev : metRes);
       } catch (e) {
         console.error('Backend refresh warning, preserving local state:', e);
       } finally {
@@ -430,6 +408,27 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const bulkResolveValidationErrors = async (tenantId?: string) => {
+    return withLoading(async () => {
+      try {
+        const targetTenantId = tenantId || activeTenantId;
+        const res = await fetchWithAuth('/api/validation-errors/bulk-resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenantId: targetTenantId })
+        });
+        const data = await parseJsonResponse(res);
+        await refreshAll();
+        toastGlobal('success', `Dismissed ${data.resolved ?? 0} open error(s)`, 'No correction was applied — this only clears the queue.');
+        return data;
+      } catch (e: any) {
+        console.error('Bulk resolve error:', e);
+        toastGlobal('error', 'Bulk dismiss failed', e.message || String(e));
+        throw e;
+      }
+    });
+  };
+
   const autoMapItems = async () => {
     return withLoading(async () => {
       try {
@@ -451,48 +450,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
       } catch (e: any) {
         console.error('Auto map error:', e);
         toastGlobal('error', 'Auto-map failed', e.message || String(e));
-        throw e;
-      }
-    });
-  };
-
-  const addCustomer = async (cust: Partial<CustomerProfile>, tenantIdOverride?: TenantId) => {
-    return withLoading(async () => {
-      try {
-        const targetTenantId = tenantIdOverride || activeTenantId;
-        const res = await fetchWithAuth('/api/customers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...cust, tenantId: targetTenantId })
-        });
-        const data = await parseJsonResponse(res);
-        await refreshAll();
-        toastGlobal('success', 'Customer saved', (cust as any).companyName || (cust as any).clientSystemCustId || '');
-        return data;
-      } catch (e: any) {
-        console.error('Add customer error:', e);
-        toastGlobal('error', 'Failed to save customer', e.message || String(e));
-        throw e;
-      }
-    });
-  };
-
-  const addItemMapping = async (mapping: Partial<ItemCodeMapping>, tenantIdOverride?: TenantId) => {
-    return withLoading(async () => {
-      try {
-        const targetTenantId = tenantIdOverride || activeTenantId;
-        const res = await fetchWithAuth('/api/items/mappings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...mapping, tenantId: targetTenantId })
-        });
-        const data = await parseJsonResponse(res);
-        await refreshAll();
-        toastGlobal('success', 'Item mapping saved', (mapping as any).clientSku || (mapping as any).name || '');
-        return data;
-      } catch (e: any) {
-        console.error('Add item mapping error:', e);
-        toastGlobal('error', 'Failed to save item mapping', e.message || String(e));
         throw e;
       }
     });
@@ -718,69 +675,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
       return data;
     });
   };
-  const deleteCustomer = async (customerId: string) => {
-    return withLoading(async () => {
-      const res = await fetchWithAuth(`/api/customers/${customerId}`, { method: 'DELETE' });
-      const data = await parseJsonResponse(res);
-      await refreshAll();
-      toastGlobal('success','Customer deleted');
-      return data;
-    });
-  };
-  const deleteItem = async (itemId: string) => {
-    return withLoading(async () => {
-      const res = await fetchWithAuth(`/api/items/mappings/${itemId}`, { method: 'DELETE' });
-      const data = await parseJsonResponse(res);
-      await refreshAll();
-      toastGlobal('success','Item deleted');
-      return data;
-    });
-  };
-
-  const exportEntityRegistrations = async (entityType: 'CUSTOMER' | 'ITEM', tenantIdOverride?: TenantId) => {
-    return withLoading(async () => {
-      try {
-        const targetTenantId = tenantIdOverride || activeTenantId;
-        const res = await fetchWithAuth(`/api/entity-mappings/${targetTenantId}/export?entityType=${entityType}`);
-        if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `CittaEFS_${entityType}_Registration_${targetTenantId}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        toastGlobal('success', 'Registration file downloaded', `Upload this through EFS's own portal, then return here to confirm.`);
-      } catch (e: any) {
-        console.error('Export entity registrations error:', e);
-        toastGlobal('error', 'Failed to export registration file', e.message || String(e));
-        throw e;
-      }
-    });
-  };
-
-  const confirmEntityRegistration = async (mappingId: string, cittaReferenceCode: string) => {
-    return withLoading(async () => {
-      try {
-        const res = await fetchWithAuth(`/api/entity-mappings/${mappingId}/confirm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cittaReferenceCode })
-        });
-        const data = await parseJsonResponse(res);
-        await refreshAll();
-        toastGlobal('success', 'Registration confirmed', data.requeued ? `${data.requeued} invoice(s) resubmitted.` : '');
-        return data;
-      } catch (e: any) {
-        console.error('Confirm entity registration error:', e);
-        toastGlobal('error', 'Failed to confirm registration', e.message || String(e));
-        throw e;
-      }
-    });
-  };
-
   const purgeDemoData = async () => {
     return withLoading(async () => {
       try {
@@ -846,20 +740,15 @@ export function HubProvider({ children }: { children: ReactNode }) {
         activeTenant,
         tenants,
         invoices,
-        customers,
-        itemMappings,
-        entityMappings,
         validationErrors,
-        metrics,
         isBgRefreshing,
         isInitialized,
         refreshAll,
         transmitInvoice,
         cancelInvoice,
         resolveValidationError,
+        bulkResolveValidationErrors,
         autoMapItems,
-        addCustomer,
-        addItemMapping,
         ingestCsvInvoices,
         onboardTenant,
         updateTenant,
@@ -872,10 +761,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
         createTenantUser,
         updateInvoice,
         deleteInvoice,
-        deleteCustomer,
-        deleteItem,
-        exportEntityRegistrations,
-        confirmEntityRegistration,
         purgeDemoData,
         retryInvoice,
         retryBulkInvoices,

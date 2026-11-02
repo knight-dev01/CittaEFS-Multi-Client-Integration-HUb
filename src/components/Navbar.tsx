@@ -5,6 +5,7 @@ import {
   Building2,
   Plug,
   FileText,
+  ShieldAlert,
   Layers,
   Menu,
   X,
@@ -29,6 +30,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
     activeTenant,
     tenants,
     invoices,
+    validationErrors,
     refreshAll,
     currentUser,
     logout,
@@ -41,6 +43,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
 
   const userRole = currentUser?.role || 'OPERATOR';
   const attentionCount = tenants.length > 0 && activeTenant ? invoices.filter((i:any) => i.tenantId === activeTenant.id && ['PENDING_NRS_STAMP','PENDING','QUEUED','REJECTED','FAILED'].includes(i.status)).length : 0;
+  const openValidationCount = tenants.length > 0 && activeTenant ? validationErrors.filter((e:any) => e.tenantId === activeTenant.id && e.status === 'OPEN').length : 0;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -94,7 +97,8 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
 
   const allTabs = [
     { id: 'connections', label: 'Connections', icon: Plug, requiredRoles: ['ADMIN'] },
-    { id: 'invoices', label: 'Invoices', icon: FileText, requiredRoles: ['ADMIN', 'OPERATOR'], count: attentionCount }
+    { id: 'invoices', label: 'Invoices', icon: FileText, requiredRoles: ['ADMIN', 'OPERATOR'], count: attentionCount },
+    { id: 'validation', label: 'Validation', icon: ShieldAlert, requiredRoles: ['ADMIN', 'OPERATOR'], count: openValidationCount }
   ];
 
   const visibleTabs = allTabs.filter(tab => tab.requiredRoles.includes(userRole));
