@@ -3,38 +3,57 @@
 /* ==========================================================================
    CittaHub design system — "Charcoal + Emerald"
    --------------------------------------------------------------------------
-   Two brand colors only: slate (charcoal) neutrals + a single emerald accent.
-   Everything else is a reserved STATUS color and may appear ONLY inside
-   status badges/dots (see StatusBadge.tsx) — never as decoration.
+   Components must use these tokens, never raw slate-/emerald- utilities.
+   Changing the palette then means editing this block only.
 
-     accent ............ emerald-700 — primary actions, links, active nav.
-                         Chosen so white button labels pass WCAG AA (5.5:1).
-     accent-strong ..... emerald-800 — hover/pressed.
-     accent-bright ..... emerald-400 — accent on dark (slate-900) surfaces.
-     accent-soft/line .. emerald-50/300 — tints for chips and focus hints.
-     ink ............... slate-900 — text and numbers. Hierarchy comes from
-                         weight and size, NOT from extra hues.
-     ink-soft/faint .... slate-600/400 — secondary and tertiary text.
-     surface/line ...... slate-50/200 — page and border.
+     canvas .......... page background
+     panel ........... cards, tables, inputs (the raised working surface)
+     panel-muted ..... table headers, inset strips, disabled controls
+     line/line-strong  hairlines and control borders
+     ink ............. primary text and numbers
+     ink-soft ........ labels and secondary text (AA on panel)
+     ink-faint ....... de-emphasised helper text (AA on panel, 4.8:1)
+     chrome .......... sidebar and page-header surface
+     accent .......... primary actions, links, active nav. white label = 5.5:1
+     accent-bright ... accent on chrome surfaces
 
-   Simplified UI rules (applied across components):
-     1. ONE radius scale: rounded-lg (8px) for cards/panels/buttons/inputs;
-        rounded-md for chips; rounded-full only for status pills and avatars.
-     2. Cards are flat: 1px border, no decorative shadows, no colored headers.
-     3. Status badges are solid-filled and reserved (ok / pending / fail /
-        neutral) — the only place amber, rose and slate-as-state appear.
-     4. No gradients, no glows, no decorative brand color on icons.
-     5. Section titles: text-sm font-semibold text-ink.
-        Captions/micro-labels: text-xs text-ink-faint.
+   Type scale — four sizes, no arbitrary values:
+     text-xl    page title            (20px)
+     text-sm    body, controls, table (14px)
+     text-xs    labels, meta, helper  (12px)
+     text-[11px] status badges only
+
+   Rules:
+     1. Radius: rounded-lg for cards/buttons/inputs, rounded-md for chips,
+        rounded-full for status pills only.
+     2. Cards are flat — 1px line, no shadow. Elevation is reserved for
+        overlays (modal, toast) that actually float above the page.
+     3. amber/rose/emerald appear ONLY inside status badges and notice icons,
+        never as a surface fill.
+     4. No gradients, glows, or hover lift on static content.
    ========================================================================== */
 
 @theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --color-canvas: #f1f5f9;
+  --color-panel: #ffffff;
+  --color-panel-muted: #f8fafc;
+
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+
   --color-ink: #0f172a;
   --color-ink-soft: #475569;
-  --color-ink-faint: #94a3b8;
+  --color-ink-faint: #64748b;
 
-  --color-surface: #f8fafc;
-  --color-line: #e2e8f0;
+  --color-chrome: #0f172a;
+  --color-chrome-line: #1e293b;
+  --color-chrome-ink: #e2e8f0;
+  --color-chrome-ink-soft: #94a3b8;
 
   --color-accent: #047857;
   --color-accent-strong: #065f46;
@@ -48,6 +67,54 @@ body,
 #root {
   min-height: 100vh;
   height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Figures line up in tables and stat rows */
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Overlay + progress motion — the only two animations in the app */
+@keyframes slide-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%) scaleX(0.5);
+  }
+  50% {
+    transform: translateX(50%) scaleX(1.2);
+  }
+  100% {
+    transform: translateX(200%) scaleX(0.5);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+
+.animate-indeterminate {
+  animation: indeterminate 1.5s infinite ease-in-out;
+  transform-origin: left;
 }
 
 /* Single focus treatment everywhere — accent, never a stray hue */

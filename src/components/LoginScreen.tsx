@@ -1,11 +1,10 @@
 import { useState, FormEvent } from 'react';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
-import {
-  Layers,
-  ArrowRight,
-  AlertCircle
-} from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { UserSession } from '../types';
+import { Button } from './ui/Button';
+import { Field, Input } from './ui/Field';
+import { Notice } from './ui/Notice';
 
 interface LoginScreenProps {
   onLogin: (session: UserSession, token: string) => void;
@@ -55,80 +54,67 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col justify-center items-center p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-4 py-12">
+      <div className="w-full max-w-sm">
 
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-lg shadow-xl relative z-10 space-y-6 p-7 sm:p-8">
-
-        {/* Brand Header */}
-        <div className="flex items-center space-x-3.5 pb-6 border-b border-slate-800/80">
-          <div className="bg-emerald-700 p-3 rounded-lg text-white">
-            <Layers className="w-6 h-6" />
+        <div className="mb-8 flex items-center gap-3">
+          <div className="rounded-lg bg-accent p-2 text-white">
+            <Layers className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white tracking-tight leading-none">
-              Citta Gateway
-            </h1>
-            <p className="text-xs text-slate-400 font-medium mt-1">
-              ERP integration &amp; NRS fiscalization
-            </p>
+            <h1 className="text-lg font-semibold leading-none tracking-tight text-ink">Citta Gateway</h1>
+            <p className="mt-1 text-xs text-ink-soft">ERP integration &amp; NRS fiscalisation</p>
           </div>
         </div>
 
-        {isQboConnectRedirect && (
-          <div className="bg-amber-950/40 border border-amber-500/30 text-amber-200/90 rounded-lg p-3.5 text-xs flex items-start space-x-2.5">
-            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-            <span className="leading-relaxed">QuickBooks Authorization Request: Please sign in with an Administrator account to manage Intuit OAuth integration.</span>
-          </div>
-        )}
+        <div className="rounded-lg border border-line bg-panel p-6">
+          <h2 className="text-base font-semibold text-ink">Sign in</h2>
+          <p className="mt-1 text-sm text-ink-soft">Administrator and operator accounts are managed in Settings.</p>
 
-        {errorMsg && (
-          <div className="bg-rose-950/40 border border-rose-500/30 text-rose-200/90 rounded-lg p-3.5 text-xs flex items-center space-x-2.5">
-            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+          {isQboConnectRedirect && (
+            <div className="mt-5">
+              <Notice tone="warn">
+                QuickBooks authorisation requested. Sign in with an administrator account to complete the Intuit OAuth flow.
+              </Notice>
+            </div>
+          )}
 
-        {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-slate-300">
-              <span>Email</span>
-            </label>
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@example.com"
-              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 outline-none"
-            />
-          </div>
+          {errorMsg && (
+            <div className="mt-5">
+              <Notice tone="fail">{errorMsg}</Notice>
+            </div>
+          )}
 
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-slate-300">
-              <span>Password</span>
-            </label>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 outline-none"
-            />
-          </div>
+          <form onSubmit={handleLogin} className="mt-6 space-y-4">
+            <Field label="Email" htmlFor="login-email">
+              <Input
+                id="login-email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@example.com"
+              />
+            </Field>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full mt-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-3 rounded-lg text-xs transition-colors flex items-center justify-center space-x-2"
-          >
-            <span>{isSubmitting ? 'Signing in...' : 'Sign In'}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </form>
+            <Field label="Password" htmlFor="login-password">
+              <Input
+                id="login-password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </Field>
+
+            <Button type="submit" disabled={isSubmitting} className="w-full">
+              {isSubmitting ? 'Signing in…' : 'Sign in'}
+            </Button>
+          </form>
+        </div>
 
       </div>
     </div>

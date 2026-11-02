@@ -6,12 +6,15 @@ import { ErpWorkspace } from './components/erp/ErpWorkspace';
 import { OnboardClientModal } from './components/OnboardClientModal';
 import { Layers } from 'lucide-react';
 import { ToastProvider, useToast, setGlobalToast } from './components/ui/Toast';
+import { Button } from './components/ui/Button';
+import { Card } from './components/ui/Card';
+import { EmptyState } from './components/ui/EmptyState';
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col justify-center items-center">
-      <Layers className="w-12 h-12 text-emerald-700 animate-pulse mb-4" />
-      <p className="text-slate-400 text-sm">Loading...</p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-canvas">
+      <Layers className="mb-3 h-8 w-8 text-accent" strokeWidth={1.5} />
+      <p className="text-sm text-ink-soft">Loading workspace</p>
     </div>
   );
 }
@@ -122,22 +125,12 @@ function HubMainContent() {
     : (userRole === 'ADMIN' ? 'connections' : 'invoices');
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col selection:bg-slate-400 selection:text-white">
-      
-        {/* Real-time Background Activity Progress Bar */}
+    <div className="flex min-h-screen flex-col bg-canvas text-ink selection:bg-accent-soft selection:text-ink">
+
+      {/* Background refresh indicator — 1px, no layout shift */}
       {isBgRefreshing && (
-        <div className="fixed top-0 left-0 right-0 h-1 bg-slate-500/20 z-50 overflow-hidden pointer-events-none">
-          <div className="h-full bg-slate-500 rounded-full" style={{
-            animation: 'shimmer-loading 1.5s infinite ease-in-out',
-            transformOrigin: 'left'
-          }} />
-          <style dangerouslySetInnerHTML={{__html: `
-            @keyframes shimmer-loading {
-              0% { transform: translateX(-100%) scaleX(0.5); }
-              50% { transform: translateX(50%) scaleX(1.2); }
-              100% { transform: translateX(200%) scaleX(0.5); }
-            }
-          `}} />
+        <div className="pointer-events-none fixed left-0 right-0 top-0 z-50 h-0.5 overflow-hidden bg-accent-soft">
+          <div className="animate-indeterminate h-full bg-accent" />
         </div>
       )}
 
@@ -149,28 +142,23 @@ function HubMainContent() {
       />
 
       {/* Main Content Area next to Sidebar — ERP-isolated, collapsible */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64 xl:pl-72'}`}>
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full mx-auto max-w-7xl">
-          
+      <div className={`flex min-w-0 flex-1 flex-col ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64 xl:pl-72'}`}>
+        <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+
           {/* ERP-dedicated workspace */}
-          <div className="transition-all duration-150">
+          <div>
             {!activeTenant ? (
               !isInitialized ? (
-                <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>
+                <p className="py-16 text-center text-sm text-ink-soft">Loading workspace…</p>
               ) : (
-                <div className="p-12 text-center bg-white rounded-lg border border-slate-200/80 shadow-sm space-y-4">
-                  <Layers className="w-10 h-10 text-slate-300 mx-auto" />
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700">No ERP connections yet</p>
-                    <p className="text-xs text-slate-400 mt-1">Connect a client ERP to start normalising invoices for CittaEFS.</p>
-                  </div>
-                  <button
-                    onClick={() => openOnboardModal()}
-                    className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-semibold text-xs rounded-lg cursor-pointer"
-                  >
-                    + Connect ERP
-                  </button>
-                </div>
+                <Card>
+                  <EmptyState
+                    icon={Layers}
+                    title="No ERP connected yet"
+                    description="Connect QuickBooks Online or Odoo to start normalising invoices for CittaEFS."
+                    action={<Button onClick={() => openOnboardModal()}>Connect an ERP</Button>}
+                  />
+                </Card>
               )
             ) : (
               <ErpWorkspace activeTab={effectiveTab} onOpenOnboard={() => openOnboardModal()} />

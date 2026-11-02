@@ -12,7 +12,7 @@ interface Props {
 
 export function ErpWorkspace({ activeTab, onOpenOnboard }: Props) {
   const { activeTenant } = useHub();
-  if (!activeTenant) return <div className="p-8 text-center text-slate-400 text-xs">Loading workspace...</div>;
+  if (!activeTenant) return <p className="py-16 text-center text-sm text-ink-soft">Loading workspace…</p>;
 
   return (
     <div className="space-y-6">

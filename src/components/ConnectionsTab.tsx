@@ -1,14 +1,10 @@
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { useHub } from '../lib/store';
 import { toastGlobal } from './ui/Toast';
 import {
-  Plug,
-  AlertTriangle,
-  CheckCircle2,
   RefreshCw,
-  ShieldCheck,
-  Globe,
   Layers,
   Zap,
   ToggleLeft,
@@ -16,6 +12,18 @@ import {
 } from 'lucide-react';
 import { StatusBadge } from './ui/StatusBadge';
 import { PageHeader } from './ui/PageHeader';
+import { Button } from './ui/Button';
+import { Card, CardHeader, CardBody } from './ui/Card';
+import { Notice } from './ui/Notice';
+
+function Row({ label, children, mono = false, tone }: { label: string; children: ReactNode; mono?: boolean; tone?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-ink-soft">{label}</dt>
+      <dd className={`min-w-0 truncate text-right font-medium ${tone || 'text-ink'} ${mono ? 'font-mono' : ''}`}>{children}</dd>
+    </div>
+  );
+}
 
 interface ConnectorStatus {
   qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null; environment?: 'sandbox' | 'production' };
@@ -82,7 +90,7 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
       const data = await parseJsonResponse(res);
       setSyncingQbo(false);
       if (data.success) {
-        toastGlobal('success', 'QuickBooks sync complete', `Found ${data.totalFound} · New ${data.newSynced} · Already synced ${data.alreadySynced}`);
+        toastGlobal('success', 'QuickBooks sync complete', `Found ${data.totalFound}, new ${data.newSynced}, already synced ${data.alreadySynced}`);
       } else {
         toastGlobal('error', 'Sync failed', data.error || 'Unknown error');
       }
@@ -110,7 +118,7 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
       const data = await parseJsonResponse(res);
       setTestingQbo(false);
       if (data.success) {
-        toastGlobal('success', 'Live QuickBooks test passed', `Company: ${data.companyInfo?.CompanyName} · ${data.companyInfo?.Country} · ${data.latencyMs}ms`);
+        toastGlobal('success', 'Live QuickBooks test passed', `${data.companyInfo?.CompanyName}, ${data.companyInfo?.Country}, ${data.latencyMs}ms`);
       } else {
         toastGlobal('error', 'Connection test failed', data.error || 'Unknown error');
       }
@@ -161,7 +169,7 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
       const data = await parseJsonResponse(res);
       setSyncingOdoo(false);
       if (data.success) {
-        toastGlobal('success', 'Odoo sync complete', `Found ${data.totalFound} · New ${data.newSynced} · Already synced ${data.alreadySynced}`);
+        toastGlobal('success', 'Odoo sync complete', `Found ${data.totalFound}, new ${data.newSynced}, already synced ${data.alreadySynced}`);
       } else {
         toastGlobal('error', 'Sync failed', data.error || 'Unknown error');
       }
@@ -184,7 +192,7 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
       const data = await parseJsonResponse(res);
       setTestingOdoo(false);
       if (data.success) {
-        toastGlobal('success', 'Live Odoo test passed', `Company: ${data.companyInfo?.CompanyName} · ${data.companyInfo?.Currency} · ${data.latencyMs}ms`);
+        toastGlobal('success', 'Live Odoo test passed', `${data.companyInfo?.CompanyName}, ${data.companyInfo?.Currency}, ${data.latencyMs}ms`);
       } else {
         toastGlobal('error', 'Connection test failed', data.error || 'Unknown error');
       }
@@ -196,264 +204,173 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
   };
 
   return (
-    <div className="space-y-6 font-sans text-xs">
+    <div className="space-y-6">
 
-      {/* Header Banner */}
       <PageHeader
-        icon={Plug}
         title="Connections"
-        subtitle={<>ERP connections and CittaEFS gateway status — <strong className="text-white font-medium">{activeTenant.name}</strong></>}
+        subtitle={<>ERP connections and CittaEFS gateway status for <span className="font-medium text-ink">{activeTenant.name}</span>.</>}
       />
 
       {/* QuickBooks OAuth Callback Result */}
       {qboRedirectStatus === 'success' && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
-          <div className="flex items-start space-x-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
-            <div>
-              <strong className="font-semibold text-emerald-950">QuickBooks Online Connected Successfully</strong>
-              <p className="mt-0.5 text-emerald-800">
-                Authorization completed for <strong>{activeTenant.name}</strong>
-                {qboRedirectRealmId ? <>. Realm ID: <span className="font-mono">{qboRedirectRealmId}</span></> : '.'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleSyncQbo}
-            disabled={syncingQbo}
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer text-xs shrink-0 transition-colors shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncingQbo ? 'animate-spin' : ''}`} />
-            <span>{syncingQbo ? 'Syncing...' : 'Sync Historical Data'}</span>
-          </button>
-        </div>
+        <Notice
+          tone="ok"
+          title="QuickBooks Online connected"
+          action={
+            <Button size="sm" onClick={handleSyncQbo} disabled={syncingQbo}>
+              <RefreshCw className={`h-3.5 w-3.5 ${syncingQbo ? 'animate-spin' : ''}`} />
+              {syncingQbo ? 'Syncing…' : 'Sync historical data'}
+            </Button>
+          }
+        >
+          Authorised for <strong className="font-medium text-ink">{activeTenant.name}</strong>.
+          {qboRedirectRealmId && <> Realm ID <span className="font-mono">{qboRedirectRealmId}</span>.</>}
+        </Notice>
       )}
 
       {qboRedirectStatus === 'error' && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-900 rounded-lg p-4 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
-          <div className="flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="font-semibold text-rose-950">QuickBooks Authorization Failed</strong>
-              <p className="mt-0.5 text-rose-800">{qboRedirectError || 'QuickBooks did not complete authorization. Please try again.'}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              window.location.href = `/api/integrations/qbo/connect?tenantId=${encodeURIComponent(activeTenant.id)}`;
-            }}
-            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-lg cursor-pointer text-xs shrink-0 transition-colors shadow-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <Notice
+          tone="fail"
+          title="QuickBooks authorisation failed"
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                window.location.href = `/api/integrations/qbo/connect?tenantId=${encodeURIComponent(activeTenant.id)}`;
+              }}
+            >
+              Try again
+            </Button>
+          }
+        >
+          {qboRedirectError || 'QuickBooks did not complete authorisation. Please try again.'}
+        </Notice>
       )}
 
-      {/* Intuit Disconnect Route Banner */}
       {isQboDisconnectedNotice && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4 text-xs flex items-center justify-between shadow-sm">
-          <div className="flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <strong className="font-semibold text-amber-950">QuickBooks Disconnect Notice:</strong>
-              <p className="mt-0.5 text-amber-800">Your QuickBooks Online app session was disconnected from Intuit. To restore automated CDC webhooks & IRN writebacks, use "Connect QuickBooks Online" below to re-authenticate.</p>
-            </div>
-          </div>
-        </div>
+        <Notice tone="warn" title="QuickBooks disconnected">
+          The Intuit app session was disconnected. Reconnect QuickBooks Online below to restore CDC webhooks and IRN writebacks.
+        </Notice>
       )}
 
-      {/* Intuit Connect / Reconnect Route Banner */}
       {isQboConnectNotice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 text-xs flex items-center justify-between shadow-sm">
-          <div className="flex items-center space-x-3">
-            <Zap className="w-5 h-5 text-emerald-700 shrink-0" />
-            <div>
-              <strong className="font-semibold text-emerald-950">Intuit Authorization Request:</strong>
-              <p className="mt-0.5 text-emerald-800">You arrived via QuickBooks App Store integration link. Click below to initiate OAuth 2.0 grant.</p>
-            </div>
-          </div>
-          <button
-            onClick={() => onResumeConnect?.()}
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer text-xs shrink-0 transition-colors shadow-sm"
-          >
-            Authorize QBO Now
-          </button>
-        </div>
+        <Notice
+          tone="info"
+          title="Intuit authorisation request"
+          action={<Button size="sm" onClick={() => onResumeConnect?.()}>Authorise QuickBooks</Button>}
+        >
+          You arrived from the QuickBooks App Store listing. Complete the OAuth 2.0 grant to finish connecting.
+        </Notice>
       )}
 
-      {/* Connector Health Grid — real, DB-backed status */}
       {isLoadingStatus ? (
-        <div className="p-8 text-center text-slate-400 text-xs">Loading connector status...</div>
+        <p className="py-12 text-center text-sm text-ink-soft">Loading connector status…</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
 
           {/* QuickBooks Online — real Integration status */}
-          <div className="bg-white rounded-lg border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-emerald-700" />
-                <span className="font-semibold text-slate-900 text-sm">QuickBooks Online</span>
-              </div>
-              <StatusBadge tone={status?.qbo.connected ? 'ok' : 'pending'}>
-                {status?.qbo.status || 'NOT_CONNECTED'}
-              </StatusBadge>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Realm / Company ID:</span>
-                <span className="font-mono font-medium text-slate-900">{status?.qbo.companyId || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Last Sync:</span>
-                <span className="font-medium text-slate-900">{formatWhen(status?.qbo.lastSyncAt ?? null)}</span>
-              </div>
-              <div className="flex justify-between items-center text-slate-500">
-                <span>Environment:</span>
-                <button
-                  onClick={handleToggleQboEnvironment}
-                  disabled={togglingQboEnv}
-                  title="Sandbox and production use separate Intuit credentials — switching an already-connected tenant will need reauthorization"
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border cursor-pointer disabled:opacity-50 transition-colors ${
-                    (status?.qbo.environment || 'sandbox') === 'production'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                  }`}
-                >
-                  {(status?.qbo.environment || 'sandbox') === 'production' ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
-                  <span>{togglingQboEnv ? 'Switching...' : (status?.qbo.environment || 'sandbox').toUpperCase()}</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
+          <Card className="flex flex-col">
+            <CardHeader
+              title="QuickBooks Online"
+              action={<StatusBadge tone={status?.qbo.connected ? 'ok' : 'pending'}>{status?.qbo.status || 'NOT_CONNECTED'}</StatusBadge>}
+            />
+            <CardBody className="flex-1">
+              <dl className="space-y-2 text-xs">
+                <Row label="Realm / company ID" mono>{status?.qbo.companyId || 'N/A'}</Row>
+                <Row label="Last sync">{formatWhen(status?.qbo.lastSyncAt ?? null)}</Row>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-ink-soft">Environment</dt>
+                  <dd>
+                    <button
+                      onClick={handleToggleQboEnvironment}
+                      disabled={togglingQboEnv}
+                      title="Sandbox and production use separate Intuit credentials — switching an already-connected ERP needs reauthorisation"
+                      className={`inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                        (status?.qbo.environment || 'sandbox') === 'production'
+                          ? 'border-accent-line bg-accent-soft text-accent-strong'
+                          : 'border-line bg-panel-muted text-ink-soft'
+                      }`}
+                    >
+                      {(status?.qbo.environment || 'sandbox') === 'production' ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                      {togglingQboEnv ? 'Switching…' : (status?.qbo.environment || 'sandbox')}
+                    </button>
+                  </dd>
+                </div>
+              </dl>
+            </CardBody>
+            <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
               {status?.qbo.connected ? (
                 <>
-                  <button
-                    onClick={handleSyncQbo}
-                    disabled={syncingQbo}
-                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs rounded-lg border border-emerald-300 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${syncingQbo ? 'animate-spin' : ''}`} />
-                    <span>{syncingQbo ? 'Syncing...' : 'Sync Now'}</span>
-                  </button>
-                  <button
-                    onClick={handleTestQbo}
-                    disabled={testingQbo}
-                    className="font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 text-emerald-700 hover:text-emerald-800"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${testingQbo ? 'animate-spin' : ''}`} />
-                    <span>{testingQbo ? 'Testing...' : 'Test (Live)'}</span>
-                  </button>
+                  <Button size="sm" variant="secondary" onClick={handleSyncQbo} disabled={syncingQbo}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncingQbo ? 'animate-spin' : ''}`} />
+                    {syncingQbo ? 'Syncing…' : 'Sync now'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleTestQbo} disabled={testingQbo}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${testingQbo ? 'animate-spin' : ''}`} />
+                    {testingQbo ? 'Testing…' : 'Test live'}
+                  </Button>
                 </>
               ) : (
-                <button
-                  onClick={() => onResumeConnect?.()}
-                  className="w-full px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Connect QuickBooks Online</span>
-                </button>
+                <Button size="sm" className="w-full" onClick={() => onResumeConnect?.()}>
+                  <Zap className="h-3.5 w-3.5" />
+                  Connect QuickBooks Online
+                </Button>
               )}
             </div>
-          </div>
+          </Card>
 
           {/* Odoo ERP — real Integration status */}
-          <div className="bg-white rounded-lg border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-slate-900" />
-                <span className="font-semibold text-slate-900 text-sm">Odoo ERP</span>
-              </div>
-              <StatusBadge tone={status?.odoo.connected ? 'ok' : 'pending'}>
-                {status?.odoo.status || 'NOT_CONNECTED'}
-              </StatusBadge>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Auth Scheme:</span>
-                <span className="font-medium text-slate-900">JSON-RPC API Key</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Database:</span>
-                <span className="font-mono font-medium text-slate-900">{status?.odoo.database || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Last Sync:</span>
-                <span className="font-medium text-slate-900">{formatWhen(status?.odoo.lastSyncAt ?? null)}</span>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
+          <Card className="flex flex-col">
+            <CardHeader
+              title="Odoo ERP"
+              action={<StatusBadge tone={status?.odoo.connected ? 'ok' : 'pending'}>{status?.odoo.status || 'NOT_CONNECTED'}</StatusBadge>}
+            />
+            <CardBody className="flex-1">
+              <dl className="space-y-2 text-xs">
+                <Row label="Auth scheme">JSON-RPC API key</Row>
+                <Row label="Database" mono>{status?.odoo.database || 'N/A'}</Row>
+                <Row label="Last sync">{formatWhen(status?.odoo.lastSyncAt ?? null)}</Row>
+              </dl>
+            </CardBody>
+            <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
               {status?.odoo.connected ? (
                 <>
-                  <button
-                    onClick={handleSyncOdoo}
-                    disabled={syncingOdoo}
-                    className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-900 font-semibold text-xs rounded-lg border border-slate-200 inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${syncingOdoo ? 'animate-spin' : ''}`} />
-                    <span>{syncingOdoo ? 'Syncing...' : 'Sync Now'}</span>
-                  </button>
-                  <button
-                    onClick={handleTestOdoo}
-                    disabled={testingOdoo}
-                    className="font-semibold text-xs hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50 text-slate-900 hover:text-slate-900"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${testingOdoo ? 'animate-spin' : ''}`} />
-                    <span>{testingOdoo ? 'Testing...' : 'Test (Live)'}</span>
-                  </button>
+                  <Button size="sm" variant="secondary" onClick={handleSyncOdoo} disabled={syncingOdoo}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncingOdoo ? 'animate-spin' : ''}`} />
+                    {syncingOdoo ? 'Syncing…' : 'Sync now'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleTestOdoo} disabled={testingOdoo}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${testingOdoo ? 'animate-spin' : ''}`} />
+                    {testingOdoo ? 'Testing…' : 'Test live'}
+                  </Button>
                 </>
               ) : (
-                <button
-                  onClick={() => onResumeConnect?.()}
-                  className="w-full px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Layers className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Connect Odoo ERP</span>
-                </button>
+                <Button size="sm" className="w-full" onClick={() => onResumeConnect?.()}>
+                  <Layers className="h-3.5 w-3.5" />
+                  Connect Odoo ERP
+                </Button>
               )}
             </div>
-          </div>
+          </Card>
 
           {/* CittaEFS Gateway — real stamping outcomes from the signing queue */}
-          <div className="bg-white rounded-lg border border-slate-200/80 p-5 space-y-4 shadow-sm hover:shadow-md transition-all">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                <span className="font-semibold text-slate-900 text-sm">CittaEFS Gateway</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Endpoint:</span>
-                <span
-                  className="font-mono font-medium text-slate-900 truncate max-w-[170px]"
-                  title={activeTenant.cittaGatewayUrl || 'https://ei-api.azurewebsites.net'}
-                >
-                  {activeTenant.cittaGatewayUrl || 'https://ei-api.azurewebsites.net'}
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Auth:</span>
-                <span className="font-medium text-slate-900">Bearer (shared key)</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>NRS Stamped (Approved):</span>
-                <span className="font-mono font-medium text-emerald-700">{status?.cittaGateway.totalStamped ?? 0}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Pending NRS Stamp:</span>
-                <span className="font-mono font-medium text-amber-600">{status?.cittaGateway.totalPending ?? 0}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Rejected (Retries Exhausted):</span>
-                <span className="font-mono font-medium text-rose-600">{status?.cittaGateway.totalRejected ?? 0}</span>
-              </div>
-            </div>
-          </div>
+          <Card className="flex flex-col">
+            <CardHeader title="CittaEFS Gateway" meta="NRS stamping outcomes from the signing queue" />
+            <CardBody className="flex-1">
+              <dl className="space-y-2 text-xs">
+                <Row label="Endpoint" mono>
+                  <span title={activeTenant.cittaGatewayUrl || 'https://ei-api.azurewebsites.net'}>
+                    {activeTenant.cittaGatewayUrl || 'https://ei-api.azurewebsites.net'}
+                  </span>
+                </Row>
+                <Row label="Auth">Bearer (shared key)</Row>
+                <Row label="Stamped / approved" mono tone="text-accent">{status?.cittaGateway.totalStamped ?? 0}</Row>
+                <Row label="Pending stamp" mono tone="text-amber-600">{status?.cittaGateway.totalPending ?? 0}</Row>
+                <Row label="Rejected" mono tone="text-rose-600">{status?.cittaGateway.totalRejected ?? 0}</Row>
+              </dl>
+            </CardBody>
+          </Card>
 
         </div>
       )}

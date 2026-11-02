@@ -1,17 +1,15 @@
 import type { ReactNode } from 'react';
 
-// The ONLY place amber / rose / neutral-slate appear as state color in the
-// two-color system (everything else is charcoal or emerald). Solid-filled so
-// status is never confusable with the emerald accent used on buttons/links.
-// Text colors chosen for WCAG AA on their fill (pending uses near-black on
-// amber — white on amber-400 fails contrast).
+// The ONLY place amber / rose / neutral appear as state colour (everything
+// else is ink or accent). Solid-filled so status never reads as an accent
+// button. Pending uses near-black on amber — white on amber-400 fails contrast.
 export type StatusTone = 'ok' | 'pending' | 'fail' | 'neutral';
 
 const TONES: Record<StatusTone, string> = {
   ok: 'bg-emerald-700 text-white',
-  pending: 'bg-amber-400 text-slate-900',
+  pending: 'bg-amber-400 text-ink',
   fail: 'bg-rose-600 text-white',
-  neutral: 'bg-slate-200 text-slate-700',
+  neutral: 'bg-slate-200 text-ink-soft',
 };
 
 export function StatusBadge({
@@ -25,7 +23,7 @@ export function StatusBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${TONES[tone]} ${className}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${TONES[tone]} ${className}`}
     >
       {children}
     </span>

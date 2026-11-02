@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -11,6 +11,10 @@ interface ToastContextType {
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+const ICONS = { success: CheckCircle2, error: AlertCircle, info: Info };
+const ICON_COLOUR = { success: 'text-emerald-700', error: 'text-rose-600', info: 'text-ink-soft' };
+const RULE = { success: 'border-l-emerald-600', error: 'border-l-rose-600', info: 'border-l-line-strong' };
 
 let nextId = 1;
 
@@ -32,21 +36,30 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={ctx}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none max-w-sm w-[92vw] sm:w-[380px]">
-        {toasts.map(t => (
-          <div key={t.id} className={`pointer-events-auto flex items-start gap-3 p-3 pr-2 rounded-lg border shadow-lg backdrop-blur-sm text-xs font-medium animate-[slideIn_0.2s_ease] ${t.type==='success' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : t.type==='error' ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <span className="mt-0.5">
-              {t.type==='success' ? <CheckCircle2 className="w-4 h-4 text-emerald-700" /> : t.type==='error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <Info className="w-4 h-4 text-slate-900" />}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold leading-tight">{t.title}</p>
-              {t.description && <p className="font-normal text-[11px] leading-snug mt-0.5 opacity-80 line-clamp-3">{t.description}</p>}
+      <div className="pointer-events-none fixed bottom-4 right-4 z-[9999] flex w-[92vw] max-w-sm flex-col gap-2 sm:w-[380px]">
+        {toasts.map(t => {
+          const Icon = ICONS[t.type];
+          return (
+            <div
+              key={t.id}
+              className={`animate-slide-in pointer-events-auto flex items-start gap-3 rounded-lg border border-l-2 border-line bg-panel p-3 pr-2 shadow-lg ${RULE[t.type]}`}
+            >
+              <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${ICON_COLOUR[t.type]}`} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold leading-tight text-ink">{t.title}</p>
+                {t.description && <p className="mt-0.5 line-clamp-3 text-xs leading-snug text-ink-soft">{t.description}</p>}
+              </div>
+              <button
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                className="cursor-pointer rounded-lg p-1 text-ink-faint hover:bg-panel-muted hover:text-ink"
+                aria-label="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
-            <button onClick={() => setToasts(prev=>prev.filter(x=>x.id!==t.id))} className="p-1 rounded-lg hover:bg-black/5 text-slate-400 hover:text-slate-700 pointer-events-auto cursor-pointer"><X className="w-3.5 h-3.5" /></button>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      <style>{`@keyframes slideIn{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
     </ToastContext.Provider>
   );
 }
