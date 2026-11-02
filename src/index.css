@@ -84,6 +84,12 @@ table {
   font-variant-numeric: tabular-nums;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-ink-faint);
+  opacity: 1;
+}
+
 /* Overlay + progress motion — the only two animations in the app */
 @keyframes slide-in {
   from {

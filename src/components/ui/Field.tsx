@@ -1,7 +1,7 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 
 const CONTROL =
-  'w-full rounded-lg border border-line-strong bg-panel px-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-panel-muted disabled:text-ink-faint';
+  'w-full rounded-lg border border-line-strong bg-panel px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-panel-muted disabled:text-ink-faint';
 
 export function Field({
   label,
