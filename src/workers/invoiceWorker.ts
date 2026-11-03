@@ -4,6 +4,7 @@ import { invoiceQueue, QueueJob, QueueablePayload } from '../queues/invoiceQueue
 import { cittaEfsClient, CittaEfsResponse } from '../services/cittaEfsClient';
 import { dispatchMerchantWebhook } from '../services/merchantWebhook';
 import { isValidCittaCode, normalizeCittaCode, getCittaCodeType } from '../data/referenceData';
+import { formatGatewayErrorMessage } from '../lib/gatewayErrors';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
@@ -302,8 +303,6 @@ export async function processInvoiceJob(
         gatewayStatus !== 408 &&
         gatewayStatus !== 429);
     if (refusedPayload) {
-      const invoiceTypeCode = (job.data as any).invoiceTypeCode;
-      const typeLabel = `${job.data.invoiceType}${invoiceTypeCode ? `/${invoiceTypeCode}` : ''}`;
       await invoiceQueue.moveToDLQ(job, errorMsg);
       await prisma.invoice.update({
         where: { id: job.data.dbInvoiceId },
@@ -317,7 +316,10 @@ export async function processInvoiceJob(
             clientInvoiceNumber: job.data.clientInvoiceNumber,
             errorCategory: 'GATEWAY_REJECTED',
             fieldAffected: 'gateway',
-            errorMessage: `CittaEFS gateway refused invoice type ${typeLabel} (HTTP ${gatewayStatus ?? '4xx'}, not retried): ${errorMsg.slice(0, 3900)}`,
+            errorMessage: formatGatewayErrorMessage(errorMsg, {
+              invoiceType: job.data.invoiceType,
+              invoiceTypeCode: (job.data as any).invoiceTypeCode,
+            }).slice(0, 4000),
             rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
             status: 'OPEN',
           }
@@ -342,7 +344,10 @@ export async function processInvoiceJob(
             clientInvoiceNumber: job.data.clientInvoiceNumber,
             errorCategory: errorMsg.includes('Gateway') || errorMsg.includes('CittaEFS') ? 'GATEWAY_REJECTED' : 'TRANSMIT_FAILED',
             fieldAffected: 'gateway',
-            errorMessage: `CittaEFS gateway rejected after ${job.maxRetries} retries: ${errorMsg.slice(0, 4000)}`,
+            errorMessage: `After ${job.maxRetries} attempts: ${formatGatewayErrorMessage(errorMsg, {
+              invoiceType: job.data.invoiceType,
+              invoiceTypeCode: (job.data as any).invoiceTypeCode,
+            })}`.slice(0, 4000),
             rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
             status: 'OPEN',
           }

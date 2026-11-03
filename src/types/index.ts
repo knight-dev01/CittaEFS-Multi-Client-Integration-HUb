@@ -159,7 +159,7 @@ export interface ValidationErrorItem {
   id: string;
   tenantId: TenantId;
   clientInvoiceNumber: string;
-  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH' | 'DUPLICATE_INVOICE';
+  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH' | 'DUPLICATE_INVOICE' | 'GATEWAY_REJECTED' | 'GATEWAY_NOT_CONFIGURED' | 'TRANSMIT_FAILED';
   fieldAffected: string;
   errorMessage: string;
   rawPayloadSample: any;

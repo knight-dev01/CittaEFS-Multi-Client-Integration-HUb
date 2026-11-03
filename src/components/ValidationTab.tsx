@@ -8,6 +8,7 @@ import { Button } from './ui/Button';
 import { Input, Select } from './ui/Field';
 import { Card } from './ui/Card';
 import { EmptyState } from './ui/EmptyState';
+import { splitGatewayErrorMessage } from '../lib/gatewayErrors';
 
 type QuickView = 'OPEN' | 'RESOLVED' | 'ALL';
 
@@ -24,6 +25,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   MISSING_B2B_TIN: 'Missing B2B TIN',
   TAX_MISMATCH: 'Tax mismatch',
   DUPLICATE_INVOICE: 'Duplicate invoice',
+  GATEWAY_REJECTED: 'CittaEFS rejected',
+  GATEWAY_NOT_CONFIGURED: 'Gateway key missing',
+  TRANSMIT_FAILED: 'Transmit failed',
 };
 
 function formatDate(value?: string | null): string {
@@ -210,6 +214,7 @@ export function ValidationTab() {
                 {filtered.map(error => {
                   const isExpanded = expandedId === error.id;
                   const isOpen = error.status === 'OPEN';
+                  const message = splitGatewayErrorMessage(error.errorMessage);
                   return (
                     <Fragment key={error.id}>
                       <tr className={`transition-colors hover:bg-panel-muted ${isExpanded ? 'bg-accent-soft/50' : ''}`}>
@@ -229,7 +234,7 @@ export function ValidationTab() {
                             {CATEGORY_LABELS[error.errorCategory] || error.errorCategory}
                           </span>
                         </td>
-                        <td className="max-w-80 truncate py-3 pr-4 text-ink-soft" title={error.errorMessage}>{error.errorMessage}</td>
+                        <td className="max-w-80 truncate py-3 pr-4 text-ink-soft" title={message.summary}>{message.summary}</td>
                         <td className="py-3 pr-4 text-xs text-ink-faint">{formatDate(error.createdAt)}</td>
                         <td className="py-3 pr-5">
                           <StatusBadge tone={statusTone(error.status)}>{error.status}</StatusBadge>
@@ -239,7 +244,17 @@ export function ValidationTab() {
                         <tr className="bg-panel-muted/60">
                           <td />
                           <td colSpan={5} className="space-y-3 py-4 pr-5">
-                            <p className="text-sm text-ink">{error.errorMessage}</p>
+                            <p className="max-w-3xl leading-relaxed text-ink">{message.summary}</p>
+                            {message.technical && (
+                              <details className="max-w-3xl rounded-md border border-line bg-panel px-3 py-2">
+                                <summary className="cursor-pointer text-xs font-medium text-ink-soft">
+                                  Technical detail
+                                </summary>
+                                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-ink-faint">
+                                  {message.technical}
+                                </pre>
+                              </details>
+                            )}
                             {isOpen ? (
                               FIXABLE_CATEGORIES.has(error.errorCategory) ? (
                                 <FixForm
