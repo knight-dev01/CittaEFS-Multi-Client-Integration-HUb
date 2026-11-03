@@ -161,17 +161,19 @@ export interface ValidationErrorItem {
   createdAt: string;
 }
 
-export interface AuditLog {
+// Matches GET /api/audit-logs (src/routes/auditLogs.ts). `rawJson` is
+// deliberately absent: it can contain full tenant records including key
+// material, so the API never returns it.
+export interface AuditLogEntry {
   id: string;
   tenantId: TenantId;
-  action: 'INVOICE_INGESTED' | 'PAYLOAD_GENERATED' | 'CITTA_SUBMITTED' | 'WEBHOOK_RECEIVED' | 'LEDGER_WRITEBACK' | 'CODE_MAPPED' | 'RECONCILIATION_RUN' | 'TENANT_ONBOARDED';
-  entityType: 'INVOICE' | 'CUSTOMER' | 'ITEM_MAPPING' | 'SYSTEM' | 'TENANT';
+  action: string;
+  entityType: string;
   entityRef: string;
   details: string;
   sha256PayloadHash: string;
   performedBy: string;
-  timestamp: string;
-  rawJson?: any;
+  createdAt: string;
 }
 
 export interface QueueJob {
@@ -186,14 +188,43 @@ export interface QueueJob {
   scheduledAt: string;
 }
 
+export interface MetricsByErp {
+  sourceErp: string;
+  total: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+  successRate: number;
+}
+
+export interface MetricsTimeseriesPoint {
+  date: string;
+  qbo: number;
+  odoo: number;
+  total: number;
+}
+
+export interface ErpHealthRow {
+  id: string;
+  erpId: string;
+  displayName: string | null;
+  companyId: string | null;
+  status: string;
+  lastSyncAt: string | null;
+  lagSec: number | null;
+}
+
 export interface SystemMetrics {
   totalInvoicesProcessed: number;
-  nrsStampSuccessRate: number; // e.g. 99.8
+  nrsStampSuccessRate: number; // percent, e.g. 99.8
   averageLatencyMs: number;
   activeTenantsCount: number;
   pendingValidationCount: number;
   reconciliationCronStatus: 'HEALTHY' | 'RUNNING' | 'ATTENTION';
-  cittaGatewayStatus: 'ONLINE' | 'DEGRADED';
+  cittaGatewayStatus: 'ONLINE' | 'DEGRADED' | 'UNKNOWN';
+  byErp?: MetricsByErp[];
+  timeseries?: MetricsTimeseriesPoint[];
+  erpHealth?: ErpHealthRow[];
 }
 
 export type UserRole = 'ADMIN' | 'OPERATOR';

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   XCircle,
   RefreshCw,
+  RotateCcw,
 } from 'lucide-react';
 import { StatusBadge, statusTone, writebackTone } from './ui/StatusBadge';
 import { PageHeader } from './ui/PageHeader';
@@ -38,12 +39,14 @@ function formatDate(value?: string | null): string {
 }
 
 export function InvoicesTab() {
-  const { invoices, activeTenant, refreshAll, isBgRefreshing } = useHub() as any;
+  const { invoices, activeTenant, refreshAll, isBgRefreshing, retryInvoice, retryBulkInvoices } = useHub() as any;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [quickView, setQuickView] = useState<QuickView>('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
+  const [retryingInvoiceId, setRetryingInvoiceId] = useState<string | null>(null);
+  const [isBulkRetrying, setIsBulkRetrying] = useState(false);
 
   const tenantInvoices: Invoice[] = useMemo(
     () => (invoices || []).filter((inv: Invoice) => inv.tenantId === activeTenant?.id),
@@ -77,6 +80,40 @@ export function InvoicesTab() {
   const expandedInvoice = expandedInvoiceId
     ? tenantInvoices.find(inv => inv.id === expandedInvoiceId) || null
     : null;
+
+  const attentionInvoices = useMemo(
+    () => tenantInvoices.filter(inv => ATTENTION_STATUSES.includes(inv.status)),
+    [tenantInvoices]
+  );
+
+  const handleRetryInvoice = async (invoice: Invoice) => {
+    setRetryingInvoiceId(invoice.id);
+    try {
+      await retryInvoice(invoice.id);
+    } catch {
+      // store.tsx already raised a toast with the real message
+    } finally {
+      setRetryingInvoiceId(null);
+    }
+  };
+
+  const handleRetryAllFailed = async () => {
+    if (!attentionInvoices.length || !activeTenant) return;
+    const proceed = window.confirm(
+      `Retry ${attentionInvoices.length} failed invoice(s) for ${activeTenant.name}?\n\n` +
+      `They are re-queued for CittaEFS stamping and move back to PENDING_NRS_STAMP. ` +
+      `Anything still wrong at the gateway will fail again with a new error.`
+    );
+    if (!proceed) return;
+    setIsBulkRetrying(true);
+    try {
+      await retryBulkInvoices(activeTenant.id, attentionInvoices.map(inv => inv.id));
+    } catch {
+      // store.tsx already raised a toast with the real message
+    } finally {
+      setIsBulkRetrying(false);
+    }
+  };
 
   if (!activeTenant) {
     return <p className="py-16 text-center text-sm text-ink-soft">No workspace — connect an ERP to see invoices.</p>;
@@ -152,6 +189,18 @@ export function InvoicesTab() {
             <h2 className="text-sm font-semibold text-ink">Invoice ledger</h2>
             <p className="mt-0.5 text-xs text-ink-faint">{activeTenant.name} — {filteredInvoices.length} shown, read-only</p>
           </div>
+          {attentionInvoices.length > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleRetryAllFailed}
+              disabled={isBulkRetrying}
+              title="Re-queue every REJECTED or FAILED invoice for this workspace"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${isBulkRetrying ? 'animate-spin' : ''}`} />
+              {isBulkRetrying ? 'Retrying…' : `Retry ${attentionInvoices.length} failed`}
+            </Button>
+          )}
         </div>
 
         {filteredInvoices.length === 0 ? (
@@ -247,6 +296,17 @@ export function InvoicesTab() {
                           {PENDING_STATUSES.includes(inv.status) && <Clock className="mr-1 h-3 w-3" />}
                           {inv.status}
                         </StatusBadge>
+                        {ATTENTION_STATUSES.includes(inv.status) && (
+                          <button
+                            onClick={() => handleRetryInvoice(inv)}
+                            disabled={retryingInvoiceId === inv.id}
+                            title={`Re-queue ${inv.clientInvoiceNumber} for CittaEFS stamping`}
+                            className="mt-1 flex cursor-pointer items-center gap-1 text-xs font-medium text-ink-soft transition-colors hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <RotateCcw className={`h-3 w-3 ${retryingInvoiceId === inv.id ? 'animate-spin' : ''}`} />
+                            {retryingInvoiceId === inv.id ? 'Retrying…' : 'Retry'}
+                          </button>
+                        )}
                       </td>
 
                       <td className="py-3 pr-5">
@@ -374,6 +434,16 @@ export function InvoicesTab() {
                     <ExternalLink className="h-3.5 w-3.5" />
                     Verify on NRS
                   </a>
+                )}
+                {ATTENTION_STATUSES.includes(expandedInvoice.status) && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleRetryInvoice(expandedInvoice)}
+                    disabled={retryingInvoiceId === expandedInvoice.id}
+                  >
+                    <RotateCcw className={`h-3.5 w-3.5 ${retryingInvoiceId === expandedInvoice.id ? 'animate-spin' : ''}`} />
+                    {retryingInvoiceId === expandedInvoice.id ? 'Retrying…' : 'Retry invoice'}
+                  </Button>
                 )}
                 <Button variant="secondary" onClick={() => setExpandedInvoiceId(null)}>Close</Button>
               </div>

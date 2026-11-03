@@ -27,6 +27,7 @@ import webhooksRouter from "./src/routes/webhooks";
 import systemRouter from "./src/routes/system";
 import entityMappingsRouter from "./src/routes/entityMappings";
 import gatewayRouter from "./src/routes/gateway";
+import auditLogsRouter from "./src/routes/auditLogs";
 
 const { JWT_SECRET } = getAuthConfig();
 
@@ -134,6 +135,8 @@ async function startServer() {
   // Gateway BEFORE systemRouter — system's JSON 404 catch-all (router.use "/api/*")
   // would otherwise shadow every /api/v1/* route the gateway registers.
   app.use(gatewayRouter);
+  // Same reason: must be mounted before systemRouter's catch-all.
+  app.use(auditLogsRouter);
   app.use(systemRouter);
 
   if (process.env.NODE_ENV !== "production") {

@@ -409,7 +409,7 @@ router.get("/api/system/citta-config", async (req: any, res) => {
   try {
     const envKey = process.env.CITTAEFS_API_KEY?.trim() || process.env.CITTA_EFS_API_KEY?.trim() || "";
     const envGateway = process.env.CITTAEFS_GATEWAY_URL?.trim() || process.env.CITTA_GATEWAY_URL?.trim() || "https://ei-api.azurewebsites.net";
-    const dbSample = await prisma.tenant.findFirst({ select: { cittaApiKey: true, cittaGatewayUrl: true } });
+    const dbSample = await prisma.tenant.findFirst({ select: { cittaApiKey: true, cittaGatewayUrl: true, cittaWritebackTarget: true } });
     const _ph = ["place", "holder"].join("");
     const _hasEnvKey = !!envKey && !envKey.includes(_ph);
     res.json({
@@ -418,6 +418,7 @@ router.get("/api/system/citta-config", async (req: any, res) => {
       envGatewayUrl: envGateway,
       dbSharedKeyPreview: dbSample?.cittaApiKey ? `${String(dbSample.cittaApiKey).slice(0, 12)}...` : null,
       dbSharedGatewayUrl: dbSample?.cittaGatewayUrl || null,
+      dbWritebackTarget: dbSample?.cittaWritebackTarget || "BOTH",
       effectiveApiKeyPreview: (envKey && !envKey.includes(_ph) ? envKey : dbSample?.cittaApiKey || "") ? `${String(envKey && !envKey.includes(_ph) ? envKey : dbSample?.cittaApiKey).slice(0, 12)}...` : "not configured",
       effectiveGatewayUrl: envGateway || dbSample?.cittaGatewayUrl || "https://ei-api.azurewebsites.net",
       note: "All tenants send through ONE CittaEFS API key. Set CITTAEFS_API_KEY env var to override DB. PATCH /api/tenants/:id/citta-config propagates to all tenants.",

@@ -13,8 +13,11 @@ import {
   RefreshCw,
   Plus,
   Trash2,
-  PanelLeftClose,
-  PanelLeftOpen
+  ChevronLeft,
+  ChevronRight,
+  LayoutDashboard,
+  Settings,
+  ScrollText
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -96,9 +99,12 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
   };
 
   const allTabs = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard, requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'connections', label: 'Connections', icon: Plug, requiredRoles: ['ADMIN'] },
     { id: 'invoices', label: 'Invoices', icon: FileText, requiredRoles: ['ADMIN', 'OPERATOR'], count: attentionCount },
-    { id: 'validation', label: 'Validation', icon: ShieldAlert, requiredRoles: ['ADMIN', 'OPERATOR'], count: openValidationCount }
+    { id: 'validation', label: 'Validation', icon: ShieldAlert, requiredRoles: ['ADMIN', 'OPERATOR'], count: openValidationCount },
+    { id: 'settings', label: 'Settings', icon: Settings, requiredRoles: ['ADMIN'] },
+    { id: 'audit', label: 'Audit log', icon: ScrollText, requiredRoles: ['ADMIN', 'OPERATOR'] }
   ];
 
   const visibleTabs = allTabs.filter(tab => tab.requiredRoles.includes(userRole));
@@ -107,7 +113,10 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
 
   const canOnboard = userRole === 'ADMIN';
 
-  const SidebarContent = () => (
+  // A plain render function, deliberately NOT a component defined inside Navbar:
+  // a nested component gets a new identity every render, so React remounted the
+  // whole sidebar (scroll reset, focused <select> blurred) on every data refresh.
+  const renderSidebarContent = () => (
     <div className="flex flex-col h-full max-h-screen bg-chrome text-chrome-ink font-sans border-r border-chrome-line shadow-xl overflow-hidden">
       <div className="p-5 border-b border-chrome-line shrink-0">
         <div className="flex items-center space-x-3">
@@ -292,17 +301,16 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
             className="fixed inset-0 bg-ink/70"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-chrome h-full shadow-xl">
-            <div className="absolute top-0 right-0 -mr-12 pt-2">
-              <button
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white bg-chrome border border-chrome-line text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 h-full flex flex-col overflow-y-auto">
-              <SidebarContent />
+          <div className="relative flex h-full w-full max-w-xs flex-1 flex-col bg-chrome shadow-xl">
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              aria-label="Close navigation"
+              className="absolute right-3 top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-chrome-line bg-chrome-line/80 text-chrome-ink transition-colors hover:bg-chrome-line hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+              {renderSidebarContent()}
             </div>
           </div>
         </div>
@@ -312,13 +320,20 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
         <div className="flex flex-col w-full h-full relative">
           <button
             onClick={toggleCollapsed}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!isCollapsed}
             title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="absolute -right-3 top-5 z-40 w-6 h-6 bg-panel border border-line rounded-full shadow flex items-center justify-center text-ink-soft hover:text-ink hover:border-line-strong cursor-pointer"
+            className="absolute -right-3.5 top-6 z-40 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-panel text-ink-soft shadow-sm transition-colors hover:border-accent hover:text-accent"
           >
-            {isCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
-          <div className={isCollapsed ? 'opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto' : ''} style={isCollapsed ? { display: 'none' } : undefined}>
-            <SidebarContent />
+          {/* h-full is load-bearing: SidebarContent sizes itself with h-full, and
+              without a definite height here it collapses to its content and the
+              chrome surface stops halfway down the viewport. */}
+          <div
+            className={isCollapsed ? 'hidden h-full min-h-0' : 'h-full min-h-0'}
+          >
+            {renderSidebarContent()}
           </div>
           {isCollapsed && (
             <div className="flex flex-col h-full bg-chrome text-chrome-ink border-r border-chrome-line">

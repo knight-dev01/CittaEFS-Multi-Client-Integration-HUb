@@ -1,7 +1,10 @@
 import { useHub } from '../../lib/store';
+import { OverviewTab } from '../OverviewTab';
 import { ConnectionsTab } from '../ConnectionsTab';
 import { InvoicesTab } from '../InvoicesTab';
 import { ValidationTab } from '../ValidationTab';
+import { SettingsTab } from '../SettingsTab';
+import { AuditLogTab } from '../AuditLogTab';
 
 interface Props {
   activeTab: string;
@@ -17,10 +20,14 @@ export function ErpWorkspace({ activeTab, onOpenOnboard }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Gateway UI: connection status + normalised invoice ledger only */}
+      {/* Gateway UI: overview, connections, normalised ledger, validation queue,
+          shared gateway settings and the audit trail. */}
+      {activeTab === 'overview' && <OverviewTab />}
       {activeTab === 'connections' && <ConnectionsTab onResumeConnect={() => onOpenOnboard(activeTenant)} />}
       {activeTab === 'invoices' && <InvoicesTab />}
       {activeTab === 'validation' && <ValidationTab />}
+      {activeTab === 'settings' && <SettingsTab />}
+      {activeTab === 'audit' && <AuditLogTab />}
     </div>
   );
 }
