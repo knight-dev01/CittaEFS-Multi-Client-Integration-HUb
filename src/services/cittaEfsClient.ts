@@ -448,9 +448,17 @@ export class CittaEfsClient {
     });
 
     if (!res.ok) {
-      throw new Error(
+      const gatewayError: any = new Error(
         `CittaEFS Gateway error (${res.status}): ${res.text || "Network error"}`,
       );
+      gatewayError.httpStatus = res.status;
+      // A 4xx means the gateway read the request and refused this payload, so
+      // resending the identical DTO cannot succeed. 408 and 429 are the only
+      // client-side statuses worth another attempt. 5xx and timeouts stay
+      // retryable — the request may not have been processed at all.
+      gatewayError.retryable =
+        res.status >= 500 || res.status === 408 || res.status === 429;
+      throw gatewayError;
     }
 
     const result = res.json<any>();

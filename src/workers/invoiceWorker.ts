@@ -289,6 +289,43 @@ export async function processInvoiceJob(
       return { jobId: job.id, success: false, error: errorMsg, movedToDLQ: true };
     }
 
+    // A 4xx is a refusal of this payload, not a transient fault: the gateway
+    // parsed the request and rejected it in its own validation or SQL layer.
+    // Replaying the same DTO five times only repeats the failure and hides the
+    // cause behind "rejected after 5 retries". 408/429 still retry.
+    const gatewayStatus = (err as any).httpStatus as number | undefined;
+    const refusedPayload =
+      (err as any).retryable === false ||
+      (gatewayStatus !== undefined &&
+        gatewayStatus >= 400 &&
+        gatewayStatus < 500 &&
+        gatewayStatus !== 408 &&
+        gatewayStatus !== 429);
+    if (refusedPayload) {
+      const invoiceTypeCode = (job.data as any).invoiceTypeCode;
+      const typeLabel = `${job.data.invoiceType}${invoiceTypeCode ? `/${invoiceTypeCode}` : ''}`;
+      await invoiceQueue.moveToDLQ(job, errorMsg);
+      await prisma.invoice.update({
+        where: { id: job.data.dbInvoiceId },
+        data: { status: 'REJECTED' }
+      }).catch(() => {});
+      dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
+      try {
+        await prisma.validationError.create({
+          data: {
+            tenantId: job.tenantId,
+            clientInvoiceNumber: job.data.clientInvoiceNumber,
+            errorCategory: 'GATEWAY_REJECTED',
+            fieldAffected: 'gateway',
+            errorMessage: `CittaEFS gateway refused invoice type ${typeLabel} (HTTP ${gatewayStatus ?? '4xx'}, not retried): ${errorMsg.slice(0, 3900)}`,
+            rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
+            status: 'OPEN',
+          }
+        });
+      } catch {}
+      return { jobId: job.id, success: false, error: errorMsg, movedToDLQ: true };
+    }
+
     // Check if max retries exceeded
     if (job.attempts >= job.maxRetries) {
       await invoiceQueue.moveToDLQ(job, `Exceeded max retries (${job.maxRetries}). Error: ${errorMsg}`);

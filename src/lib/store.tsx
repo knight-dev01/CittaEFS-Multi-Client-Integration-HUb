@@ -42,10 +42,8 @@ interface HubContextType {
   createTenantUser: (userData: { email: string; password: string; name: string; role?: string; organization?: string; tenantId: string }) => Promise<any>;
   updateInvoice: (invoiceId: string, data: any) => Promise<any>;
   deleteInvoice: (invoiceId: string) => Promise<any>;
-  purgeDemoData: () => Promise<any>;
   retryInvoice: (invoiceId: string) => Promise<any>;
   retryBulkInvoices: (tenantId?: string, invoiceIds?: string[]) => Promise<any>;
-  getRetryStatus: (invoiceId: string) => Promise<any>;
 }
 
 const HubContext = createContext<HubContextType | undefined>(undefined);
@@ -675,22 +673,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
       return data;
     });
   };
-  const purgeDemoData = async () => {
-    return withLoading(async () => {
-      try {
-        const res = await fetchWithAuth('/api/system/purge-demo-data', { method: 'POST' });
-        const data = await parseJsonResponse(res);
-        await refreshAll();
-        toastGlobal('success', 'Staging purge complete', `${data?.deletedInvoices ?? ''} invoices cleared`);
-        return data;
-      } catch (e: any) {
-        console.error('Purge test data error:', e);
-        toastGlobal('error', 'Purge failed', e.message || String(e));
-        throw e;
-      }
-    });
-  };
-
   const retryInvoice = async (invoiceId: string) => {
     return withLoading(async () => {
       try {
@@ -724,11 +706,6 @@ export function HubProvider({ children }: { children: ReactNode }) {
       }
     });
   };
-  const getRetryStatus = async (invoiceId: string) => {
-    const res = await fetchWithAuth(`/api/invoices/retry-status/${invoiceId}`);
-    return parseJsonResponse(res);
-  };
-
   return (
     <HubContext.Provider
       value={{
@@ -761,10 +738,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
         createTenantUser,
         updateInvoice,
         deleteInvoice,
-        purgeDemoData,
         retryInvoice,
-        retryBulkInvoices,
-        getRetryStatus
+        retryBulkInvoices
       }}
     >
       {children}
