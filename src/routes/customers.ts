@@ -16,6 +16,18 @@ router.get("/api/customers", async (req: any, res) => {
     const queryTenantId = req.query.tenantId as string | undefined;
     const { skip, take, page, limit } = parsePagination(req);
     const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
+    // Free-text search is server-side on purpose: filtering only the current
+    // page in the browser would silently miss rows on every other page.
+    const search = String(req.query.q || "").trim();
+    if (search) {
+      where.OR = [
+        { companyName: { contains: search, mode: "insensitive" } },
+        { clientSystemCustId: { contains: search, mode: "insensitive" } },
+        { taxId: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { cittaCustomerId: { contains: search, mode: "insensitive" } },
+      ];
+    }
     const [total, rawCustomers] = await Promise.all([
       prisma.customer.count({ where }),
       prisma.customer.findMany({ where, skip, take, orderBy: { createdAt: "desc" } }),

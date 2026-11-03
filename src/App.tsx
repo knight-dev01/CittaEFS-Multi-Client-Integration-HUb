@@ -118,8 +118,8 @@ function HubMainContent() {
   // Enforce role-based tab routing restrictions without setState-during-render
   const userRole = currentUser?.role || 'OPERATOR';
   const allowedTabs = userRole === 'ADMIN'
-    ? ['overview', 'connections', 'invoices', 'validation', 'settings', 'audit']
-    : ['overview', 'invoices', 'validation', 'audit'];
+    ? ['overview', 'connections', 'invoices', 'validation', 'directories', 'settings', 'audit']
+    : ['overview', 'invoices', 'validation', 'directories', 'audit'];
   const effectiveTab = allowedTabs.includes(activeTab)
     ? activeTab
     : (userRole === 'ADMIN' ? 'connections' : 'invoices');

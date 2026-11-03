@@ -62,22 +62,30 @@ export function formatInvoice(inv: any) {
 export function formatCustomer(c:any) {
   if (!c) return c;
   const isB2B = c.taxClassification === 'B2B' || c.isB2B === true;
+  const taxId = c.taxId || c.tin || null;
+  // Customer carries no phone column and no verification flag, so anything this
+  // helper invents here would be presented as fact. Absent stays null; a TIN is
+  // only reported as malformed, never as "validated" — nothing validates it.
   return {
     ...c,
-    clientCustomerCode: c.clientSystemCustId || c.clientCustomerCode || 'CUST-001',
+    clientCustomerCode: c.clientSystemCustId || c.clientCustomerCode || null,
     cittaCustomerCode: c.cittaCustomerId || c.cittaCustomerCode || null,
-    name: c.companyName || c.name || 'Unnamed Customer',
-    tin: c.taxId || c.tin || 'N/A',
+    name: c.companyName || c.name || null,
+    tin: taxId,
     isB2B,
-    street: c.street || 'Nairobi Business District',
-    city: c.city || 'Nairobi',
+    street: c.street || null,
+    city: c.city || null,
     country: c.country || null,
-    email: c.email || 'contact@client.com',
-    ccEmail: (c as any).ccEmail || null,
-    postcode: (c as any).postcode || null,
-    phone: c.phone || '+254700000000',
-    tinValidationStatus: c.tinValidationStatus || (isB2B ? 'VALIDATED' : 'UNVERIFIED'),
-    lastSyncedAt: c.updatedAt ? new Date(c.updatedAt).toISOString() : new Date().toISOString(),
+    email: c.email || null,
+    ccEmail: c.ccEmail || null,
+    postcode: c.postcode || null,
+    phone: null,
+    tinValidationStatus: !taxId
+      ? 'UNVERIFIED'
+      : /^[A-Z]\d{9}[A-Z]$/.test(taxId)
+        ? 'UNVERIFIED'
+        : 'INVALID_FORMAT',
+    lastSyncedAt: c.updatedAt ? new Date(c.updatedAt).toISOString() : null,
   };
 }
 

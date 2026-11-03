@@ -22,6 +22,17 @@ router.get("/api/items/mappings", async (req: any, res) => {
     const queryTenantId = req.query.tenantId as string | undefined;
     const { skip, take, page, limit } = parsePagination(req);
     const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
+    // Same reason as /api/customers: search every row, not only the page on screen.
+    const search = String(req.query.q || "").trim();
+    if (search) {
+      where.OR = [
+        { clientSku: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { name: { contains: search, mode: "insensitive" } },
+        { hsOrServiceCode: { contains: search, mode: "insensitive" } },
+        { productCategory: { contains: search, mode: "insensitive" } },
+      ];
+    }
     const [total, rawItems] = await Promise.all([
       prisma.item.count({ where }),
       prisma.item.findMany({ where, skip, take, orderBy: { createdAt: "desc" } }),

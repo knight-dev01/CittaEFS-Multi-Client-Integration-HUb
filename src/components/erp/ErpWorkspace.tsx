@@ -3,6 +3,7 @@ import { OverviewTab } from '../OverviewTab';
 import { ConnectionsTab } from '../ConnectionsTab';
 import { InvoicesTab } from '../InvoicesTab';
 import { ValidationTab } from '../ValidationTab';
+import { DirectoriesTab } from '../DirectoriesTab';
 import { SettingsTab } from '../SettingsTab';
 import { AuditLogTab } from '../AuditLogTab';
 
@@ -21,11 +22,12 @@ export function ErpWorkspace({ activeTab, onOpenOnboard }: Props) {
   return (
     <div className="space-y-6">
       {/* Gateway UI: overview, connections, normalised ledger, validation queue,
-          shared gateway settings and the audit trail. */}
+          read-only ERP directories, shared gateway settings and the audit trail. */}
       {activeTab === 'overview' && <OverviewTab />}
       {activeTab === 'connections' && <ConnectionsTab onResumeConnect={() => onOpenOnboard(activeTenant)} />}
       {activeTab === 'invoices' && <InvoicesTab />}
       {activeTab === 'validation' && <ValidationTab />}
+      {activeTab === 'directories' && <DirectoriesTab />}
       {activeTab === 'settings' && <SettingsTab />}
       {activeTab === 'audit' && <AuditLogTab />}
     </div>

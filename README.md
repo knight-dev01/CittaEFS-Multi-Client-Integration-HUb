@@ -100,7 +100,7 @@ Invoices remain the fiscal unit pushed to EFS/NRS — `clientInvoiceNumber` (`Do
 
 ## 🖥️ Dashboard Modules — ERP-Scoped From Onset
 
-Onboarding an ERP immediately creates its workspace, queue and messages — no client selection. These six tabs are what the UI actually renders today (`src/components/erp/ErpWorkspace.tsx`):
+Onboarding an ERP immediately creates its workspace, queue and messages — no client selection. These seven tabs are what the UI actually renders today (`src/components/erp/ErpWorkspace.tsx`):
 
 | Tab Module | Key Capabilities | ERP Scope | Role |
 | :--- | :--- | :--- | :--- |
@@ -108,11 +108,9 @@ Onboarding an ERP immediately creates its workspace, queue and messages — no c
 | 🔌 **Connections** | QBO OAuth connect/sync + test-live, Odoo form + test-live, per-connection `status CONNECTED` `lastSyncAt`, sandbox/production toggle | QBO / Odoo per `companyId` | ADMIN |
 | 📄 **Invoices** | `PENDING_NRS_STAMP → APPROVED|SIGNED|REJECTED` `irn|qrCodeUrl`, `ledgerWriteback SYNCED|FAILED`, line-item drill-down. `REJECTED`/`FAILED` rows take a per-invoice **Retry** (`POST /api/invoices/:id/retry`) plus a bulk **Retry N failed** (`POST /api/invoices/retry-bulk` with explicit IDs) | All ERPs, read-only | ADMIN, OPERATOR |
 | ⚠️ **Validation** | `MISSING_HS_CODE` / `INVALID_TIN_FORMAT` / `MISSING_B2B_TIN` take an inline fix and re-queue the invoice; other categories (`INVALID_DATE`, `TAX_MISMATCH`, `DUPLICATE_INVOICE`) only mark resolved — the backend never applies a correction for those (`src/routes/validation.ts`). `Auto-map items` and `Dismiss all open` are bulk actions | Per ERP `sourceErp` | ADMIN, OPERATOR |
+| 📚 **Directories** | Read-only `GET /api/customers` and `GET /api/items/mappings`, server-side `q` search plus pagination. Shows customer TIN/type/location and item SKU, Citta code and `MAPPED`/`UNMAPPED`. Hub edits are rejected (`403`) — corrections go back through the ERP and a re-sync | One workspace | ADMIN, OPERATOR |
 | ⚙️ **Settings** | Workspace `companyName` / `TIN` / `defaultVatRate` (`PATCH /api/tenants/:id`), plus the shared CittaEFS gateway key, URL and `cittaWritebackTarget` for every tenant (`GET` / `PATCH /api/system/citta-config`). Retry backoff is compiled into `src/queues/invoiceQueue.ts` and shown read-only | One workspace + gateway-wide | ADMIN |
 | 🧾 **Audit log** | `GET /api/audit-logs` — tenant-scoped, newest first, filters on `action` (from `GET /api/audit-logs/actions`) and free-text `q`, paginated. Expands to full `details` and SHA-256 payload hash. `rawJson` is never returned because `TENANT_ONBOARDED` rows embed the tenant record, key material included (`src/routes/auditLogs.ts`) | One workspace | ADMIN, OPERATOR |
-
-**PLANNED — backend exists, no UI yet.**
-- **Customers** and **Items** directories — `GET /api/customers`, `GET /api/items/mappings` (read-only ERP data, `403` on hub edit).
 
 ---
 
@@ -199,7 +197,7 @@ curl -H "Authorization: Bearer <CITTAEFS_API_KEY>" https://ei-api.azurewebsites.
 ├── scripts/checkNoFallbacks.js
 ├── src/
 │   ├── adapters/connectorAdapters.ts    # QuickBooksAdapter + OdooAdapter (CsvAdapter frozen)
-│   ├── components/erp/ErpWorkspace.tsx # ERP-scoped router (Overview|Connections|Invoices|Validation|Settings|Audit)
+│   ├── components/erp/ErpWorkspace.tsx # ERP-scoped router (Overview|Connections|Invoices|Validation|Directories|Settings|Audit)
 │   ├── components/OnboardClientModal.tsx # Onboard ERP (QBO|Odoo) not Client
 │   ├── config/erpRegistry.ts         # ERP_REGISTRY qbo|odoo active
 │   ├── crons/reconciliation.ts       # runQbReconciliationCron runNrsReconciliationCron recoverOrphans/Stale

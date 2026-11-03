@@ -99,36 +99,42 @@ export interface Invoice {
   updatedAt: string;
 }
 
+// Matches GET /api/customers after formatCustomer (src/lib/serverHelpers.ts).
+// Nullable on purpose: the hub only holds what the ERP actually sent.
 export interface CustomerProfile {
   id: string;
   tenantId: TenantId;
-  clientCustomerCode: string;
+  clientCustomerCode: string | null;
   cittaCustomerCode: string | null; // CittaEFS-issued ID; null until registered
-  name: string;
-  tin: string;
+  name: string | null;
+  tin: string | null;
   isB2B: boolean;
-  street: string;
-  city: string;
+  street: string | null;
+  city: string | null;
   country: string | null;
-  email: string;
-  phone: string;
+  email: string | null;
+  phone: string | null;
   tinValidationStatus: 'VALIDATED' | 'INVALID_FORMAT' | 'UNVERIFIED';
-  lastSyncedAt: string;
+  lastSyncedAt: string | null;
 }
 
+// Matches GET /api/items/mappings: raw Item columns plus the computed
+// MAPPED/UNMAPPED status (src/routes/items.ts).
 export interface ItemCodeMapping {
   id: string;
   tenantId: TenantId;
   clientSku: string;
-  name: string;
+  name: string | null;
   description: string;
   unitCode: string;
-  category: string;
   hsOrServiceCode: string;
-  codeType: 'HS_CODE' | 'SERVICE_CODE';
-  codeDescription: string;
+  categoryType: string;
   defaultVatRate: number;
-  status: 'MAPPED' | 'UNMAPPED' | 'NEEDS_REVIEW';
+  taxCategoryCode: string | null;
+  productCategory: string | null;
+  isService: boolean;
+  status: 'MAPPED' | 'UNMAPPED';
+  createdAt: string;
   updatedAt: string;
 }
 

@@ -17,7 +17,8 @@ import {
   ChevronRight,
   LayoutDashboard,
   Settings,
-  ScrollText
+  ScrollText,
+  Boxes
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -103,6 +104,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
     { id: 'connections', label: 'Connections', icon: Plug, requiredRoles: ['ADMIN'] },
     { id: 'invoices', label: 'Invoices', icon: FileText, requiredRoles: ['ADMIN', 'OPERATOR'], count: attentionCount },
     { id: 'validation', label: 'Validation', icon: ShieldAlert, requiredRoles: ['ADMIN', 'OPERATOR'], count: openValidationCount },
+    { id: 'directories', label: 'Directories', icon: Boxes, requiredRoles: ['ADMIN', 'OPERATOR'] },
     { id: 'settings', label: 'Settings', icon: Settings, requiredRoles: ['ADMIN'] },
     { id: 'audit', label: 'Audit log', icon: ScrollText, requiredRoles: ['ADMIN', 'OPERATOR'] }
   ];
