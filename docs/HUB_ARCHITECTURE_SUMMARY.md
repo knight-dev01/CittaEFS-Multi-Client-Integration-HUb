@@ -1,6 +1,6 @@
 # How the Hub Works Now (and What Changed)
 
-**As of:** branch `refactor/thin-hub-pivot`, 2026-09-14. Covers the thin-hub pivot (Phases 0–5 of `CittaHub_Revision_Plan.md`; Phase 6 rollout not yet done).
+**As of:** 2026-11-03, main branch (commits 8b4b74d / 037e889). Covers the thin-hub pivot (Phases 0–5 of `CittaHub_Revision_Plan.md`; Phase 6 rollout not yet done) plus the post-pivot UI/API hardening done in October–November 2026.
 
 ## What the Hub is
 
@@ -56,5 +56,12 @@ Since there's no API to register a customer, staff now get a guided manual path 
 - Production DB backup before any prod migration — needs ops access.
 - Dropping the deprecated `Customer`/`Item` tables — deferred to Phase 6, after a parallel-run period.
 - Two exposed secrets found along the way (a hardcoded API key default in `prisma/schema.prisma`, a GitHub token in the git remote URL) still need rotation — that's on you/your GitHub admin, not a code change.
+
+## Changes since 2026-09-14
+
+- **UI hardening & six-tab layout** — Overview, Invoices (retry for REJECTED/FAILED), Validation, Directories (Customers/Items server search + pagination, MAPPED/UNMAPPED), Settings (read-only retry backoff), Audit Log. Sidebar fixed to not show partially and closes with ChevronLeft/Right.
+- **Gateway rejections are terminal for 4xx** — a 4xx from CittaEFS means the payload is refused. The worker now DLQs immediately, marks the invoice REJECTED and creates a GATEWAY_REJECTED validation error without burning five retries (5xx, 408, 429 still retry).
+- **Readable gateway errors** — `src/lib/gatewayErrors.ts` translates CittaEFS's raw SQL / ASP.NET replies (e.g. CK_WM_001_INV_REP_PTR_Type) into plain sentences. The raw text is kept after a "Technical detail" toggle in the Validation tab. Implemented at write time and again on read so existing rows render readably.
+- **Normalization positioning clarified** — invoice documents are normalized from QBO/Odoo/Excel into CittaEFS's DTO (canonical schema, invoiceTypeCode mapping, `normalizeCittaCode`). Master data is not normalized into EFS; customers/items remain a reference (EntityMapping) with manual registration.
 
 See `docs/CittaHub_Revision_Plan.md` for the full phase-by-phase breakdown and rationale.

@@ -1,6 +1,6 @@
 # CittaEFS Multi-Client Integration Hub — Project Documentation
 
-> Generated from a full codebase analysis on 2026-09-12. Reflects the state of branch `feat/odoo-erp-integration` at commit `7890daf`.
+> Last updated 2026-11-03 (main). Originally generated from a full codebase analysis on 2026-09-12 reflecting branch `feat/odoo-erp-integration` at commit `7890daf`. Updated to include October–November 2026 UI/API hardening, readable gateway errors, and 4xx-terminal retry behaviour.
 
 ## 1. Overview
 
@@ -217,6 +217,8 @@ Notable business rules encoded directly in the schema:
 5. `invoiceTypeCode` (`380`/`381`/`384`/`388`/`389`/`390`/`392`/`393`) maps to `invoiceType`; `380`/`393` → `CREDIT_NOTE`, `384` → `DEBIT_NOTE`.
 6. Missing or `UNMAPPED` HS codes default to `SERV-DEFAULT` at the schema layer; a second, stricter gate later blocks genuinely unrecognized codes at worker time via `isValidCittaCode`.
 7. A SHA-256 hash of a payload summary is computed here for audit-log linkage.
+
+*Post-2026-09 update:* Gateway rejections are now rendered in plain English via `src/lib/gatewayErrors.ts`. The 4xx class is terminal (no 5 retries), and the raw gateway reply is kept behind a "Technical detail" toggle in the Validation tab. Existing stored errors are translated on read.
 
 ---
 
