@@ -31,6 +31,7 @@ const ALLOWLIST = [
   'src/test/unit/adapters.test.ts',
   'src/test/unit/immutable.test.ts',
   'src/test/unit/validationApi.test.ts',
+  'src/test/unit/connectors.test.ts',
 
   // Static reference data constants used for reference UI components
   'src/data/referenceData.ts',
