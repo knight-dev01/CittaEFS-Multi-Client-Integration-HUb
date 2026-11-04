@@ -510,19 +510,25 @@ export async function ingestOdooInvoice(
   await upsertOdooMasterData(tenantId, transformed.customerCode!, transformed.customerName, transformed.customerTin, processedLineItems);
 
   let shouldAutoEnqueue = opts?.autoEnqueue;
-  if (shouldAutoEnqueue === undefined) {
-    try {
-      // autoEnqueueQbo is a generic "preview inbox vs auto-enqueue" toggle despite its
-      // QBO-era name — reused here rather than adding an Odoo-specific column.
-      const odooErp = await prisma.tenantErp.findFirst({ where: { tenantId, platformType: "Odoo ERP" }, select: { autoEnqueueQbo: true } });
-      shouldAutoEnqueue = odooErp?.autoEnqueueQbo ?? false;
-    } catch { shouldAutoEnqueue = false; }
+  let tenantErpId: string | undefined;
+  try {
+    // autoEnqueueQbo is a generic "preview inbox vs auto-enqueue" toggle despite its
+    // QBO-era name — reused here rather than adding an Odoo-specific column.
+    const odooErp = await prisma.tenantErp.findFirst({
+      where: { tenantId, platformType: "Odoo ERP" },
+      select: { id: true, autoEnqueueQbo: true },
+    });
+    tenantErpId = odooErp?.id;
+    if (shouldAutoEnqueue === undefined) shouldAutoEnqueue = odooErp?.autoEnqueueQbo ?? false;
+  } catch {
+    if (shouldAutoEnqueue === undefined) shouldAutoEnqueue = false;
   }
 
   const dbInvoice = await prisma.invoice.create({
     data: {
       tenantId,
       sourceErp: "odoo",
+      tenantErpId,
       odooInvoiceId: odooId,
       clientInvoiceId,
       documentNumber: transformed.documentNumber,
@@ -565,7 +571,7 @@ export async function ingestOdooInvoice(
         vatRate: li.vatRate,
       })),
     });
-    await invoiceQueue.add("signInvoice", { ...validatedPayload, dbInvoiceId: dbInvoice.id }, { idempotencyKey: `${tenantId}:${clientInvoiceId}` });
+    await invoiceQueue.add("signInvoice", { ...validatedPayload, dbInvoiceId: dbInvoice.id, tenantErpId }, { idempotencyKey: `${tenantId}:${clientInvoiceId}` });
     console.log(`Successfully ingested and enqueued Odoo Invoice ${clientInvoiceId} (odooId ${odooId}) for tenant ${tenantId} — auto-enqueue ON`);
   } else {
     console.log(`Odoo Invoice ${clientInvoiceId} (odooId ${odooId}) ingested to preview inbox for tenant ${tenantId} — awaiting operator approval (autoEnqueue OFF)`);

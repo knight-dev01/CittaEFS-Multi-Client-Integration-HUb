@@ -1,10 +1,10 @@
 # CittaEFS Multi-Client Integration Hub — Project Documentation
 
-> Last updated 2026-11-03 (main). Originally generated from a full codebase analysis on 2026-09-12 reflecting branch `feat/odoo-erp-integration` at commit `7890daf`. Updated to include October–November 2026 UI/API hardening, readable gateway errors, and 4xx-terminal retry behaviour.
+> Last updated 2026-11-04 (main). Originally generated from a full codebase analysis on 2026-09-12 reflecting branch `feat/odoo-erp-integration` at commit `7890daf`. Updated to include October–November 2026 UI/API hardening, readable gateway errors, 4xx-terminal retry behaviour, per-connection health/mapping, planned ERP contracts, and the normalised EFS export.
 
 ## 1. Overview
 
-The **CittaEFS Multi-Client Integration Hub** is a multi-tenant middleware application that connects client ERP systems (QuickBooks Online, Odoo, Excel/CSV, with SAP, NetSuite, and Custom-SQL planned) to Nigeria's **FIRS NRS** (National Revenue Service) e-invoicing regime via the **CittaEFS Gateway**.
+The **CittaEFS Multi-Client Integration Hub** is a multi-tenant middleware application that connects client ERP systems to Nigeria's **FIRS NRS** (National Revenue Service) e-invoicing regime via the **CittaEFS Gateway**. Live connectors are QuickBooks Online and Odoo. Xero, Zoho Books, Sage Business Cloud, Tally Prime, SAP Business One and Custom ERP have adapter contracts but are not integrated yet (`docs/erp-adapters/planned-erps.md`).
 
 Its core job is to:
 
@@ -94,8 +94,8 @@ Key models in `prisma/schema.prisma`:
 - Same tiered HS/code inference as QBO, minus the "existing code" tier (Odoo has none natively).
 - Full reference: `docs/odoo-integration.md`.
 
-### Excel/CSV (`src/adapters/connectorAdapters.ts` — `CsvAdapter`)
-- Drag-drop ingestion via SheetJS, grouped by `clientInvoiceNumber`, with a mandatory preview step (`InvoicePreview.tsx`) before submission.
+### Excel/CSV (removed)
+The old `CsvAdapter` and drag-drop ingestion path were deleted; invoices are ERP-sourced only. The reverse direction is now supported: `GET /api/invoices/export` writes a normalised EFS bulk-upload file as CSV, Excel or JSON (`src/lib/efsExport.ts`), and the Invoices tab exposes the three download buttons.
 
 ### CittaEFS Gateway Client (`src/services/cittaEfsClient.ts`)
 - As of 2026-08-29, the system moved from a **per-tenant gateway key** model to a **single shared `CITTAEFS_API_KEY`** for all tenants (env var takes priority over the first tenant's DB-stored key; saving the key in the UI propagates it to all tenants). This is a deliberate, documented change — **`README.md`'s "per-tenant" description of this is stale** and should be disregarded in favor of `.env.example`/`src/routes/system.ts`.
@@ -108,7 +108,7 @@ Key models in `prisma/schema.prisma`:
 - `POST /api/webhooks/qbo`: verifies Intuit's HMAC signature, then ingests the specific invoice referenced.
 
 ### Extensibility — ERP Registry (`src/config/erpRegistry.ts`)
-`ERP_REGISTRY` declaratively maps a `platformType` to `{ id, tabs, configFields, matching }`. SAP (OData + CSRF), NetSuite (TBA/HMAC), and Custom SQL (`vw_pending_invoices` view) are already defined here as `comingSoon: true` placeholders — adding a new ERP is meant to be primarily declarative.
+`ERP_REGISTRY` declaratively maps a `platformType` to `{ id, label, availability, tabs, configFields, matching, authMethod, apiStyle, coreObjects, quirks, smokeTest, doNot }`. QuickBooks Online and Odoo are `availability: 'live'`; Xero, Zoho Books, Sage Business Cloud, Tally Prime, SAP Business One and Custom ERP are `'planned'` — shown on the Connections tab as **Not yet integrated**, rejected by ERP creation, and skipped by the health cron. See `docs/erp-adapters/planned-erps.md`. Adding an ERP stays primarily declarative, but a planned entry must not be presented as a working connector.
 
 ---
 
@@ -117,8 +117,8 @@ Key models in `prisma/schema.prisma`:
 | Router | Responsibilities |
 |---|---|
 | `auth.ts` | Login/refresh/logout/me; admin-only user list/create. JWT access (8h) + refresh (7d) via httpOnly cookies, bcrypt password hashing. |
-| `tenants.ts` | Tenant CRUD, onboarding wizard, per-tenant multi-ERP management (`/erps`), QBO staging-inbox approval, CittaEFS gateway config + test, global system config, ERP field mapping. |
-| `invoices.ts` (largest route file) | List/get/update/delete, single & bulk ingestion (`/api/integration/gen/invoices[/bulk]`), cancel, retry (single & bulk), staging summary, queue stats, and an **external Hub API** (`/api/hub/v1/*` — health, list, get-by-number, create) gated by `X-Hub-Api-Key`. |
+| `tenants.ts` | Tenant CRUD, onboarding wizard, per-tenant multi-ERP management (`/erps`), per-connection health test (`/erps/:id/test`), tax/product mapping (`/erps/:id/mapping`), recent runs (`/erps/:id/runs`), QBO staging-inbox approval, CittaEFS gateway config + test, global system config, ERP field mapping. |
+| `invoices.ts` (largest route file) | List/get/update/delete, single & bulk ingestion (`/api/integration/gen/invoices[/bulk]`), normalised EFS export (`GET /api/invoices/export` — CSV/XLSX/JSON), cancel, retry (single & bulk), staging summary, queue stats, and an **external Hub API** (`/api/hub/v1/*` — health, list, get-by-number, create) gated by `X-Hub-Api-Key`. |
 | `customers.ts` | Customer CRUD. |
 | `items.ts` | Item/code mapping CRUD plus a bulk `/auto-map` endpoint. |
 | `validation.ts` | List/resolve/bulk-resolve validation errors, audit logs, `/api/metrics`. |

@@ -64,7 +64,12 @@ async function initBullMq(): Promise<any> {
 initBullMq().catch(() => {});
 
 // The queued payload always carries the DB Invoice row's primary key (dbInvoiceId)
-export type QueueablePayload = ValidatedInvoiceIngestion & { dbInvoiceId: string };
+// and, when known, the TenantErp connection that produced it. tenantErpId is
+// observability metadata only — the worker still rebuilds the gateway payload.
+export type QueueablePayload = ValidatedInvoiceIngestion & {
+  dbInvoiceId: string;
+  tenantErpId?: string;
+};
 
 export interface QueueJob<T> {
   id: string;

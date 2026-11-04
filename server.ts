@@ -90,6 +90,7 @@ async function startServer() {
     if (origin && isOriginAllowed(origin)){ res.setHeader("Access-Control-Allow-Origin", origin); res.setHeader("Vary","Origin"); } else if (!origin){ res.setHeader("Access-Control-Allow-Origin", corsAllowList[0]||"*"); }
     res.setHeader("Access-Control-Allow-Methods","GET, POST, PUT, DELETE, PATCH, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers","Content-Type, Authorization, X-Requested-With");
+    res.setHeader("Access-Control-Expose-Headers","Content-Disposition, X-Export-Rows, X-Export-Invoices, X-Export-Skipped");
     res.setHeader("Access-Control-Allow-Credentials","true");
     if (req.method==="OPTIONS") return res.sendStatus(204);
     next();
@@ -180,6 +181,15 @@ async function startServer() {
       }
     } catch(e:any){ console.warn("[Cron] Odoo reconcile error:", e.message); }
   }, 60000).unref(); // 60s Odoo continuous poll (no webhook)
+  // ERP connection health — every 15 minutes, per connection. Updates
+  // TenantErp.status and the health block inside TenantErp.config.
+  setInterval(async ()=>{
+    try {
+      const { runErpHealthCron } = await import("./src/crons/erpHealth");
+      const report = await runErpHealthCron();
+      if (report.needsReauth>0 || report.failed>0) broadcastEvent({ type:"update", method:"CRON", path:"/erp/health"});
+    } catch(e:any){ console.warn("[Cron] ERP health error:", e.message); }
+  }, 900000).unref(); // 15m ERP health probe
 
   (async()=>{
     const redisUrl=process.env.REDIS_URL?.trim()||process.env.REDIS_HOST?.trim();

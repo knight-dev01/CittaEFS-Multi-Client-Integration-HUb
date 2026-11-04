@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useHub } from '../lib/store';
+import { fetchWithAuth } from '../lib/api';
+import { toastGlobal } from './ui/Toast';
 import type { Invoice } from '../types';
 import {
   FileText,
@@ -13,6 +15,7 @@ import {
   XCircle,
   RefreshCw,
   RotateCcw,
+  Download,
 } from 'lucide-react';
 import { StatusBadge, statusTone, writebackTone } from './ui/StatusBadge';
 import { PageHeader } from './ui/PageHeader';
@@ -47,6 +50,7 @@ export function InvoicesTab() {
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
   const [retryingInvoiceId, setRetryingInvoiceId] = useState<string | null>(null);
   const [isBulkRetrying, setIsBulkRetrying] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<'csv' | 'xlsx' | 'json' | null>(null);
 
   const tenantInvoices: Invoice[] = useMemo(
     () => (invoices || []).filter((inv: Invoice) => inv.tenantId === activeTenant?.id),
@@ -115,6 +119,53 @@ export function InvoicesTab() {
     }
   };
 
+  const handleExport = async (format: 'csv' | 'xlsx' | 'json') => {
+    if (!activeTenant) return;
+    setExportingFormat(format);
+    try {
+      const res = await fetchWithAuth(
+        `/api/invoices/export?format=${format}&tenantId=${encodeURIComponent(activeTenant.id)}`
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let message = `HTTP ${res.status}`;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed?.error) message = parsed.error;
+        } catch {
+          if (text.trim()) message = text.trim().slice(0, 200);
+        }
+        throw new Error(message);
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const filename = /filename="([^"]+)"/.exec(disposition)?.[1]
+        || `cittaefs-efs-${activeTenant.id}.${format}`;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      const rows = res.headers.get('X-Export-Rows');
+      const exported = res.headers.get('X-Export-Invoices');
+      toastGlobal(
+        'success',
+        'EFS export ready',
+        `${filename}${exported ? ` — ${exported} invoice(s)` : ''}${rows ? `, ${rows} line row(s)` : ''}.`
+      );
+    } catch (err: any) {
+      toastGlobal('error', 'Export failed', err.message);
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
   if (!activeTenant) {
     return <p className="py-16 text-center text-sm text-ink-soft">No workspace — connect an ERP to see invoices.</p>;
   }
@@ -131,6 +182,47 @@ export function InvoicesTab() {
           </Button>
         )}
       />
+
+      {/* EFS upload export */}
+      <div className="flex flex-col gap-3 rounded-lg border border-line bg-panel px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-ink">EFS upload export</p>
+          <p className="mt-0.5 text-xs text-ink-faint">
+            Normalised file for CittaEFS bulk upload — one row per invoice line, exact InvoiceTemplate headers.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => handleExport('csv')}
+            disabled={exportingFormat !== null}
+            title="Download comma-separated values"
+          >
+            <Download className={`h-3.5 w-3.5 ${exportingFormat === 'csv' ? 'animate-pulse' : ''}`} />
+            {exportingFormat === 'csv' ? 'Preparing…' : 'CSV'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleExport('xlsx')}
+            disabled={exportingFormat !== null}
+            title="Download Excel workbook with the InvoiceTemplate sheet"
+          >
+            <Download className={`h-3.5 w-3.5 ${exportingFormat === 'xlsx' ? 'animate-pulse' : ''}`} />
+            {exportingFormat === 'xlsx' ? 'Preparing…' : 'Excel'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleExport('json')}
+            disabled={exportingFormat !== null}
+            title="Download the same rows as structured JSON"
+          >
+            <Download className={`h-3.5 w-3.5 ${exportingFormat === 'json' ? 'animate-pulse' : ''}`} />
+            {exportingFormat === 'json' ? 'Preparing…' : 'JSON'}
+          </Button>
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="flex flex-col gap-3 rounded-lg border border-line bg-panel p-3 lg:flex-row lg:items-center lg:justify-between">

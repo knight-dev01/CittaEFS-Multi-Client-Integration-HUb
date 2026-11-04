@@ -14,6 +14,24 @@ const prisma = new PrismaClient({
 });
 const qboAdapter = new QuickBooksAdapter();
 
+const QBO_MAX_RETRIES = 3;
+const QBO_RETRY_BASE_MS = 1000;
+
+async function qboFetchWithRetry(
+  url: string,
+  init: RequestInit,
+  attempt = 0
+): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status === 429 && attempt < QBO_MAX_RETRIES) {
+    const retryAfter = Number(res.headers.get('Retry-After') || '1');
+    const delay = Math.max(retryAfter * 1000, QBO_RETRY_BASE_MS * Math.pow(2, attempt));
+    await new Promise(r => setTimeout(r, delay));
+    return qboFetchWithRetry(url, init, attempt + 1);
+  }
+  return res;
+}
+
 export interface QboOAuthConfig {
   clientId: string;
   clientSecret: string;
@@ -390,7 +408,7 @@ export async function fetchQboCompanyInfo(tenantId: string): Promise<any> {
   const baseUrl = await getQboBaseUrl(tenantId);
   const url = `${baseUrl}/v3/company/${realmId}/companyinfo/${realmId}?minorversion=65`;
 
-  const response = await fetch(url, {
+  const response = await qboFetchWithRetry(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -436,7 +454,7 @@ export async function fetchQboInvoices(
 
   const url = `${baseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(query)}&minorversion=65`;
 
-  const response = await fetch(url, {
+  const response = await qboFetchWithRetry(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -489,7 +507,7 @@ export async function fetchAllQboInvoicesPaginated(
     const query = `SELECT * FROM Invoice STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
     const url = `${baseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(query)}&minorversion=65`;
 
-    const response = await fetch(url, {
+    const response = await qboFetchWithRetry(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -795,11 +813,16 @@ export async function ingestQboInvoice(
 
   // Determine auto-enqueue vs preview inbox (tenantErp.autoEnqueueQbo, default false = preview required for security)
   let shouldAutoEnqueue = opts?.autoEnqueue;
-  if (shouldAutoEnqueue === undefined) {
-    try {
-      const qboErp = await prisma.tenantErp.findFirst({ where: { tenantId, platformType: "QuickBooks Online" }, select: { autoEnqueueQbo: true } });
-      shouldAutoEnqueue = qboErp?.autoEnqueueQbo ?? false;
-    } catch { shouldAutoEnqueue = false; }
+  let tenantErpId: string | undefined;
+  try {
+    const qboErp = await prisma.tenantErp.findFirst({
+      where: { tenantId, platformType: "QuickBooks Online" },
+      select: { id: true, autoEnqueueQbo: true },
+    });
+    tenantErpId = qboErp?.id;
+    if (shouldAutoEnqueue === undefined) shouldAutoEnqueue = qboErp?.autoEnqueueQbo ?? false;
+  } catch {
+    if (shouldAutoEnqueue === undefined) shouldAutoEnqueue = false;
   }
   // Resolve invoiceType/Kind from QBO payload when present, not hard-coded
   const resolvedInvoiceType = (rawInvoice.invoiceType as any) || (rawInvoice.TxnType === "CreditMemo" ? "CREDIT_NOTE" : "STANDARD");
@@ -810,6 +833,7 @@ export async function ingestQboInvoice(
     data: {
       tenantId,
       sourceErp: "qbo",
+      tenantErpId,
       qboInvoiceId: qboId,
       clientInvoiceId,
       documentNumber: docNumber,
@@ -855,7 +879,7 @@ export async function ingestQboInvoice(
         vatRate: li.vatRate,
       })),
     });
-    await invoiceQueue.add("signInvoice", { ...validatedPayload, dbInvoiceId: dbInvoice.id }, { idempotencyKey: `${tenantId}:${docNumber}` });
+    await invoiceQueue.add("signInvoice", { ...validatedPayload, dbInvoiceId: dbInvoice.id, tenantErpId }, { idempotencyKey: `${tenantId}:${docNumber}` });
     console.log(`Successfully ingested and enqueued QBO Invoice ${clientInvoiceId} (qboId ${qboId}) for tenant ${tenantId} — auto-enqueue ON`);
   } else {
     console.log(`QBO Invoice ${clientInvoiceId} (qboId ${qboId}) ingested to preview inbox for tenant ${tenantId} — awaiting operator approval (autoEnqueue OFF)`);

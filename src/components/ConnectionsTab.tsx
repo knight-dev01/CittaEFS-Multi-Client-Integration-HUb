@@ -15,6 +15,8 @@ import { PageHeader } from './ui/PageHeader';
 import { Button } from './ui/Button';
 import { Card, CardHeader, CardBody } from './ui/Card';
 import { Notice } from './ui/Notice';
+import { ErpConnectionsPanel } from './ErpConnectionsPanel';
+import { PLANNED_ERPS } from '../config/erpRegistry';
 
 function Row({ label, children, mono = false, tone }: { label: string; children: ReactNode; mono?: boolean; tone?: string }) {
   return (
@@ -374,6 +376,51 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
 
         </div>
       )}
+
+      {!isLoadingStatus && <ErpConnectionsPanel tenantId={activeTenant.id} onChanged={loadStatus} />}
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Planned connectors</h2>
+            <p className="mt-0.5 text-xs text-ink-faint">
+              Adapter contracts are defined for these ERPs. They are not integrated yet — no live traffic is sent or accepted.
+            </p>
+          </div>
+          <StatusBadge tone="neutral">{PLANNED_ERPS.length} planned</StatusBadge>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {PLANNED_ERPS.map((erp) => {
+            const Icon = erp.icon;
+            return (
+              <Card key={erp.id} className="flex flex-col">
+                <CardHeader
+                  title={
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-ink-faint" />
+                      {erp.label}
+                    </span>
+                  }
+                  action={<StatusBadge tone="neutral">Not yet integrated</StatusBadge>}
+                />
+                <CardBody className="flex-1 space-y-3">
+                  <p className="text-xs text-ink-soft">{erp.description}</p>
+                  <dl className="space-y-2 text-xs">
+                    <Row label="Auth">{erp.authMethod || 'To be confirmed'}</Row>
+                    <Row label="API">{erp.apiStyle || 'To be confirmed'}</Row>
+                  </dl>
+                </CardBody>
+                <div className="border-t border-line px-5 py-3">
+                  <p className="text-[11px] text-ink-faint">
+                    Planned adapter — the contract is documented, the connector is not built.
+                  </p>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
 
     </div>
   );

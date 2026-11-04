@@ -4,7 +4,7 @@
 
 ## What the Hub is
 
-An internal-only tool (client companies never log in) that pulls invoices from a client's ERP (QuickBooks Online, Odoo, or Excel upload), normalizes them, and submits them to the CittaEFS Gateway, which forwards them to NRS for e-invoicing compliance. Your own team (Admin / Integration Manager / Operator / Auditor) are the only users.
+An internal-only tool (client companies never log in) that pulls invoices from a client's ERP (QuickBooks Online or Odoo), normalizes them, and submits them to the CittaEFS Gateway, which forwards them to NRS for e-invoicing compliance. Xero, Zoho Books, Sage Business Cloud, Tally Prime, SAP Business One and Custom ERP are registered adapter contracts only — they show on Connections as **Not yet integrated** and cannot be onboarded. Your own team (Admin / Integration Manager / Operator / Auditor) are the only users.
 
 ## The core change: CittaEFS owns customer/item identity, not the Hub
 
@@ -62,6 +62,6 @@ Since there's no API to register a customer, staff now get a guided manual path 
 - **UI hardening & six-tab layout** — Overview, Invoices (retry for REJECTED/FAILED), Validation, Directories (Customers/Items server search + pagination, MAPPED/UNMAPPED), Settings (read-only retry backoff), Audit Log. Sidebar fixed to not show partially and closes with ChevronLeft/Right.
 - **Gateway rejections are terminal for 4xx** — a 4xx from CittaEFS means the payload is refused. The worker now DLQs immediately, marks the invoice REJECTED and creates a GATEWAY_REJECTED validation error without burning five retries (5xx, 408, 429 still retry).
 - **Readable gateway errors** — `src/lib/gatewayErrors.ts` translates CittaEFS's raw SQL / ASP.NET replies (e.g. CK_WM_001_INV_REP_PTR_Type) into plain sentences. The raw text is kept after a "Technical detail" toggle in the Validation tab. Implemented at write time and again on read so existing rows render readably.
-- **Normalization positioning clarified** — invoice documents are normalized from QBO/Odoo/Excel into CittaEFS's DTO (canonical schema, invoiceTypeCode mapping, `normalizeCittaCode`). Master data is not normalized into EFS; customers/items remain a reference (EntityMapping) with manual registration.
+- **Normalization positioning clarified** - invoice documents are normalized from QBO/Odoo into CittaEFS's DTO (canonical schema, invoiceTypeCode mapping, `normalizeCittaCode`). Master data is not normalized into EFS; customers/items remain a reference (EntityMapping) with manual registration.
 
 See `docs/CittaHub_Revision_Plan.md` for the full phase-by-phase breakdown and rationale.

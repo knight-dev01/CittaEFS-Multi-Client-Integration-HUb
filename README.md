@@ -43,6 +43,17 @@ Invoices remain the fiscal unit pushed to EFS/NRS — `clientInvoiceNumber` (`Do
 * **4-Stage:** `1 Webhook|poll` → `2 Normalize clientInvoiceNumber|customerTin|hsCode|vatRate|currency` → `3 Validate B2B TIN 10-14, hs bare 8130, INVOICE_NUMBER_PATTERN ^[A-Z0-9]+$, INVOICE_TYPE_REQUIRES_IRN 380|384|393, 7.5%` → `4 NRS Gateway SHA-256 IRN/QR`.
 * **Queue:** `prisma QueueJob` `hydrate+recoverOrphans PENDING after restart` `recoverStale 2m`, `BullMQ optional REDIS_URL` else DB-memory, `WebSockets Live Telemetry` `type:update` WS primary SSE fallback 30s `src/lib/store.tsx`.
 
+### 7. Per-Connection Health & Mapping
+* **Test now:** `POST /api/tenants/:id/erps/:erpId/test` runs the first smoke step for that ERP — QuickBooks `companyinfo`, Odoo authenticated `res.company` read. Probes only run when the matching `Integration` is `CONNECTED`; an unauthorised platform is reported as not connected, never as broken.
+* **Status:** only auth-class failures set `TenantErp.status = NEEDS_REAUTH`. Timeouts and 5xx keep the status and record `config.health.lastError`. The merchant sees a plain sentence; the raw reply sits behind a `Technical detail` toggle (`src/services/erpHealthService.ts`).
+* **Cron:** `src/crons/erpHealth.ts` probes every live connection every 15 minutes (`ERP_HEALTH_INTERVAL_MS`) and writes `health` into `TenantErp.config`. No migration — `src/lib/erpConnectionConfig.ts` owns the JSON reads/writes.
+* **Mapping:** `GET`/`PATCH /api/tenants/:id/erps/:erpId/mapping` stores `mapping_config {taxRates, products}` in the same config column: hub VAT rate → ERP tax code, hub SKU → ERP product code. Changes are audited as `ERP_MAPPING_UPDATED`.
+* **Runs:** `GET /api/tenants/:id/erps/:erpId/runs` returns the ten latest gateway jobs tagged with that connection. Queueing stays shared — this is observability, not a separate queue.
+
+### 8. Planned Connectors + EFS Export
+* **Planned ERPs:** `src/config/erpRegistry.ts` defines Xero, Zoho Books, Sage Business Cloud, Tally Prime, SAP Business One and Custom ERP with the same six-field contract as the live adapters. They render as neutral **Not yet integrated** cards on Connections. `POST /api/tenants/:id/erps` rejects them, the health cron skips them, and no fake network stub exists (`docs/erp-adapters/planned-erps.md`).
+* **Normalised export:** `GET /api/invoices/export?format=csv|xlsx|json` produces the EFS bulk-upload file from the canonical `Invoice` model — one row per line, exact `INVOICE_TEMPLATE_COLUMNS` headers, one `InvoiceTemplate` sheet, numeric amounts, EFS codes `381`/`380`/`384`/`395`. The Invoices tab has CSV / Excel / JSON buttons. Builder lives in `src/lib/efsExport.ts`; details in `docs/erp-adapters/connection-health-and-export.md`.
+
 ---
 
 ## 🗺️ System Architecture — ERP Gateway
@@ -105,8 +116,8 @@ Onboarding an ERP immediately creates its workspace, queue and messages — no c
 | Tab Module | Key Capabilities | ERP Scope | Role |
 | :--- | :--- | :--- | :--- |
 | 📊 **Overview** | `GET /api/metrics?tenantId=` — processed count, `nrsStampSuccessRate`, average queue latency, open validation errors, 30-day approved-stamp chart (UTC days), `byErp` totals, `erpHealth` sync lag | One workspace | ADMIN, OPERATOR |
-| 🔌 **Connections** | QBO OAuth connect/sync + test-live, Odoo form + test-live, per-connection `status CONNECTED` `lastSyncAt`, sandbox/production toggle | QBO / Odoo per `companyId` | ADMIN |
-| 📄 **Invoices** | `PENDING_NRS_STAMP → APPROVED|SIGNED|REJECTED` `irn|qrCodeUrl`, `ledgerWriteback SYNCED|FAILED`, line-item drill-down. `REJECTED`/`FAILED` rows take a per-invoice **Retry** (`POST /api/invoices/:id/retry`) plus a bulk **Retry N failed** (`POST /api/invoices/retry-bulk` with explicit IDs) | All ERPs, read-only | ADMIN, OPERATOR |
+| 🔌 **Connections** | QBO OAuth connect/sync + test-live, Odoo form + test-live, per-connection `status CONNECTED` `lastSyncAt`, sandbox/production toggle. **Connection health** runs a smoke test per connection (`POST /api/tenants/:id/erps/:erpId/test`), shows latency/company/auth state, edits tax and product mapping, lists recent gateway runs, and renders the six planned ERPs as **Not yet integrated** | QBO / Odoo per `companyId`; planned ERPs read-only | ADMIN |
+| 📄 **Invoices** | `PENDING_NRS_STAMP → APPROVED|SIGNED|REJECTED` `irn|qrCodeUrl`, `ledgerWriteback SYNCED|FAILED`, line-item drill-down. `REJECTED`/`FAILED` rows take a per-invoice **Retry** (`POST /api/invoices/:id/retry`) plus a bulk **Retry N failed** (`POST /api/invoices/retry-bulk` with explicit IDs). **EFS upload export** downloads the normalised file as CSV, Excel or JSON (`GET /api/invoices/export`) | All ERPs, read-only | ADMIN, OPERATOR |
 | ⚠️ **Validation** | `MISSING_HS_CODE` / `INVALID_TIN_FORMAT` / `MISSING_B2B_TIN` take an inline fix and re-queue the invoice; other categories (`INVALID_DATE`, `TAX_MISMATCH`, `DUPLICATE_INVOICE`) only mark resolved — the backend never applies a correction for those (`src/routes/validation.ts`). Gateway rejections show a plain-English summary with the raw reply behind a `Technical detail` toggle (`src/lib/gatewayErrors.ts`, applied at write time and to existing rows). `Auto-map items` and `Dismiss all open` are bulk actions | Per ERP `sourceErp` | ADMIN, OPERATOR |
 | 📚 **Directories** | Read-only `GET /api/customers` and `GET /api/items/mappings`, server-side `q` search plus pagination. Shows customer TIN/type/location and item SKU, Citta code and `MAPPED`/`UNMAPPED`. Hub edits are rejected (`403`) — corrections go back through the ERP and a re-sync | One workspace | ADMIN, OPERATOR |
 | ⚙️ **Settings** | Workspace `companyName` / `TIN` / `defaultVatRate` (`PATCH /api/tenants/:id`), plus the shared CittaEFS gateway key, URL and `cittaWritebackTarget` for every tenant (`GET` / `PATCH /api/system/citta-config`). Retry backoff is compiled into `src/queues/invoiceQueue.ts` and shown read-only | One workspace + gateway-wide | ADMIN |
@@ -199,17 +210,22 @@ curl -H "Authorization: Bearer <CITTAEFS_API_KEY>" https://ei-api.azurewebsites.
 │   ├── adapters/connectorAdapters.ts    # QuickBooksAdapter + OdooAdapter (CsvAdapter frozen)
 │   ├── components/erp/ErpWorkspace.tsx # ERP-scoped router (Overview|Connections|Invoices|Validation|Directories|Settings|Audit)
 │   ├── components/OnboardClientModal.tsx # Onboard ERP (QBO|Odoo) not Client
-│   ├── config/erpRegistry.ts         # ERP_REGISTRY qbo|odoo active
+│   ├── config/erpRegistry.ts         # ERP_REGISTRY live qbo|odoo + planned Xero|Zoho|Sage|Tally|SAP|Custom
 │   ├── crons/reconciliation.ts       # runQbReconciliationCron runNrsReconciliationCron recoverOrphans/Stale
-│   ├── queues/invoiceQueue.ts        # DB + BullMQ 5 retries
+│   ├── crons/erpHealth.ts            # 15m per-connection health probe (ERP_HEALTH_INTERVAL_MS)
+│   ├── lib/erpConnectionConfig.ts    # mapping_config + health JSON in TenantErp.config
+│   ├── lib/efsExport.ts              # normalised EFS rows + CSV/XLSX/JSON writers
+│   ├── queues/invoiceQueue.ts        # DB + BullMQ 5 retries, jobs tagged tenantErpId
 │   ├── workers/invoiceWorker.ts      # normalize 8130 bare → cittaEfsClient
 │   ├── services/cittaEfsClient.ts    # POST gen/invoices dtoArray bare, GET archive/errors, writeback SYNCED|FAILED
+│   ├── services/erpHealthService.ts  # QBO/Odoo smoke probes, auth-failure classification
 │   ├── services/qboService.ts        # OAuth + fetch + ingest + sparse IRN|QR writeback
 │   ├── services/odooService.ts       # JSON-RPC + message_post
-│   ├── routes/tenants.ts             # ERP create tenantId,erpId,companyId independent
+│   ├── routes/tenants.ts             # ERP create tenantId,erpId,companyId independent + health/mapping/runs
 │   ├── routes/qbo.ts|odoo.ts|webhooks.ts|invoices.ts|validation.ts|system.ts
-│   └── data/referenceData.ts         # HS 5600+ Service 400+ bare + normalizeCittaCode
-├── server.ts                       # Express + WS + 5s worker + 60s QBO|Odoo + 300s NRS intervals
+│   ├── data/referenceData.ts         # HS 5600+ Service 400+ bare + normalizeCittaCode
+│   └── docs/erp-adapters/            # quickbooks, odoo, planned-erps, connection-health-and-export
+├── server.ts                       # Express + WS + 5s worker + 60s QBO|Odoo + 300s NRS + 15m ERP health
 └── README.md
 ```
 

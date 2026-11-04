@@ -37,7 +37,8 @@ const STATUS_TONES: Record<string, StatusTone> = {
   PENDING_REGISTRATION: 'pending', PROCESSING: 'pending', RETRY: 'pending',
   RETRYING: 'pending', INVITED: 'pending', UNMAPPED: 'pending', OPEN: 'pending',
   FAILED: 'fail', REJECTED: 'fail', DLQ: 'fail', SUSPENDED: 'fail',
-  CANCELLED: 'neutral', DRAFT: 'neutral',
+  NEEDS_REAUTH: 'fail',
+  CANCELLED: 'neutral', DRAFT: 'neutral', INACTIVE: 'neutral', NOT_CONNECTED: 'neutral',
 };
 
 export function statusTone(status?: string): StatusTone {

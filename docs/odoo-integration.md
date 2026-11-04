@@ -19,7 +19,7 @@ How the Hub pulls posted invoices out of a client's Odoo instance over JSON-RPC,
 
 ## Overview
 
-Odoo is one of five ERP adapters registered in the Hub (alongside QuickBooks Online, Excel/CSV, and two not-yet-live adapters for SAP and NetSuite). Unlike QuickBooks, Odoo has no central OAuth app registry — every client hosts their own instance, so the connector authenticates with a per-client URL, database name, username and API key instead of an OAuth redirect.
+Odoo is one of the Hub's two live ERP adapters, alongside QuickBooks Online. Xero, Zoho Books, Sage Business Cloud, Tally Prime, SAP Business One and Custom ERP are registered contracts only and are not integrated yet (`./erp-adapters/planned-erps.md`). Unlike QuickBooks, Odoo has no central OAuth app registry — every client hosts their own instance, so the connector authenticates with a per-client URL, database name, username and API key instead of an OAuth redirect.
 
 > **In one sentence:** The Hub polls a client's `account.move` table for posted customer invoices and credit notes, converts each one into a CittaEFS invoice, and — once it's been stamped by the CittaEFS Gateway — leaves a note with the IRN and QR code on the original Odoo record.
 

@@ -11,12 +11,42 @@ import {
   parsePagination,
 } from "../lib/serverHelpers";
 import { packEncryptedString } from "../config/encryption";
-import { getErpForTenant } from "../config/erpRegistry";
+import { getErpForTenant, isErpAvailable } from "../config/erpRegistry";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { getCittaCodeType } from "../data/referenceData";
+import { TAX_CATEGORIES } from "../data/invoiceTemplateReference";
+import {
+  readMappingConfig,
+  normalizeMappingInput,
+  withMappingConfig,
+  readHealth,
+} from "../lib/erpConnectionConfig";
+import { checkErpConnection } from "../services/erpHealthService";
 
 const router = Router();
+
+// Adds the registry definition and decoded per-connection settings to a
+// TenantErp row so the UI never has to parse the raw config string.
+function formatTenantErp(row: any) {
+  if (!row) return row;
+  const definition = getErpForTenant(row.platformType);
+  return {
+    ...row,
+    label: definition.label,
+    shortLabel: definition.shortLabel,
+    availability: definition.availability,
+    docsPath: definition.docsPath,
+    mappingConfig: readMappingConfig(row.config),
+    health: readHealth(row.config),
+  };
+}
+
+const ERP_WRITE_ROLES = ["ADMIN", "INTEGRATION_MANAGER", "OPERATOR"];
+
+function canWriteErp(req: any): boolean {
+  return !req.user || ERP_WRITE_ROLES.includes(req.user.role);
+}
 
 // GET /api/tenants
 router.get("/api/tenants", async (req: any, res) => {
@@ -43,6 +73,7 @@ router.get("/api/tenants", async (req: any, res) => {
         : new Date().toISOString(),
       customers: (t.customers || []).map(formatCustomer),
       invoices: (t.invoices || []).map(formatInvoice),
+      tenantErps: (t.tenantErps || []).map(formatTenantErp),
     }));
     res.json(tenants);
   } catch (e: any) {
@@ -210,6 +241,7 @@ router.get("/api/tenants/:id", async (req: any, res) => {
       ...tenant,
       customers: (tenant.customers || []).map(formatCustomer),
       invoices: (tenant.invoices || []).map(formatInvoice),
+      tenantErps: (tenant.tenantErps || []).map(formatTenantErp),
     });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -221,7 +253,146 @@ router.get("/api/tenants/:id/erps", async (req: any, res) => {
   try {
     if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
     const erps = await prisma.tenantErp.findMany({ where: { tenantId: req.params.id }, orderBy: { createdAt: "asc" } });
-    res.json(erps);
+    res.json(erps.map(formatTenantErp));
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/tenants/:id/erps/:erpId/mapping
+// Returns the saved per-connection mapping plus the tenant's product list and
+// valid tax categories, so the mapping panel can offer real choices.
+router.get("/api/tenants/:id/erps/:erpId/mapping", async (req: any, res) => {
+  try {
+    if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
+    const connection = await prisma.tenantErp.findFirst({
+      where: { id: req.params.erpId, tenantId: req.params.id },
+    });
+    if (!connection) return res.status(404).json({ success: false, error: "ERP connection not found" });
+    const items = await prisma.item.findMany({
+      where: { tenantId: req.params.id },
+      select: { clientSku: true, name: true, hsOrServiceCode: true },
+      orderBy: { clientSku: "asc" },
+      take: 500,
+    });
+    res.json({
+      connectionId: connection.id,
+      platformType: connection.platformType,
+      mappingConfig: readMappingConfig(connection.config),
+      products: items,
+      taxCategories: TAX_CATEGORIES,
+    });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/tenants/:id/erps/:erpId/mapping
+// Saves mapping_config inside TenantErp.config. `replace: true` swaps the whole
+// map (what the panel sends); otherwise the posted keys merge into the existing
+// map so an integration can patch one entry at a time.
+router.patch("/api/tenants/:id/erps/:erpId/mapping", async (req: any, res) => {
+  try {
+    if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
+    if (!canWriteErp(req)) return res.status(403).json({ success: false, error: "Forbidden: insufficient role" });
+    const connection = await prisma.tenantErp.findFirst({
+      where: { id: req.params.erpId, tenantId: req.params.id },
+    });
+    if (!connection) return res.status(404).json({ success: false, error: "ERP connection not found" });
+
+    const incoming = normalizeMappingInput(req.body);
+    const current = readMappingConfig(connection.config);
+    const next = req.body?.replace === true
+      ? incoming
+      : {
+          taxRates: { ...current.taxRates, ...incoming.taxRates },
+          products: { ...current.products, ...incoming.products },
+        };
+
+    const updated = await prisma.tenantErp.update({
+      where: { id: connection.id },
+      data: { config: withMappingConfig(connection.config, next) },
+    });
+    await safeAuditLogCreate(prisma, {
+      tenantId: req.params.id,
+      action: "ERP_MAPPING_UPDATED",
+      entityType: "TENANT_ERP",
+      entityRef: connection.platformType,
+      details: `Mapping updated for ${connection.platformType}: ${Object.keys(next.taxRates).length} tax code(s), ${Object.keys(next.products).length} product code(s).`,
+      sha256PayloadHash: generateSha256(JSON.stringify(next)),
+      performedBy: req.user?.email || "Operator",
+    });
+    res.json(formatTenantErp(updated));
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/tenants/:id/erps/:erpId/test
+// Runs the first smoke step defined for this ERP and records the result on the
+// connection. Only auth failures flip status to NEEDS_REAUTH.
+router.post("/api/tenants/:id/erps/:erpId/test", async (req: any, res) => {
+  try {
+    if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
+    if (!canWriteErp(req)) return res.status(403).json({ success: false, error: "Forbidden: insufficient role" });
+    const connection = await prisma.tenantErp.findFirst({
+      where: { id: req.params.erpId, tenantId: req.params.id },
+    });
+    if (!connection) return res.status(404).json({ success: false, error: "ERP connection not found" });
+
+    const result = await checkErpConnection(connection.id);
+    await safeAuditLogCreate(prisma, {
+      tenantId: req.params.id,
+      action: "ERP_HEALTH_TEST",
+      entityType: "TENANT_ERP",
+      entityRef: connection.platformType,
+      details: `Health test for ${connection.platformType}: ${result.success ? "passed" : "failed"} (${result.latencyMs} ms). ${result.technicalDetail || result.message}`,
+      sha256PayloadHash: generateSha256(`${connection.id}:${result.checkedAt}`),
+      performedBy: req.user?.email || "Operator",
+    });
+    res.json(result);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/tenants/:id/erps/:erpId/runs
+// Recent gateway jobs and invoice counts for one connection. Queueing stays
+// shared; this is per-connection observability, not a separate queue.
+router.get("/api/tenants/:id/erps/:erpId/runs", async (req: any, res) => {
+  try {
+    if (!canAccessTenant(req, req.params.id)) return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
+    const connection = await prisma.tenantErp.findFirst({
+      where: { id: req.params.erpId, tenantId: req.params.id },
+    });
+    if (!connection) return res.status(404).json({ success: false, error: "ERP connection not found" });
+
+    const marker = `"tenantErpId":"${connection.id}"`;
+    const [jobs, invoiceCount, latestInvoice] = await Promise.all([
+      prisma.queueJob.findMany({
+        where: { tenantId: req.params.id, payload: { contains: marker } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: { id: true, jobName: true, status: true, attempts: true, maxRetries: true, lastError: true, nextAttemptAt: true, createdAt: true, updatedAt: true },
+      }),
+      prisma.invoice.count({ where: { tenantId: req.params.id, tenantErpId: connection.id } }),
+      prisma.invoice.findFirst({
+        where: { tenantId: req.params.id, tenantErpId: connection.id },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true, status: true },
+      }),
+    ]);
+
+    res.json({
+      connectionId: connection.id,
+      platformType: connection.platformType,
+      invoiceCount,
+      lastInvoiceAt: latestInvoice?.createdAt || null,
+      lastInvoiceStatus: latestInvoice?.status || null,
+      runs: jobs.map((job) => ({
+        id: job.id,
+        jobName: job.jobName,
+        status: job.status,
+        attempts: job.attempts,
+        maxRetries: job.maxRetries,
+        lastError: job.lastError,
+        nextAttemptAt: job.nextAttemptAt,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      })),
+    });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
@@ -283,6 +454,12 @@ router.post("/api/tenants/:id/erps", async (req: any, res) => {
     if (req.user && !["ADMIN","INTEGRATION_MANAGER","OPERATOR","AUDITOR"].includes(req.user.role) && req.user.role) return res.status(403).json({ success: false, error: "Forbidden: insufficient role" });
     const { platformType, displayName, config } = req.body;
     if (!platformType) return res.status(400).json({ success: false, error: "platformType required" });
+    if (!isErpAvailable(platformType)) {
+      return res.status(400).json({
+        success: false,
+        error: `${platformType} has an adapter definition but is not integrated yet. Live connectors are QuickBooks Online and Odoo ERP.`,
+      });
+    }
     const erp = getErpForTenant(platformType);
     // Schema is now @@unique([tenantId, erpId, companyId]); old key tenantId_platformType no longer exists.
     // Use findFirst for backward-compat tolerant check (platformType + tenantId) until companyId is populated.

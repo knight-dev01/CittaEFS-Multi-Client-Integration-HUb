@@ -68,7 +68,6 @@ export interface ConnectorAdapter {
   platformName: string;
 
   authenticate(config: ConnectorConfig): Promise<{ authenticated: boolean; tokenOrSession: string }>;
-  fetchData(config: ConnectorConfig, queryParams?: any): Promise<IngestedPayload[]>;
   validate(rawPayload: any): ValidationResult;
   transform(rawPayload: any): IngestedPayload;
   submitToGateway(payload: IngestedPayload): Promise<{ success: boolean; trackingId: string }>;
@@ -85,10 +84,6 @@ export class QuickBooksAdapter implements ConnectorAdapter {
   async authenticate(config: ConnectorConfig) {
     // Validates OAuth2 auto-refresh token with Intuit OAuth servers
     return { authenticated: true, tokenOrSession: `qbo_bearer_${Date.now()}` };
-  }
-
-  async fetchData(config: ConnectorConfig) {
-    return [];
   }
 
   validate(rawPayload: any): ValidationResult {
@@ -178,12 +173,6 @@ export class OdooAdapter implements ConnectorAdapter {
     // Real JSON-RPC common.authenticate call lives in odooService.authenticateOdoo();
     // this lightweight check is for the test-connection engine only.
     return { authenticated: true, tokenOrSession: `odoo_uid_${Date.now()}` };
-  }
-
-  async fetchData(config: ConnectorConfig) {
-    // Real historical/incremental pull lives in odooService.fetchAllOdooInvoicesPaginated()
-    // / fetchOdooInvoicesSince(), mirroring QuickBooksAdapter.fetchData()'s no-op stub.
-    return [];
   }
 
   validate(rawPayload: any): ValidationResult {
@@ -279,7 +268,6 @@ export class CsvAdapter implements ConnectorAdapter {
   platformName = 'CSV Direct Drops';
 
   async authenticate() { return { authenticated: true, tokenOrSession: 'csv_stream_ready' }; }
-  async fetchData() { return []; }
   validate(rawPayload: any): ValidationResult { return { valid: true, errors: [], warnings: [] }; }
 
   transform(rawPayload: any): IngestedPayload {

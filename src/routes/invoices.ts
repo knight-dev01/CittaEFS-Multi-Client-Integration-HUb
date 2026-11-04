@@ -12,6 +12,14 @@ import {
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { getCittaCodeType } from "../data/referenceData";
+import {
+  buildEfsExport,
+  exportFileName,
+  isEfsExportFormat,
+  toCsv,
+  toJson,
+  toXlsx,
+} from "../lib/efsExport";
 
 const router = Router();
 
@@ -64,6 +72,55 @@ router.get("/api/invoices/retry-status/:id", async (req:any, res)=>{
     const qRow = await prisma.queueJob.findFirst({ where:{ tenantId: inv.tenantId, payload:{contains: inv.id}}, orderBy:{createdAt:'desc'}});
     res.json({ invoice: formatInvoice(inv), queueJob: qRow ? { id: qRow.id, status: qRow.status, attempts: qRow.attempts, maxRetries: qRow.maxRetries, lastError: qRow.lastError, nextAttemptAt: qRow.nextAttemptAt, createdAt: qRow.createdAt } : null });
   } catch(e:any){ res.status(500).json({success:false, error:e.message});}
+});
+
+// GET /api/invoices/export — normalised EFS upload file. Declared before
+// /api/invoices/:id so "export" is never treated as an invoice id.
+router.get("/api/invoices/export", async (req: any, res) => {
+  try {
+    const format = String(req.query.format || "csv").toLowerCase();
+    if (!isEfsExportFormat(format)) {
+      return res.status(400).json({ success: false, error: "format must be csv, xlsx or json" });
+    }
+
+    const where: any = { ...getScopedTenantWhere(req, req.query.tenantId as string | undefined) };
+    if (req.user && req.user.role !== "ADMIN" && !where.tenantId && req.user.tenantId) {
+      where.tenantId = req.user.tenantId;
+    }
+    if (req.query.status) where.status = String(req.query.status);
+    if (req.query.erpId) where.tenantErpId = String(req.query.erpId);
+
+    const invoices = await prisma.invoice.findMany({
+      where,
+      include: { lineItems: true },
+      orderBy: { createdAt: "asc" },
+      take: 5000,
+    });
+
+    const result = buildEfsExport(invoices);
+    res.setHeader("X-Export-Rows", String(result.rows.length));
+    res.setHeader("X-Export-Invoices", String(result.invoicesExported));
+    if (result.invoicesSkipped.length) {
+      res.setHeader("X-Export-Skipped", result.invoicesSkipped.slice(0, 50).join(","));
+    }
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${exportFileName(format, String(where.tenantId || "all"))}"`,
+    );
+
+    if (format === "csv") {
+      res.type("text/csv");
+      return res.send(toCsv(result));
+    }
+    if (format === "xlsx") {
+      res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      return res.send(toXlsx(result));
+    }
+    res.type("application/json");
+    return res.send(toJson(result));
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 router.get("/api/invoices/:id", async (req: any, res) => {
