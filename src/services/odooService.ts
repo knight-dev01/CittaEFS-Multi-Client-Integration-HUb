@@ -274,43 +274,68 @@ const POSTED_INVOICE_DOMAIN = [
 const INVOICE_FIELDS = ["id", "name", "invoice_date", "move_type", "partner_id", "amount_untaxed", "amount_tax", "amount_total", "currency_id", "write_date"];
 
 /**
+ * Fetches one page of posted invoices (offset/limit). Cursor is the next
+ * offset, or null on the last page. Does not touch lastSyncAt — the shared sync
+ * pipeline marks a completed run.
+ */
+export async function fetchOdooInvoicePage(
+  tenantId: string,
+  cursor: number | null,
+  options?: { limit?: number; since?: Date | string | null },
+): Promise<{ records: any[]; nextCursor: number | null }> {
+  const creds = await getValidOdooCredentials(tenantId);
+  const limit = options?.limit ?? 100;
+  const offset = cursor ?? 0;
+
+  const domain: any[] = [...POSTED_INVOICE_DOMAIN];
+  if (options?.since) {
+    domain.push([
+      "write_date",
+      ">",
+      new Date(options.since).toISOString().replace("T", " ").substring(0, 19),
+    ]);
+  }
+
+  let page: any[];
+  try {
+    page = await callOdoo(creds.url, "object", "execute_kw", [
+      creds.database, creds.uid, creds.apiKey,
+      "account.move", "search_read",
+      [domain],
+      { fields: INVOICE_FIELDS, offset, limit },
+    ]);
+  } catch (e: any) {
+    throw new Error(`Could not reach Odoo, please try again: ${e.message}`);
+  }
+
+  const records = page?.length ? await composeInvoicePage(creds, page) : [];
+  const nextCursor = (page?.length ?? 0) < limit ? null : offset + limit;
+
+  return { records, nextCursor };
+}
+
+/**
  * Fetches all historical posted invoices from Odoo using offset/limit pagination.
  */
 export async function fetchAllOdooInvoicesPaginated(tenantId: string): Promise<any[]> {
-  const creds = await getValidOdooCredentials(tenantId);
   const integration = await prisma.integration.findFirst({
     where: { tenantId, sourceSystem: SOURCE_SYSTEM },
   });
   if (!integration) throw new Error(`Integration details not found for tenant ${tenantId}`);
 
-  let allMoves: any[] = [];
-  let offset = 0;
-  const limit = 100;
+  const allMoves: any[] = [];
+  let cursor: number | null = null;
 
   while (true) {
-    let page: any[];
-    try {
-      page = await callOdoo(creds.url, "object", "execute_kw", [
-        creds.database, creds.uid, creds.apiKey,
-        "account.move", "search_read",
-        [POSTED_INVOICE_DOMAIN],
-        { fields: INVOICE_FIELDS, offset, limit },
-      ]);
-    } catch (e: any) {
-      throw new Error(`Could not reach Odoo, please try again: ${e.message}`);
-    }
-
-    if (!page || page.length === 0) break;
-    allMoves.push(...page);
-    if (page.length < limit) break;
-    offset += limit;
+    const page = await fetchOdooInvoicePage(tenantId, cursor);
+    allMoves.push(...page.records);
+    if (page.nextCursor === null) break;
+    cursor = page.nextCursor;
   }
-
-  const composed = await composeInvoicePage(creds, allMoves);
 
   await prisma.integration.update({ where: { id: integration.id }, data: { lastSyncAt: new Date() } });
 
-  return composed;
+  return allMoves;
 }
 
 /**

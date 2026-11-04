@@ -1,252 +1,88 @@
 import { Router } from "express";
-import crypto from "crypto";
-import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma";
 import {
   generateSha256,
   safeAuditLogCreate,
   renderOAuthBridgeHtml,
-  getAuthConfig,
 } from "../lib/serverHelpers";
-import { packEncryptedString } from "../config/encryption";
+import { createOAuthConnectionRouter, runPagedSync } from "../connectors";
 import {
   fetchQboInvoices,
-  fetchAllQboInvoicesPaginated,
+  fetchQboInvoicePage,
   fetchQboCompanyInfo,
   ingestQboInvoice,
   getTenantQboEnvironment,
   getQboCredentialsForEnvironment,
+  QBO_OAUTH_PROVIDER,
   QboEnvironment,
 } from "../services/qboService";
 
 const router = Router();
-const { JWT_SECRET } = getAuthConfig();
 
-// QuickBooks Online OAuth2 — connect (initiate)
-router.get("/api/integrations/qbo/connect", async (req: any, res) => {
-  const wantsJson = req.headers.accept?.includes("application/json");
-  try {
-    const userRole = req.user?.role;
-    if (userRole && !["ADMIN", "INTEGRATION_MANAGER"].includes(userRole)) {
-      const error = "Forbidden: Requires ADMIN or INTEGRATION_MANAGER role";
-      if (wantsJson) return res.status(403).json({ error });
-      return res
-        .status(403)
-        .send(
-          renderOAuthBridgeHtml({
-            success: false,
-            error,
-            redirectQs: "qbo=error",
-          }),
+// Connect + callback are the shared OAuth route factory. QBO supplies its
+// endpoints, how to pick sandbox/production credentials, and realmId handling.
+router.use(
+  createOAuthConnectionRouter({
+    platformKey: "qbo",
+    sourceSystem: "QUICKBOOKS_ONLINE",
+    platformLabel: "QuickBooks Online",
+    provider: QBO_OAUTH_PROVIDER,
+    resolveTenantId: (req) =>
+      (req.query.tenantId as string) || req.user?.tenantId || "tenant_qbo_smb",
+    getRedirectUri: () => process.env.QBO_REDIRECT_URI || "",
+    buildState: async (_req, tenantId) => ({
+      environment: await getTenantQboEnvironment(tenantId),
+    }),
+    getCredentials: async (tenantId, state) => {
+      const environment: QboEnvironment =
+        state?.environment === "production"
+          ? "production"
+          : state?.environment === "sandbox"
+            ? "sandbox"
+            : await getTenantQboEnvironment(tenantId);
+      return {
+        ...getQboCredentialsForEnvironment(environment),
+        redirectUri: process.env.QBO_REDIRECT_URI || "",
+      };
+    },
+    extractCompanyId: (req) =>
+      typeof req.query.realmId === "string" ? req.query.realmId : undefined,
+    onConnected: async ({ tenantId, state }) => {
+      // Persist the environment this grant was issued under, so later token
+      // refreshes and API calls pick the matching credentials and base URL.
+      try {
+        const tenantRow = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { erpConfig: true },
+        });
+        let cfg: any = {};
+        try {
+          cfg = tenantRow?.erpConfig ? JSON.parse(tenantRow.erpConfig) : {};
+        } catch {}
+        cfg.environment = state?.environment === "production" ? "production" : "sandbox";
+        await prisma.tenant.update({
+          where: { id: tenantId },
+          data: { erpConfig: JSON.stringify(cfg) },
+        });
+      } catch (e: any) {
+        console.warn(
+          `[QBO Callback] Failed to persist environment for tenant ${tenantId}:`,
+          e.message,
         );
-    }
-
-    const tenantId =
-      (req.query.tenantId as string) ||
-      req.user?.tenantId ||
-      "tenant_qbo_smb";
-    const environment = await getTenantQboEnvironment(tenantId);
-    const { clientId } = getQboCredentialsForEnvironment(environment);
-    const redirectUri = process.env.QBO_REDIRECT_URI;
-
-    if (!clientId || !redirectUri) {
-      const error = `QBO client credentials for ${environment} (QBO_CLIENT_ID_${environment.toUpperCase()} or QBO_CLIENT_ID) and QBO_REDIRECT_URI environment variables are required`;
-      if (wantsJson) return res.status(400).json({ error });
-      return res
-        .status(400)
-        .send(
-          renderOAuthBridgeHtml({
-            success: false,
-            error,
-            redirectQs: "qbo=error",
-          }),
-        );
-    }
-
-    const stateToken = jwt.sign(
-      { tenantId, environment, timestamp: Date.now() },
-      JWT_SECRET,
-      { expiresIn: "15m" },
-    );
-    const qboAuthUrl = `https://appcenter.intuit.com/connect/oauth2?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=com.intuit.quickbooks.accounting&state=${encodeURIComponent(stateToken)}`;
-
-    if (wantsJson) {
-      return res.json({ url: qboAuthUrl });
-    }
-
-    res.redirect(qboAuthUrl);
-  } catch (e: any) {
-    if (wantsJson) return res.status(500).json({ error: e.message });
-    res
-      .status(500)
-      .send(
-        renderOAuthBridgeHtml({
-          success: false,
-          error: e.message,
-          redirectQs: "qbo=error",
-        }),
-      );
-  }
-});
-
-// QuickBooks Online OAuth2 — callback
-router.get("/api/integrations/qbo/callback", async (req, res) => {
-  try {
-    const { code, state, realmId } = req.query;
-    if (!code || !state) {
-      return res
-        .status(400)
-        .send(
-          renderOAuthBridgeHtml({
-            success: false,
-            error: "Missing code or state parameter in callback",
-            redirectQs: "qbo=error",
-          }),
-        );
-    }
-
-    let decoded: any;
-    try {
-      decoded = jwt.verify(state as string, JWT_SECRET);
-    } catch (e) {
-      return res
-        .status(401)
-        .send(
-          renderOAuthBridgeHtml({
-            success: false,
-            error: "Invalid or expired state parameter",
-            redirectQs: "qbo=error",
-          }),
-        );
-    }
-
-    const tenantId = decoded.tenantId;
-    const environment: QboEnvironment = decoded.environment === "production" ? "production" : "sandbox";
-    const { clientId, clientSecret } = getQboCredentialsForEnvironment(environment);
-    const redirectUri = process.env.QBO_REDIRECT_URI;
-
-    if (!clientId || !clientSecret || !redirectUri) {
-      return res
-        .status(500)
-        .send(
-          renderOAuthBridgeHtml({
-            success: false,
-            error: `QBO client credentials for ${environment} (QBO_CLIENT_ID_${environment.toUpperCase()}/QBO_CLIENT_SECRET_${environment.toUpperCase()}, or else QBO_CLIENT_ID/SECRET), or QBO_REDIRECT_URI, missing in server config`,
-            redirectQs: "qbo=error",
-          }),
-        );
-    }
-
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString(
-      "base64",
-    );
-    const tokenRes = await fetch(
-      "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code: code as string,
-          redirect_uri: redirectUri,
-        }).toString(),
-      },
-    );
-
-    if (!tokenRes.ok) {
-      const errText = await tokenRes.text();
-      console.error("QBO Token Exchange Error:", errText);
-      return res
-        .status(400)
-        .send(
-          renderOAuthBridgeHtml({
-            success: false,
-            error: `QBO OAuth token exchange failed: ${errText}`,
-            redirectQs: "qbo=error",
-          }),
-        );
-    }
-
-    const tokenData = (await tokenRes.json()) as any;
-    const { access_token, refresh_token, expires_in } = tokenData;
-    const encryptedAccess = packEncryptedString(access_token);
-    const encryptedRefresh = packEncryptedString(refresh_token);
-    const expiresAt = new Date(Date.now() + (expires_in || 3600) * 1000);
-
-    await prisma.integration.upsert({
-      where: {
-        tenantId_sourceSystem: {
-          tenantId,
-          sourceSystem: "QUICKBOOKS_ONLINE",
-        },
-      },
-      create: {
-        tenantId,
-        sourceSystem: "QUICKBOOKS_ONLINE",
-        accessToken: encryptedAccess,
-        refreshToken: encryptedRefresh,
-        companyId: (realmId as string) || "UNKNOWN_REALM",
-        accessTokenExpiresAt: expiresAt,
-        status: "CONNECTED",
-      },
-      update: {
-        accessToken: encryptedAccess,
-        refreshToken: encryptedRefresh,
-        companyId: (realmId as string) || "UNKNOWN_REALM",
-        accessTokenExpiresAt: expiresAt,
-        status: "CONNECTED",
-      },
-    });
-
-    // Persist the environment this OAuth grant was issued under, so later
-    // token refreshes/API calls (qboService.ts) pick the matching credentials
-    // and base URL even if the tenant never touched the Mapping tab's dropdown.
-    try {
-      const tenantRow = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { erpConfig: true } });
-      let cfg: any = {};
-      try { cfg = tenantRow?.erpConfig ? JSON.parse(tenantRow.erpConfig) : {}; } catch {}
-      cfg.environment = environment;
-      await prisma.tenant.update({ where: { id: tenantId }, data: { erpConfig: JSON.stringify(cfg) } });
-    } catch (e: any) {
-      console.warn(`[QBO Callback] Failed to persist environment for tenant ${tenantId}:`, e.message);
-    }
-
-    await safeAuditLogCreate(prisma, {
-      tenantId,
-      action: "CONNECTOR_AUTHENTICATED",
-      entityType: "INTEGRATION",
-      entityRef: (realmId as string) || "QUICKBOOKS_ONLINE",
-      details: `QuickBooks Online OAuth authenticated successfully for realm ${realmId}`,
-      sha256PayloadHash: generateSha256(String(realmId || "QBO")),
-      performedBy: "QBO OAuth Callback",
-      rawJson: { sourceSystem: "QUICKBOOKS_ONLINE", realmId },
-    });
-
-    res.send(
+      }
+    },
+    successQuery: ({ tenantId, companyId }) =>
+      `qbo=success&tenantId=${encodeURIComponent(tenantId)}&realmId=${encodeURIComponent(companyId || "")}`,
+    renderBridge: (payload) =>
       renderOAuthBridgeHtml({
-        success: true,
-        tenantId,
-        realmId: (realmId as string) || "",
-        redirectQs: `qbo=success&tenantId=${encodeURIComponent(tenantId)}&realmId=${encodeURIComponent((realmId as string) || "")}`,
+        success: payload.success,
+        tenantId: payload.tenantId,
+        realmId: payload.companyId,
+        error: payload.error,
+        redirectQs: payload.redirectQs,
       }),
-    );
-  } catch (e: any) {
-    console.error("QBO Callback Error:", e);
-    res
-      .status(500)
-      .send(
-        renderOAuthBridgeHtml({
-          success: false,
-          error: `Server error during QBO callback: ${e.message}`,
-          redirectQs: "qbo=error",
-        }),
-      );
-  }
-});
+  }),
+);
 
 // QuickBooks Online — switch sandbox/production for this tenant. A single
 // Intuit app issues separate credentials per environment, so sandbox tokens
@@ -357,60 +193,40 @@ router.post("/api/integrations/qbo/sync", async (req: any, res) => {
 
     const tenantId = requestedTenantId;
 
-    let rawInvoices: any[] = [];
-    try {
-      rawInvoices = await fetchAllQboInvoicesPaginated(tenantId);
-    } catch (fetchErr: any) {
-      console.warn(
-        "[QBO Sync] Paginated fetch failed, trying standard fetch:",
-        fetchErr,
-      );
-      rawInvoices = await fetchQboInvoices(tenantId);
-    }
-
-    const totalFound = rawInvoices.length;
-    let newSynced = 0;
-    let alreadySynced = 0;
-    const processedInvoices = [];
-
-    for (const rawInv of rawInvoices) {
-      try {
-        const clientInvoiceId = rawInv.Id;
-        const existing = await prisma.invoice.findFirst({
-          where: { tenantId, clientInvoiceId },
-        });
-
-        const dbInv = await ingestQboInvoice(tenantId, rawInv);
-        if (existing) {
-          alreadySynced++;
-        } else {
-          newSynced++;
+    const result = await runPagedSync<any, number>({
+      tenantId,
+      sourceSystem: "QUICKBOOKS_ONLINE",
+      platformLabel: "QuickBooks Online",
+      auditAction: "QBO_HISTORICAL_SYNC",
+      performedBy: req.user?.email || "Sync Operator",
+      fetchPage: async (cursor) => {
+        try {
+          return await fetchQboInvoicePage(tenantId, cursor);
+        } catch (fetchErr: any) {
+          if (cursor !== null) throw fetchErr;
+          console.warn(
+            "[QBO Sync] Paginated fetch failed, trying standard fetch:",
+            fetchErr,
+          );
+          const rows = await fetchQboInvoices(tenantId);
+          return { records: rows, nextCursor: null };
         }
-        processedInvoices.push(dbInv);
-      } catch (err: any) {
-        console.warn(`[QBO Sync Warning] Skipped invoice: ${err.message}`);
-      }
-    }
-
-    try {
-      await safeAuditLogCreate(prisma, {
-        tenantId,
-        action: "QBO_HISTORICAL_SYNC",
-        entityType: "INTEGRATION",
-        entityRef: "QUICKBOOKS_ONLINE",
-        details: `QBO historical sync completed. Total found: ${totalFound}, New synced: ${newSynced}, Already synced: ${alreadySynced}`,
-        sha256PayloadHash: generateSha256(tenantId + Date.now()),
-        performedBy: req.user?.email || "Sync Operator",
-      });
-    } catch {}
+      },
+      // ingestQboInvoice dedupes on DocNumber, so the pipeline must count on it too.
+      dedupeKey: (raw) => String(raw.DocNumber || raw.Id),
+      ingest: (raw) => ingestQboInvoice(tenantId, raw),
+      onRecordError: ({ key, error }) =>
+        console.warn(`[QBO Sync Warning] Skipped invoice ${key}: ${error.message}`),
+    });
 
     res.json({
       success: true,
-      totalFound,
-      newSynced,
-      alreadySynced,
-      count: processedInvoices.length,
-      invoices: processedInvoices,
+      totalFound: result.totalFound,
+      newSynced: result.newSynced,
+      alreadySynced: result.alreadySynced,
+      count: result.processed.length,
+      invoices: result.processed,
+      skipped: result.errors.length,
     });
   } catch (e: any) {
     console.error(

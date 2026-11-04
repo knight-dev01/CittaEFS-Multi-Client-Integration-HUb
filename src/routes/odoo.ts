@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { generateSha256, safeAuditLogCreate } from "../lib/serverHelpers";
+import { runPagedSync } from "../connectors";
 import {
   connectOdoo,
   getValidOdooCredentials,
   fetchOdooCompanyInfo,
-  fetchAllOdooInvoicesPaginated,
-  fetchOdooInvoicesSince,
+  fetchOdooInvoicePage,
   ingestOdooInvoice,
 } from "../services/odooService";
 
@@ -97,40 +97,30 @@ router.post("/api/integrations/odoo/sync", async (req: any, res) => {
       where: { tenantId, sourceSystem: "ODOO" },
     });
 
-    const rawInvoices = integration?.lastSyncAt
-      ? await fetchOdooInvoicesSince(tenantId, integration.lastSyncAt)
-      : await fetchAllOdooInvoicesPaginated(tenantId);
+    const result = await runPagedSync<any, number>({
+      tenantId,
+      sourceSystem: "ODOO",
+      platformLabel: "Odoo ERP",
+      auditAction: "ODOO_SYNC",
+      performedBy: req.user?.email || "Sync Operator",
+      fetchPage: (cursor) =>
+        fetchOdooInvoicePage(tenantId, cursor, { since: integration?.lastSyncAt }),
+      // ingestOdooInvoice dedupes on account.move.name.
+      dedupeKey: (raw) => String(raw.name || raw.id),
+      ingest: (raw) => ingestOdooInvoice(tenantId, raw),
+      onRecordError: ({ key, error }) =>
+        console.warn(`[Odoo Sync Warning] Skipped invoice ${key}: ${error.message}`),
+    });
 
-    const totalFound = rawInvoices.length;
-    let newSynced = 0;
-    let alreadySynced = 0;
-    const processedInvoices = [];
-
-    for (const rawMove of rawInvoices) {
-      try {
-        const clientInvoiceId = rawMove.name;
-        const existing = await prisma.invoice.findFirst({ where: { tenantId, clientInvoiceId } });
-        const dbInv = await ingestOdooInvoice(tenantId, rawMove);
-        if (existing) alreadySynced++; else newSynced++;
-        processedInvoices.push(dbInv);
-      } catch (err: any) {
-        console.warn(`[Odoo Sync Warning] Skipped invoice: ${err.message}`);
-      }
-    }
-
-    try {
-      await safeAuditLogCreate(prisma, {
-        tenantId,
-        action: "ODOO_SYNC",
-        entityType: "INTEGRATION",
-        entityRef: "ODOO",
-        details: `Odoo sync completed. Total found: ${totalFound}, New synced: ${newSynced}, Already synced: ${alreadySynced}`,
-        sha256PayloadHash: generateSha256(tenantId + Date.now()),
-        performedBy: req.user?.email || "Sync Operator",
-      });
-    } catch {}
-
-    res.json({ success: true, totalFound, newSynced, alreadySynced, count: processedInvoices.length, invoices: processedInvoices });
+    res.json({
+      success: true,
+      totalFound: result.totalFound,
+      newSynced: result.newSynced,
+      alreadySynced: result.alreadySynced,
+      count: result.processed.length,
+      invoices: result.processed,
+      skipped: result.errors.length,
+    });
   } catch (e: any) {
     console.error("[API Error] POST /api/integrations/odoo/sync failed:", e.message);
 

@@ -1,13 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 import { getDatabaseUrl } from "../config/dbConfig";
-import {
-  unpackAndDecryptString,
-  packEncryptedString,
-} from "../config/encryption";
 import { QuickBooksAdapter } from "../adapters/connectorAdapters";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { CITTA_HS_CODES_REFERENCE, CITTA_SERVICE_CODES_REFERENCE, isValidCittaCode, getCittaCodeType, normalizeCittaCode } from "../data/referenceData";
+import {
+  buildAuthorizationUrl,
+  exchangeAuthorizationCode,
+  refreshAccessToken,
+  revokeAccessToken,
+  ensureFreshAccessToken,
+} from "../connectors";
+import type { OAuthProvider } from "../connectors";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -48,9 +52,22 @@ export interface QboTokenResponse {
 }
 
 /**
- * Custom fetch-backed QuickBooks Online OAuth2 client.
- * Encapsulates authorization URL generation, authorization code exchange, and token refresh
- * using standard native fetch API without external library dependencies.
+ * The QuickBooks half of the shared OAuth contract. Everything else — state,
+ * exchange, refresh, revoke, token storage — comes from src/connectors.
+ */
+export const QBO_OAUTH_PROVIDER: OAuthProvider = {
+  authorizationUrl: "https://appcenter.intuit.com/connect/oauth2",
+  tokenUrl: "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+  revokeUrl: "https://oauth.platform.intuit.com/oauth2/v1/tokens/revoke",
+  scopes: ["com.intuit.quickbooks.accounting"],
+  tokenAuthStyle: "basic",
+  revokeBodyStyle: "json",
+};
+
+/**
+ * Fetch-backed QuickBooks Online OAuth2 client.
+ * Kept as a thin compatibility wrapper for callers that still instantiate it;
+ * the actual requests go through the shared connector kit.
  */
 export class QboOAuthClient {
   clientId: string;
@@ -65,39 +82,32 @@ export class QboOAuthClient {
     this.redirectUri = config.redirectUri;
   }
 
-  /**
-   * Generates Intuit OAuth2 Authorization URL
-   */
-  authorizeUri(options?: { scope?: string[]; state?: string }): string {
-    const scopes = options?.scope
-      ? options.scope.join(" ")
-      : "com.intuit.quickbooks.accounting";
-    const state = options?.state || "citta_efs_state";
-
-    const params = new URLSearchParams({
-      client_id: this.clientId,
-      response_type: "code",
-      scope: scopes,
-      redirect_uri: this.redirectUri,
-      state,
-    });
-
-    return `https://appcenter.intuit.com/connect/oauth2?${params.toString()}`;
+  private credentials() {
+    return {
+      clientId: this.clientId,
+      clientSecret: this.clientSecret,
+      redirectUri: this.redirectUri,
+    };
   }
 
-  /**
-   * Alias for authorizeUri
-   */
+  /** Generates the Intuit OAuth2 authorization URL. */
+  authorizeUri(options?: { scope?: string[]; state?: string }): string {
+    return buildAuthorizationUrl(
+      options?.scope
+        ? { ...QBO_OAUTH_PROVIDER, scopes: options.scope }
+        : QBO_OAUTH_PROVIDER,
+      this.credentials(),
+      { state: options?.state || "citta_efs_state" },
+    );
+  }
+
+  /** Alias for authorizeUri. */
   getAuthorizationUrl(options?: { scope?: string[]; state?: string }): string {
     return this.authorizeUri(options);
   }
 
-  /**
-   * Exchanges authorization code for Access & Refresh Tokens using standard fetch
-   */
-  async createToken(
-    authCodeOrUrl: string,
-  ): Promise<{ token: QboTokenResponse }> {
+  /** Exchanges an authorization code for access and refresh tokens. */
+  async createToken(authCodeOrUrl: string): Promise<{ token: QboTokenResponse }> {
     let code = authCodeOrUrl;
     if (authCodeOrUrl.includes("code=")) {
       try {
@@ -112,94 +122,19 @@ export class QboOAuthClient {
       }
     }
 
-    const basicAuth = Buffer.from(
-      `${this.clientId}:${this.clientSecret}`,
-    ).toString("base64");
-    const response = await fetch(
-      "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: this.redirectUri,
-        }).toString(),
-      },
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(
-        `Failed to exchange authorization code (${response.status}): ${errText}`,
-      );
-    }
-
-    const tokenData = (await response.json()) as QboTokenResponse;
-    return { token: tokenData };
+    const tokens = await exchangeAuthorizationCode(QBO_OAUTH_PROVIDER, this.credentials(), code);
+    return { token: tokens.raw as QboTokenResponse };
   }
 
-  /**
-   * Refreshes access token using refresh token via standard fetch
-   */
-  async refreshTokens(
-    refreshToken: string,
-  ): Promise<{ token: QboTokenResponse }> {
-    const basicAuth = Buffer.from(
-      `${this.clientId}:${this.clientSecret}`,
-    ).toString("base64");
-    const response = await fetch(
-      "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-        }).toString(),
-      },
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(
-        `Failed to refresh token (${response.status}): ${errText}`,
-      );
-    }
-
-    const tokenData = (await response.json()) as QboTokenResponse;
-    return { token: tokenData };
+  /** Refreshes an access token. */
+  async refreshTokens(refreshToken: string): Promise<{ token: QboTokenResponse }> {
+    const tokens = await refreshAccessToken(QBO_OAUTH_PROVIDER, this.credentials(), refreshToken);
+    return { token: tokens.raw as QboTokenResponse };
   }
 
-  /**
-   * RevoNGN token
-   */
+  /** Revokes a token. */
   async revokeToken(token: string): Promise<boolean> {
-    const basicAuth = Buffer.from(
-      `${this.clientId}:${this.clientSecret}`,
-    ).toString("base64");
-    const response = await fetch(
-      "https://oauth.platform.intuit.com/oauth2/v1/tokens/revoke",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ token }),
-      },
-    );
-
-    return response.ok;
+    return revokeAccessToken(QBO_OAUTH_PROVIDER, this.credentials(), token);
   }
 }
 
@@ -282,29 +217,6 @@ async function getQboBaseUrl(tenantId: string): Promise<string> {
 export async function getValidQboAccessToken(
   tenantId: string,
 ): Promise<string> {
-  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
-
-  if (!integration) {
-    throw new Error(
-      `No QuickBooks Online integration found for tenant ${tenantId}`,
-    );
-  }
-
-  // If token is valid for more than 5 minutes, use it
-  const isExpired =
-    new Date(integration.accessTokenExpiresAt).getTime() - Date.now() <
-    5 * 60 * 1000;
-  if (!isExpired) {
-    try {
-      return unpackAndDecryptString(integration.accessToken);
-    } catch (e) {
-      console.warn(
-        "Failed to decrypt cached access token, forcing refresh:",
-        e,
-      );
-    }
-  }
-
   const environment = await getTenantQboEnvironment(tenantId);
   const { clientId, clientSecret } = getQboCredentialsForEnvironment(environment);
   if (!clientId || !clientSecret) {
@@ -313,83 +225,17 @@ export async function getValidQboAccessToken(
     );
   }
 
-  let decryptedRefreshToken = "";
-  try {
-    decryptedRefreshToken = unpackAndDecryptString(integration.refreshToken);
-  } catch (e: any) {
-    await prisma.integration
-      .update({
-        where: { id: integration.id },
-        data: { status: "DISCONNECTED" },
-      })
-      .catch(() => {});
-    throw new Error(`Failed to decrypt refresh token: ${e.message}`);
-  }
-
-  try {
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString(
-      "base64",
-    );
-    const response = await fetch(
-      "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: decryptedRefreshToken,
-        }).toString(),
-      },
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      // Update integration status to DISCONNECTED so UI prompts user to re-authenticate
-      await prisma.integration
-        .update({
-          where: { id: integration.id },
-          data: { status: "DISCONNECTED" },
-        })
-        .catch(() => {});
-
-      throw new Error(
-        `QuickBooks connection needs reauthorization (token exchange failed ${response.status}): ${errText}`,
-      );
-    }
-
-    const data = (await response.json()) as any;
-    const encryptedAccessToken = packEncryptedString(data.access_token);
-    const encryptedRefreshToken = packEncryptedString(
-      data.refresh_token || decryptedRefreshToken,
-    );
-    const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000);
-
-    await prisma.integration.update({
-      where: { id: integration.id },
-      data: {
-        accessToken: encryptedAccessToken,
-        refreshToken: encryptedRefreshToken,
-        accessTokenExpiresAt: expiresAt,
-        status: "CONNECTED",
-      },
-    });
-
-    return data.access_token;
-  } catch (error: any) {
-    await prisma.integration
-      .update({
-        where: { id: integration.id },
-        data: { status: "DISCONNECTED" },
-      })
-      .catch(() => {});
-    throw new Error(
-      `Error refreshing QBO token for tenant ${tenantId}: ${error.message}`,
-    );
-  }
+  return ensureFreshAccessToken({
+    tenantId,
+    sourceSystem: "QUICKBOOKS_ONLINE",
+    platformLabel: "QuickBooks",
+    provider: QBO_OAUTH_PROVIDER,
+    credentials: {
+      clientId,
+      clientSecret,
+      redirectUri: process.env.QBO_REDIRECT_URI,
+    },
+  });
 }
 
 /**
@@ -484,11 +330,15 @@ export async function fetchQboInvoices(
 }
 
 /**
- * Fetches all historical invoices from QBO using paginated queries (STARTPOSITION / MAXRESULTS).
+ * Fetches one page of QBO invoices using STARTPOSITION / MAXRESULTS.
+ * Cursor is the next STARTPOSITION, or null on the last page. Does not touch
+ * Integration.lastSyncAt — the shared sync pipeline marks a completed run.
  */
-export async function fetchAllQboInvoicesPaginated(
+export async function fetchQboInvoicePage(
   tenantId: string,
-): Promise<any[]> {
+  cursor: number | null,
+  options?: { maxResults?: number },
+): Promise<{ records: any[]; nextCursor: number | null }> {
   const accessToken = await getValidQboAccessToken(tenantId);
   const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
 
@@ -498,47 +348,58 @@ export async function fetchAllQboInvoicesPaginated(
 
   const realmId = integration.companyId;
   const baseUrl = await getQboBaseUrl(tenantId);
+  const maxResults = options?.maxResults ?? 1000;
+  const startPosition = cursor ?? 1;
 
-  let allInvoices: any[] = [];
-  let startPosition = 1;
-  const maxResults = 1000;
+  const query = `SELECT * FROM Invoice STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+  const url = `${baseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(query)}&minorversion=65`;
+
+  const response = await qboFetchWithRetry(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    if (response.status === 401 || response.status === 400) {
+      throw new Error("QuickBooks connection needs reauthorization");
+    }
+    throw new Error(
+      `Could not reach QuickBooks, please try again (${response.status}): ${errText}`,
+    );
+  }
+
+  const data = (await response.json()) as any;
+  const records = data.QueryResponse?.Invoice || [];
+  const nextCursor = records.length < maxResults ? null : startPosition + maxResults;
+
+  return { records, nextCursor };
+}
+
+/**
+ * Fetches all historical invoices from QBO using the shared page function.
+ */
+export async function fetchAllQboInvoicesPaginated(
+  tenantId: string,
+): Promise<any[]> {
+  const integration = await prisma.integration.findFirst({
+    where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" },
+  });
+  if (!integration) {
+    throw new Error(`Integration details not found for tenant ${tenantId}`);
+  }
+
+  const allInvoices: any[] = [];
+  let cursor: number | null = null;
 
   while (true) {
-    const query = `SELECT * FROM Invoice STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
-    const url = `${baseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(query)}&minorversion=65`;
-
-    const response = await qboFetchWithRetry(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      if (response.status === 401 || response.status === 400) {
-        throw new Error("QuickBooks connection needs reauthorization");
-      }
-      throw new Error(
-        `Could not reach QuickBooks, please try again (${response.status}): ${errText}`,
-      );
-    }
-
-    const data = (await response.json()) as any;
-    const pageInvoices = data.QueryResponse?.Invoice || [];
-
-    if (pageInvoices.length === 0) {
-      break;
-    }
-
-    allInvoices.push(...pageInvoices);
-
-    if (pageInvoices.length < maxResults) {
-      break;
-    }
-
-    startPosition += maxResults;
+    const page = await fetchQboInvoicePage(tenantId, cursor);
+    allInvoices.push(...page.records);
+    if (page.nextCursor === null) break;
+    cursor = page.nextCursor;
   }
 
   await prisma.integration.update({
