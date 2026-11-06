@@ -8,6 +8,7 @@ import {
   fetchOdooCompanyInfo,
   fetchOdooInvoicePage,
   ingestOdooInvoice,
+  writebackProblemToOdoo,
 } from "../services/odooService";
 
 const router = Router();
@@ -108,8 +109,18 @@ router.post("/api/integrations/odoo/sync", async (req: any, res) => {
       // ingestOdooInvoice dedupes on account.move.name.
       dedupeKey: (raw) => String(raw.name || raw.id),
       ingest: (raw) => ingestOdooInvoice(tenantId, raw),
-      onRecordError: ({ key, error }) =>
-        console.warn(`[Odoo Sync Warning] Skipped invoice ${key}: ${error.message}`),
+      onRecordError: ({ record, key, error }) => {
+        console.warn(`[Odoo Sync Warning] Skipped invoice ${key}: ${error.message}`);
+        // Mirror the rejection into the source ERP so the client can fix it
+        // without leaving Odoo. Best-effort: a failed writeback must not stop
+        // the rest of the sync.
+        writebackProblemToOdoo(tenantId, String(record.id), error.message).catch(
+          (wbErr) =>
+            console.warn(
+              `[Odoo Sync Warning] Could not write problem back for invoice ${key}: ${wbErr.message}`,
+            ),
+        );
+      },
     });
 
     res.json({

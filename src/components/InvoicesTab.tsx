@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useHub } from '../lib/store';
-import { fetchWithAuth } from '../lib/api';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { toastGlobal } from './ui/Toast';
 import type { Invoice } from '../types';
 import {
@@ -30,6 +30,20 @@ type QuickView = 'ALL' | 'PENDING' | 'APPROVED' | 'ATTENTION';
 const PENDING_STATUSES = ['PENDING_NRS_STAMP', 'PENDING', 'QUEUED'];
 const APPROVED_STATUSES = ['APPROVED', 'SIGNED'];
 const ATTENTION_STATUSES = ['REJECTED', 'FAILED'];
+
+const BILLING_REFERENCE_TYPES = [
+  'CREDIT_NOTE',
+  'CREDITNOTE',
+  'DEBIT_NOTE',
+  'DEBITNOTE',
+  '380',
+  '384',
+  '393',
+];
+
+function needsBillingReference(invoice: Invoice): boolean {
+  return BILLING_REFERENCE_TYPES.includes(String(invoice.invoiceType || '').toUpperCase());
+}
 
 function money(value: unknown): string {
   return `NGN ${Number(value ?? 0).toLocaleString()}`;
@@ -515,6 +529,14 @@ export function InvoicesTab() {
                 <Notice tone="fail">{expandedInvoice.errorMessage}</Notice>
               )}
 
+              {needsBillingReference(expandedInvoice) && (
+                <BillingReferenceEditor
+                  key={expandedInvoice.id}
+                  invoice={expandedInvoice}
+                  onSaved={refreshAll}
+                />
+              )}
+
               <div className="flex flex-wrap justify-end gap-2">
                 {expandedInvoice.verificationLink && (
                   <a
@@ -552,6 +574,96 @@ function Stat({ label, value, mono = false }: { label: string; value: ReactNode;
     <div className="rounded-lg border border-line bg-panel-muted px-3 py-2.5">
       <dt className="text-xs text-ink-soft">{label}</dt>
       <dd className={`mt-0.5 text-sm font-medium text-ink ${mono ? 'font-mono' : ''}`}>{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * Credit and debit notes (380/384/393) must point at the IRN of the invoice
+ * they correct. ERP-synced notes arrive without it, so this lets the operator
+ * paste it and retry without leaving the hub.
+ */
+function BillingReferenceEditor({
+  invoice,
+  onSaved,
+}: {
+  invoice: Invoice;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [value, setValue] = useState(invoice.billingReferenceIrns || '');
+  const [saving, setSaving] = useState(false);
+  const locked = APPROVED_STATUSES.includes(invoice.status);
+
+  const handleSave = async () => {
+    const irns = value.split(',').map(v => v.trim()).filter(Boolean);
+    if (!irns.length) {
+      toastGlobal(
+        'error',
+        'Billing reference required',
+        "Enter the original invoice's CittaEFS IRN."
+      );
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetchWithAuth(`/api/invoices/${invoice.id}/billing-reference`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billingReferenceIrns: irns, retry: true }),
+      });
+      const data = await parseJsonResponse<{ requeued?: boolean }>(res);
+      toastGlobal(
+        'success',
+        'Billing reference saved',
+        data.requeued
+          ? 'Invoice re-queued for CittaEFS stamping. Any earlier attempt was replaced.'
+          : 'Saved. Retry the invoice when you are ready.'
+      );
+      await onSaved();
+    } catch (e: any) {
+      toastGlobal('error', 'Billing reference not saved', e.message || String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-line bg-panel-muted p-3.5">
+      <p className="text-sm font-medium text-ink">Original invoice reference</p>
+      {locked ? (
+        <p className="mt-1 text-xs text-ink-soft">
+          This note is {invoice.status}, so its reference can no longer change.
+          {invoice.billingReferenceIrns ? (
+            <span className="mt-1 block font-mono text-xs text-ink">{invoice.billingReferenceIrns}</span>
+          ) : (
+            <span className="mt-1 block text-ink-soft">No reference was stored.</span>
+          )}
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-xs text-ink-soft">
+            A credit or debit note must point at the invoice it corrects. Open the
+            original invoice above, copy its CittaEFS IRN, paste it here, then save
+            and retry. If the original is still pending, stamp it first. Saving
+            replaces any earlier queued attempt.
+          </p>
+          <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
+            <Input
+              type="text"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              placeholder="CittaEFS IRN of the original invoice"
+              aria-label="Original invoice CittaEFS IRN"
+              disabled={saving}
+              className="flex-1 font-mono text-xs"
+            />
+            <Button onClick={handleSave} disabled={saving}>
+              <RotateCcw className={`h-3.5 w-3.5 ${saving ? 'animate-spin' : ''}`} />
+              {saving ? 'Saving…' : 'Save and retry'}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

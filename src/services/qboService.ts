@@ -503,6 +503,35 @@ async function upsertQboMasterData(
 }
 
 /**
+ * Resolves the original invoice's IRN for a QBO credit memo.
+ *
+ * QBO links a credit memo to its source invoice through LinkedTxn. The source
+ * invoice's CittaEFS IRN lives in the Hub, not in QBO, so the link is resolved
+ * against the Hub's own Invoice row.
+ */
+async function resolveQboBillingReferenceIrns(
+  tenantId: string,
+  rawInvoice: any,
+  transformed: any,
+): Promise<string[] | undefined> {
+  const direct = transformed.billingReferenceIrns;
+  if (Array.isArray(direct) && direct.length) return direct;
+
+  const linked = Array.isArray(rawInvoice.LinkedTxn) ? rawInvoice.LinkedTxn : [];
+  const linkedInvoice = linked.find(
+    (l: any) => String(l?.TxnType || "").toLowerCase() === "invoice",
+  );
+  const linkedId = linkedInvoice?.TxnId ? String(linkedInvoice.TxnId) : undefined;
+  if (!linkedId) return undefined;
+
+  const original = await prisma.invoice.findFirst({
+    where: { tenantId, qboInvoiceId: linkedId, irn: { not: null } },
+    select: { irn: true },
+  });
+  return original?.irn ? [original.irn] : undefined;
+}
+
+/**
  * Ingests a raw QBO invoice payload. Performs validation, transforms it,
  * inserts into the DB (as PENDING_NRS_STAMP), and enqueues a signing job.
  */
@@ -562,6 +591,11 @@ export async function ingestQboInvoice(
 
   // Transform raw invoice to canonical structure
   const transformed = qboAdapter.transform(rawInvoice);
+  const billingReferenceIrns = await resolveQboBillingReferenceIrns(
+    tenantId,
+    rawInvoice,
+    transformed,
+  );
 
   // Validate unmapped HS/Service codes — Option B auto-map + service detection, Option A strict will be checked before enqueue
   const tenantItems = await prisma.item.findMany({ where: { tenantId } });
@@ -700,6 +734,9 @@ export async function ingestQboInvoice(
       documentNumber: docNumber,
       invoiceType: resolvedInvoiceType,
       invoiceKind: resolvedInvoiceKind,
+      billingReferenceIrns: billingReferenceIrns?.length
+        ? billingReferenceIrns.join(",")
+        : null,
       issueDate: new Date(transformed.issueDate),
       customerCode,
       customerName: transformed.customerName,
@@ -729,6 +766,8 @@ export async function ingestQboInvoice(
       customerCode,
       customerName: transformed.customerName,
       customerTin: transformed.customerTin || undefined,
+      originalIrn: billingReferenceIrns?.[0],
+      billingReferenceIrns,
       lineItems: processedLineItems.map((li) => ({
         itemCode: li.itemCode,
         description: li.description,
@@ -848,4 +887,71 @@ export async function writebackToQbo(
   });
 
   return data;
+}
+
+/**
+ * Writes a validation / ingest problem back to QBO on the source invoice.
+ *
+ * QBO has no general-purpose chatter note API, so the invoice's PrivateNote is
+ * used instead. The current note is fetched and appended to, and the update is
+ * sparse so the invoice's business fields and SyncToken are preserved.
+ */
+export async function writebackProblemToQbo(
+  tenantId: string,
+  qboInvoiceId: string,
+  problem: string,
+): Promise<void> {
+  const accessToken = await getValidQboAccessToken(tenantId);
+  const integration = await prisma.integration.findFirst({
+    where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" },
+  });
+  if (!integration) {
+    throw new Error(`Integration details not found for tenant ${tenantId}`);
+  }
+
+  const realmId = integration.companyId;
+  const baseUrl = await getQboBaseUrl(tenantId);
+
+  let syncToken = "0";
+  let existingNote = "";
+  try {
+    const rawInvoice = await fetchSingleQboInvoice(tenantId, qboInvoiceId);
+    syncToken = rawInvoice.SyncToken || "0";
+    existingNote = rawInvoice.PrivateNote || "";
+  } catch (e: any) {
+    console.warn(
+      `Could not fetch latest QBO invoice ${qboInvoiceId} before problem writeback:`,
+      e.message,
+    );
+  }
+
+  const note = [
+    existingNote,
+    `CittaEFS Validation Problem — Invoice ${qboInvoiceId}: ${problem}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const url = `${baseUrl}/v3/company/${realmId}/invoice?minorversion=65`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      Id: qboInvoiceId,
+      SyncToken: syncToken,
+      sparse: true,
+      PrivateNote: note,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(
+      `QBO problem writeback failed (${response.status}): ${errText}`,
+    );
+  }
 }

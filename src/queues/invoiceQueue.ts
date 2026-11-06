@@ -333,6 +333,47 @@ class InvoiceQueueManager {
     return job!;
   }
 
+  /**
+   * Clears every queued / failed / processing job for one invoice before a
+   * fresh retry is added. Retries should replace the previous attempt, not pile
+   * up beside it in the queue and the DLQ.
+   */
+  public async clearInvoiceJobs(invoiceId: string): Promise<string[]> {
+    await this.hydrateIfNeeded();
+    const stale = [...this.queue, ...this.dlq].filter(
+      (j) => (j.data as any).dbInvoiceId === invoiceId,
+    );
+    const ids = stale.map((j) => j.id);
+
+    this.queue = this.queue.filter((j) => (j.data as any).dbInvoiceId !== invoiceId);
+    this.dlq = this.dlq.filter((j) => (j.data as any).dbInvoiceId !== invoiceId);
+
+    for (const id of ids) {
+      try {
+        const q = await initBullMq();
+        if (q) await q.remove(id).catch(() => {});
+      } catch {}
+    }
+
+    try {
+      const prisma = getPrisma();
+      await prisma.queueJob.updateMany({
+        where: {
+          payload: { contains: invoiceId },
+          status: { in: ['QUEUED', 'PROCESSING', 'DLQ', 'FAILED'] },
+        },
+        data: {
+          status: 'COMPLETED',
+          lastError: 'Superseded by a newer retry',
+          updatedAt: new Date(),
+        },
+      }).catch(() => {});
+      await prisma.$disconnect().catch(() => {});
+    } catch {}
+
+    return ids;
+  }
+
   public async requeueInvoice(invoiceId: string, tenantId: string): Promise<QueueJob<QueueablePayload> | null> {
     // Find existing queue job by payload containing invoiceId
     await this.hydrateIfNeeded();

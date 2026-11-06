@@ -299,6 +299,11 @@ router.post("/api/v1/transactions/initialize", async (req, res) => {
         subtotal: validated.subtotal,
         taxAmount: validated.totalVat,
         totalAmount: validated.grandTotal,
+        billingReferenceIrns:
+          Array.isArray((validated as any).billingReferenceIrns) &&
+          (validated as any).billingReferenceIrns.length
+            ? (validated as any).billingReferenceIrns.join(",")
+            : null,
         status: "PENDING_NRS_STAMP",
         ledgerWritebackStatus: "PENDING",
         callbackUrl: body.callbackUrl || body.webhookUrl || body.callback_url || null,
@@ -416,6 +421,7 @@ router.post("/api/v1/transactions/refund", async (req, res) => {
       customerName: original.customerName,
       customerTin: original.customerTin,
       originalIrn: original.irn,
+      billingReferenceIrns: [original.irn],
       lineItems: original.lineItems.map((li: any) => ({
         itemCode: li.itemCode,
         description: li.description,
@@ -439,6 +445,7 @@ router.post("/api/v1/transactions/refund", async (req, res) => {
         subtotal: validated.subtotal,
         taxAmount: validated.totalVat,
         totalAmount: validated.grandTotal,
+        billingReferenceIrns: original.irn,
         status: "PENDING_NRS_STAMP",
         ledgerWritebackStatus: "PENDING",
         lineItems: {

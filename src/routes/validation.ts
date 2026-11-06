@@ -6,8 +6,8 @@ import {
   parsePagination,
 } from "../lib/serverHelpers";
 import { getCittaCodeType, isValidCittaCode } from "../data/referenceData";
-import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { invoiceQueue } from "../queues/invoiceQueue";
+import { buildQueuePayloadFromInvoice } from "../lib/invoiceQueuePayload";
 import { ingestOdooInvoice } from "../services/odooService";
 import { ingestQboInvoice } from "../services/qboService";
 import { OdooAdapter, QuickBooksAdapter } from "../adapters/connectorAdapters";
@@ -19,27 +19,9 @@ import { OdooAdapter, QuickBooksAdapter } from "../adapters/connectorAdapters";
 async function requeuePersistedInvoice(invoiceId: string): Promise<boolean> {
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, include: { lineItems: true } });
   if (!inv) return false;
-  const validated = invoiceIngestionSchema.parse({
-    tenantId: inv.tenantId,
-    clientInvoiceNumber: inv.clientInvoiceId,
-    documentNumber: inv.documentNumber || undefined,
-    invoiceType: inv.invoiceType as any,
-    invoiceKind: inv.invoiceKind as any,
-    issueDate: inv.issueDate.toISOString().substring(0, 10),
-    customerCode: inv.customerCode,
-    customerName: inv.customerName,
-    customerTin: inv.customerTin || undefined,
-    lineItems: inv.lineItems.map((li: any) => ({
-      itemCode: li.itemCode,
-      description: li.description,
-      quantity: li.quantity,
-      unitPrice: li.unitPrice,
-      discountAmount: 0,
-      hsOrServiceCode: li.hsOrServiceCode,
-      codeType: getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE",
-      vatRate: li.vatRate,
-    })),
-  });
+  const validated = buildQueuePayloadFromInvoice(inv);
+  // A corrected retry replaces its earlier attempt instead of adding another.
+  await invoiceQueue.clearInvoiceJobs(inv.id);
   await invoiceQueue.add(
     "signInvoice",
     { ...validated, dbInvoiceId: inv.id },

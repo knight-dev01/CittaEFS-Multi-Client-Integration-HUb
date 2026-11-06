@@ -271,7 +271,7 @@ const POSTED_INVOICE_DOMAIN = [
   ["move_type", "in", ["out_invoice", "out_refund"]],
   ["state", "=", "posted"],
 ];
-const INVOICE_FIELDS = ["id", "name", "invoice_date", "move_type", "partner_id", "amount_untaxed", "amount_tax", "amount_total", "currency_id", "write_date"];
+const INVOICE_FIELDS = ["id", "name", "invoice_date", "move_type", "partner_id", "amount_untaxed", "amount_tax", "amount_total", "currency_id", "write_date", "reversed_entry_id"];
 
 /**
  * Fetches one page of posted invoices (offset/limit). Cursor is the next
@@ -427,6 +427,32 @@ async function upsertOdooMasterData(
 }
 
 /**
+ * Resolves the original invoice's IRN for an Odoo refund / credit note.
+ *
+ * Odoo links a refund to its source move through reversed_entry_id. The source
+ * invoice's CittaEFS IRN lives in the Hub, not in Odoo, so the link is resolved
+ * against the Hub's own Invoice row.
+ */
+async function resolveOdooBillingReferenceIrns(
+  tenantId: string,
+  rawMove: any,
+  transformed: any,
+): Promise<string[] | undefined> {
+  const direct = transformed.billingReferenceIrns;
+  if (Array.isArray(direct) && direct.length) return direct;
+
+  const reversed = rawMove.reversed_entry_id;
+  const reversedId = Array.isArray(reversed) ? reversed[0] : reversed;
+  if (!reversedId) return undefined;
+
+  const original = await prisma.invoice.findFirst({
+    where: { tenantId, odooInvoiceId: String(reversedId), irn: { not: null } },
+    select: { irn: true },
+  });
+  return original?.irn ? [original.irn] : undefined;
+}
+
+/**
  * Ingests a composed raw Odoo invoice (account.move + _lines + _partnerVat).
  * Mirrors ingestQboInvoice's pipeline: dedup, validate, transform, HS/service-code
  * inference + validation, master-data upsert, and conditional auto-enqueue.
@@ -467,6 +493,11 @@ export async function ingestOdooInvoice(
   }
 
   const transformed = odooAdapter.transform(rawMove);
+  const billingReferenceIrns = await resolveOdooBillingReferenceIrns(
+    tenantId,
+    rawMove,
+    transformed,
+  );
 
   const tenantItems = await prisma.item.findMany({ where: { tenantId } });
   const processedLineItems = transformed.lineItems.map((li: any) => {
@@ -559,6 +590,9 @@ export async function ingestOdooInvoice(
       documentNumber: transformed.documentNumber,
       invoiceType: transformed.invoiceType || "STANDARD",
       invoiceKind: transformed.invoiceKind || "B2C",
+      billingReferenceIrns: billingReferenceIrns?.length
+        ? billingReferenceIrns.join(",")
+        : null,
       issueDate: new Date(transformed.issueDate),
       customerCode: transformed.customerCode!,
       customerName: transformed.customerName,
@@ -585,6 +619,8 @@ export async function ingestOdooInvoice(
       customerCode: transformed.customerCode,
       customerName: transformed.customerName,
       customerTin: transformed.customerTin || undefined,
+      originalIrn: billingReferenceIrns?.[0],
+      billingReferenceIrns,
       lineItems: processedLineItems.map((li) => ({
         itemCode: li.itemCode,
         description: li.description,
@@ -602,6 +638,29 @@ export async function ingestOdooInvoice(
     console.log(`Odoo Invoice ${clientInvoiceId} (odooId ${odooId}) ingested to preview inbox for tenant ${tenantId} — awaiting operator approval (autoEnqueue OFF)`);
   }
   return dbInvoice;
+}
+
+/**
+ * Writes a validation / ingest problem back to Odoo as a chatter note.
+ *
+ * This is deliberately separate from the compliance writeback: a failed invoice
+ * has no IRN to stamp, but the client still needs to see why the Hub rejected it
+ * without leaving Odoo. Odoo's universal message log is the only safe target
+ * because a client instance is not guaranteed to have custom fields.
+ */
+export async function writebackProblemToOdoo(
+  tenantId: string,
+  odooInvoiceId: string,
+  problem: string,
+): Promise<void> {
+  const creds = await getValidOdooCredentials(tenantId);
+  const body = `CittaEFS Validation Problem — Invoice ${odooInvoiceId}: ${problem}`;
+  await callOdoo(creds.url, "object", "execute_kw", [
+    creds.database, creds.uid, creds.apiKey,
+    "account.move", "message_post",
+    [[Number(odooInvoiceId)]],
+    { body },
+  ]);
 }
 
 /**

@@ -1,8 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { generateSha256, safeAuditLogCreate } from "../lib/serverHelpers";
-import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { invoiceQueue } from "../queues/invoiceQueue";
-import { getCittaCodeType } from "../data/referenceData";
+import { buildQueuePayloadFromInvoice } from "../lib/invoiceQueuePayload";
 
 // Thin-hub pivot (docs/CittaHub_Revision_Plan.md Phase 3): registration
 // confirmation is its own service function, separate from the Express route
@@ -33,27 +32,8 @@ export async function confirmEntityMappingRegistration(
     for (const inv of stuck) {
       try {
         await prisma.invoice.update({ where: { id: inv.id }, data: { status: "PENDING_NRS_STAMP" } });
-        const validated = invoiceIngestionSchema.parse({
-          tenantId: inv.tenantId,
-          clientInvoiceNumber: inv.clientInvoiceId,
-          documentNumber: inv.documentNumber || undefined,
-          invoiceType: inv.invoiceType as any,
-          invoiceKind: inv.invoiceKind as any,
-          issueDate: inv.issueDate.toISOString().substring(0, 10),
-          customerCode: inv.customerCode,
-          customerName: inv.customerName,
-          customerTin: inv.customerTin || undefined,
-          lineItems: inv.lineItems.map((li: any) => ({
-            itemCode: li.itemCode,
-            description: li.description,
-            quantity: li.quantity,
-            unitPrice: li.unitPrice,
-            discountAmount: 0,
-            hsOrServiceCode: li.hsOrServiceCode,
-            codeType: getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE",
-            vatRate: li.vatRate,
-          })),
-        });
+        const validated = buildQueuePayloadFromInvoice(inv);
+        await invoiceQueue.clearInvoiceJobs(inv.id);
         await invoiceQueue.add(
           "signInvoice",
           { ...validated, dbInvoiceId: inv.id },

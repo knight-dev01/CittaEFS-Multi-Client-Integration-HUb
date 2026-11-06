@@ -20,7 +20,7 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock('../../lib/prisma', () => ({ prisma: h.prisma }));
-vi.mock('../../queues/invoiceQueue', () => ({ invoiceQueue: { add: vi.fn() } }));
+vi.mock('../../queues/invoiceQueue', () => ({ invoiceQueue: { add: vi.fn(), clearInvoiceJobs: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../../services/odooService', () => ({ ingestOdooInvoice: vi.fn() }));
 vi.mock('../../services/qboService', () => ({ ingestQboInvoice: vi.fn() }));
 

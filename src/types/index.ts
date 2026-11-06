@@ -66,6 +66,7 @@ export interface Invoice {
   issueDate: string; // YYYY-MM-DD
   dueDate: string;
   originalIrn?: string; // required for Credit/Debit notes
+  billingReferenceIrns?: string; // comma-separated original IRNs for 380/384/393
   
   // Customer info
   customerCode: string;

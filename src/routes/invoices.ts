@@ -13,6 +13,10 @@ import { invoiceIngestionSchema } from "../schemas/invoice.schema";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { getCittaCodeType } from "../data/referenceData";
 import {
+  buildQueuePayloadFromInvoice,
+  parseBillingReferenceIrns,
+} from "../lib/invoiceQueuePayload";
+import {
   buildEfsExport,
   exportFileName,
   isEfsExportFormat,
@@ -270,14 +274,9 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
                 }
               }
               try {
-                const v = invoiceIngestionSchema.parse({
-                  tenantId: tenant.id, clientInvoiceNumber: duplicate.clientInvoiceId, documentNumber: duplicate.documentNumber || undefined,
-                  invoiceType: duplicate.invoiceType as any, invoiceKind: duplicate.invoiceKind as any,
-                  issueDate: duplicate.issueDate.toISOString().substring(0,10),
-                  customerCode: duplicate.customerCode, customerName: duplicate.customerName, customerTin: duplicate.customerTin || undefined,
-                  lineItems: duplicate.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
-                });
-                await invoiceQueue.add("signInvoice", { ...v, dbInvoiceId: duplicate.id }, { idempotencyKey: `${tenant.id}:${duplicate.clientInvoiceId}:retry` });
+                await invoiceQueue.clearInvoiceJobs(duplicate.id);
+                const v = buildQueuePayloadFromInvoice(duplicate);
+                await invoiceQueue.add("signInvoice", { ...v, dbInvoiceId: duplicate.id }, { idempotencyKey: `${tenant.id}:${duplicate.clientInvoiceId}:retry:${Date.now()}` });
                 return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `Invoice "${clientInvoiceNumber}" was stuck in Hub (status ${duplicate.status}) — re-queued to CittaEFS`, cittaResponse: { status: duplicate.status, invoice: existingFmt, idempotent: true, requeued: true } });
               } catch (rqErr) { console.warn('[Idempotent requeue failed]', (rqErr as any)?.message); }
             }
@@ -426,6 +425,7 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
     const _effectiveCurrency = (currency as any) || (req.body as any).CurrencyCode || "NGN";
     const _effectiveHeaderCharges = Number(_hc ?? 0);
     const _effectiveHeaderDiscount = Number(_hd ?? 0);
+    const _brArr = parseBillingReferenceIrns(_br);
     const rawNewInvoice = await prisma.invoice.create({
       data: {
         tenantId: tenant.id,
@@ -444,6 +444,7 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
         totalAmount: grandTotal,
         headerCharges: _effectiveHeaderCharges,
         headerDiscount: _effectiveHeaderDiscount,
+        billingReferenceIrns: _brArr?.length ? _brArr.join(",") : null,
         status: "PENDING_NRS_STAMP",
         ledgerWritebackStatus: "PENDING",
         lineItems: {
@@ -454,8 +455,6 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
     });
 
     const newInvoice = formatInvoice(rawNewInvoice);
-
-    const _brArr = _br ? String(_br).split(',').map((x:string)=>x.trim()).filter(Boolean) : undefined;
     const validatedPayload = invoiceIngestionSchema.parse({
       tenantId: tenant.id,
       clientInvoiceNumber:
@@ -533,14 +532,9 @@ router.post("/api/integration/gen/invoices", async (req, res) => {
           if (found.status === "REJECTED") {
             await prisma.invoice.update({ where: { id: found.id }, data: { status: "PENDING_NRS_STAMP" } });
             try {
-              const vRetry = invoiceIngestionSchema.parse({
-                tenantId: found.tenantId, clientInvoiceNumber: found.clientInvoiceId, documentNumber: found.documentNumber || undefined,
-                invoiceType: found.invoiceType as any, invoiceKind: found.invoiceKind as any,
-                issueDate: found.issueDate.toISOString().substring(0,10),
-                customerCode: found.customerCode, customerName: found.customerName, customerTin: found.customerTin || undefined,
-                lineItems: found.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
-              });
-              await invoiceQueue.add("signInvoice", { ...vRetry, dbInvoiceId: found.id }, { idempotencyKey: `${found.tenantId}:${found.clientInvoiceId}:retry` });
+              await invoiceQueue.clearInvoiceJobs(found.id);
+              const vRetry = buildQueuePayloadFromInvoice(found);
+              await invoiceQueue.add("signInvoice", { ...vRetry, dbInvoiceId: found.id }, { idempotencyKey: `${found.tenantId}:${found.clientInvoiceId}:retry:${Date.now()}` });
             } catch {}
             return res.status(200).json({ success: true, idempotent: true, requeued: true, message: `REJECTED invoice "${found.clientInvoiceId}" re-queued to CittaEFS (was REJECTED)`, cittaResponse: { status: "PENDING_NRS_STAMP", invoice: formatInvoice(found), idempotent: true, requeued: true } });
           }
@@ -574,6 +568,7 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
       const _hd_b = (payload as any).HeaderDiscount ?? (payload as any).headerDiscount ?? headerDiscount;
       const _itc_b = (payload as any).InvoiceTypeCode ?? (payload as any).invoiceTypeCode ?? invoiceTypeCode;
       const _br_b = (payload as any).billingReferenceIrns ?? (payload as any)['Billing Reference IRNs'] ?? billingReferenceIrns;
+      const _brArr_b = parseBillingReferenceIrns(_br_b);
       const errors: string[] = [];
       if (!clientInvoiceNumber) errors.push("clientInvoiceNumber mandatory");
       if (!issueDate) errors.push("issueDate mandatory");
@@ -595,14 +590,9 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
               const qRow = await prisma.queueJob.findFirst({ where: { tenantId: tenant.id, payload: { contains: dup.id } }, orderBy: { createdAt: 'desc' } });
               if (!qRow || qRow.status === 'DLQ' || qRow.status === 'FAILED') {
                 try {
-                  const vBulk = invoiceIngestionSchema.parse({
-                    tenantId: tenant.id, clientInvoiceNumber: dup.clientInvoiceId, documentNumber: dup.documentNumber || undefined,
-                    invoiceType: dup.invoiceType as any, invoiceKind: dup.invoiceKind as any,
-                    issueDate: dup.issueDate.toISOString().substring(0,10),
-                    customerCode: dup.customerCode, customerName: dup.customerName, customerTin: dup.customerTin || undefined,
-                    lineItems: dup.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
-                  });
-                  await invoiceQueue.add("signInvoice", { ...vBulk, dbInvoiceId: dup.id }, { idempotencyKey: `${tenant.id}:${dup.clientInvoiceId}:retry` });
+                  await invoiceQueue.clearInvoiceJobs(dup.id);
+                  const vBulk = buildQueuePayloadFromInvoice(dup);
+                  await invoiceQueue.add("signInvoice", { ...vBulk, dbInvoiceId: dup.id }, { idempotencyKey: `${tenant.id}:${dup.clientInvoiceId}:retry:${Date.now()}` });
                   results.push({ clientInvoiceNumber, success: true, idempotent: true, requeued: true, invoice: formatInvoice(dup), message: `Was stuck in Hub — re-queued to CittaEFS` });
                   continue;
                 } catch {}
@@ -670,6 +660,7 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
             subtotal, taxAmount: totalVat, totalAmount: grandTotal,
             headerCharges: _effHC_b,
             headerDiscount: _effHD_b,
+            billingReferenceIrns: _brArr_b?.length ? _brArr_b.join(",") : null,
             status: "PENDING_NRS_STAMP", ledgerWritebackStatus: "PENDING",
             lineItems: { create: processed },
           },
@@ -682,14 +673,9 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
             if (existing.status === "REJECTED") {
               await prisma.invoice.update({ where: { id: existing.id }, data: { status: "PENDING_NRS_STAMP" } }).catch(()=>{});
               try {
-                const vRetryBulk = invoiceIngestionSchema.parse({
-                  tenantId: tenant.id, clientInvoiceNumber: existing.clientInvoiceId, documentNumber: existing.documentNumber || undefined,
-                  invoiceType: existing.invoiceType as any, invoiceKind: existing.invoiceKind as any,
-                  issueDate: existing.issueDate.toISOString().substring(0,10),
-                  customerCode: existing.customerCode, customerName: existing.customerName, customerTin: existing.customerTin || undefined,
-                  lineItems: existing.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
-                });
-                await invoiceQueue.add("signInvoice", { ...vRetryBulk, dbInvoiceId: existing.id }, { idempotencyKey: `${tenant.id}:${existing.clientInvoiceId}:retry` });
+                await invoiceQueue.clearInvoiceJobs(existing.id);
+                const vRetryBulk = buildQueuePayloadFromInvoice(existing);
+                await invoiceQueue.add("signInvoice", { ...vRetryBulk, dbInvoiceId: existing.id }, { idempotencyKey: `${tenant.id}:${existing.clientInvoiceId}:retry:${Date.now()}` });
                 results.push({ clientInvoiceNumber, success: true, idempotent: true, requeued: true, invoice: formatInvoice(existing), message: `REJECTED — re-queued` });
               } catch { results.push({ clientInvoiceNumber, success: true, idempotent: true, invoice: formatInvoice(existing), message: `Already exists (REJECTED) — re-queued` }); }
             } else {
@@ -705,7 +691,6 @@ router.post("/api/integration/gen/invoices/bulk", async (req: any, res) => {
         }
       }
       const newInv = formatInvoice(raw);
-      const _brArr_b = _br_b ? String(_br_b).split(',').map((x:string)=>x.trim()).filter(Boolean) : undefined;
       const validated = invoiceIngestionSchema.parse({
         tenantId: tenant.id, clientInvoiceNumber, documentNumber: documentNumber || undefined,
         invoiceType: _itc_b ? undefined : (invoiceType || "STANDARD"), invoiceTypeCode: _itc_b ? String(_itc_b) : undefined,
@@ -768,6 +753,97 @@ router.post("/api/invoices/cancel", async (req: any, res) => {
   }
 });
 
+// Attach the original invoice's IRN to a credit/debit note (types 380/384/393)
+// and optionally retry it as one fresh queue job.
+router.post("/api/invoices/:id/billing-reference", async (req: any, res) => {
+  try {
+    const role = req.user?.role;
+    if (req.user && !["ADMIN", "OPERATOR", "INTEGRATION_MANAGER"].includes(role)) {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+    const { id } = req.params;
+    const invoice = await prisma.invoice.findUnique({ where: { id }, include: { lineItems: true } });
+    if (!invoice) return res.status(404).json({ success: false, error: "Invoice not found" });
+    if (!canAccessTenant(req, invoice.tenantId)) {
+      return res.status(403).json({ success: false, error: "Forbidden: tenant isolation" });
+    }
+    if (["APPROVED", "SIGNED"].includes(invoice.status)) {
+      return res.status(400).json({ success: false, error: `Invoice already ${invoice.status} — cannot change its billing reference` });
+    }
+
+    const billingReferenceIrns = parseBillingReferenceIrns(
+      req.body?.billingReferenceIrns ?? req.body?.billingReferenceIrn ?? req.body?.originalIrn,
+    );
+    if (!billingReferenceIrns?.length) {
+      return res.status(400).json({
+        success: false,
+        error: "Enter the original invoice's CittaEFS IRN.",
+      });
+    }
+
+    for (const irn of billingReferenceIrns) {
+      const original = await prisma.invoice.findFirst({
+        where: { tenantId: invoice.tenantId, irn },
+        select: { id: true },
+      });
+      if (!original || original.id === invoice.id) {
+        return res.status(400).json({
+          success: false,
+          error: `No other stamped invoice on this tenant has IRN ${irn}. Open the original invoice in Invoices and copy its CittaEFS IRN.`,
+        });
+      }
+    }
+
+    const stored = billingReferenceIrns.join(",");
+    await prisma.invoice.update({
+      where: { id },
+      data: {
+        billingReferenceIrns: stored,
+        status: ["REJECTED", "FAILED", "CANCELLED", "DLQ"].includes(invoice.status)
+          ? "PENDING_NRS_STAMP"
+          : invoice.status,
+      },
+    });
+
+    let job: any = null;
+    if (req.body?.retry !== false) {
+      await invoiceQueue.clearInvoiceJobs(id);
+      const validated = buildQueuePayloadFromInvoice({
+        ...invoice,
+        billingReferenceIrns: stored,
+      });
+      job = await invoiceQueue.add(
+        "signInvoice",
+        { ...validated, dbInvoiceId: invoice.id },
+        { idempotencyKey: `${invoice.tenantId}:${invoice.clientInvoiceId}:retry:${Date.now()}` },
+      );
+    }
+
+    try {
+      await prisma.validationError.updateMany({
+        where: { tenantId: invoice.tenantId, clientInvoiceNumber: invoice.clientInvoiceId, status: "OPEN" },
+        data: { status: "RETRIED" },
+      });
+    } catch {}
+
+    await safeAuditLogCreate(prisma, {
+      tenantId: invoice.tenantId,
+      action: "INVOICE_BILLING_REFERENCE_SET",
+      entityType: "INVOICE",
+      entityRef: invoice.clientInvoiceId,
+      details: `Billing reference IRN(s) set on invoice ${invoice.clientInvoiceId}: ${stored}${job ? `; retried as job ${job.id}` : ""}`,
+      sha256PayloadHash: generateSha256(`${invoice.clientInvoiceId}:${stored}`),
+      performedBy: req.user?.email || "Operator",
+    });
+
+    const refreshed = await prisma.invoice.findUnique({ where: { id }, include: { lineItems: true } });
+    res.json({ success: true, requeued: Boolean(job), jobId: job?.id, invoice: formatInvoice(refreshed) });
+  } catch (e: any) {
+    console.error(`[API Error] POST /api/invoices/${req.params.id}/billing-reference failed:`, e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 router.post("/api/invoices/:id/retry", async (req: any, res) => {
   try {
     const role = req.user?.role;
@@ -781,23 +857,15 @@ router.post("/api/invoices/:id/retry", async (req: any, res) => {
     if (needsStatusReset) {
       await prisma.invoice.update({ where: { id }, data: { status: "PENDING_NRS_STAMP" } });
     }
-    let requeuedJob: any = null;
-    try { requeuedJob = await invoiceQueue.requeueInvoice(id, invoice.tenantId); } catch {}
-    if (!requeuedJob) {
-      const validated = invoiceIngestionSchema.parse({
-        tenantId: invoice.tenantId,
-        clientInvoiceNumber: invoice.clientInvoiceId,
-        documentNumber: invoice.documentNumber || undefined,
-        invoiceType: invoice.invoiceType as any,
-        invoiceKind: invoice.invoiceKind as any,
-        issueDate: invoice.issueDate.toISOString().substring(0,10),
-        customerCode: invoice.customerCode,
-        customerName: invoice.customerName,
-        customerTin: invoice.customerTin || undefined,
-        lineItems: invoice.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount: 0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
-      });
-      requeuedJob = await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: invoice.id }, { idempotencyKey: `${invoice.tenantId}:${invoice.clientInvoiceId}:retry:${Date.now()}` });
-    }
+    // A retry replaces the previous attempt: clear queued/DLQ jobs for this
+    // invoice first, then enqueue one fresh payload built from current data.
+    await invoiceQueue.clearInvoiceJobs(invoice.id);
+    const validated = buildQueuePayloadFromInvoice(invoice);
+    const requeuedJob = await invoiceQueue.add(
+      "signInvoice",
+      { ...validated, dbInvoiceId: invoice.id },
+      { idempotencyKey: `${invoice.tenantId}:${invoice.clientInvoiceId}:retry:${Date.now()}` },
+    );
     try { await prisma.validationError.updateMany({ where: { tenantId: invoice.tenantId, clientInvoiceNumber: invoice.clientInvoiceId, status: "OPEN" }, data: { status: "RETRIED" } }); } catch {}
     await safeAuditLogCreate(prisma, { tenantId: invoice.tenantId, action: "INVOICE_RETRY", entityType: "INVOICE", entityRef: invoice.clientInvoiceId, details: `Manual retry queued for invoice ${invoice.clientInvoiceId} (was ${invoice.status}) via POST /api/invoices/:id/retry`, sha256PayloadHash: generateSha256(invoice.clientInvoiceId + Date.now()), performedBy: req.user?.email || "Operator" });
     res.json({ success: true, requeued: true, jobId: requeuedJob?.id, invoice: formatInvoice(await prisma.invoice.findUnique({ where: { id }, include: { lineItems: true } })) });
@@ -823,18 +891,9 @@ router.post("/api/invoices/retry-bulk", async (req: any, res) => {
     for (const inv of retryable) {
       try {
         if (["REJECTED","FAILED","CANCELLED"].includes(inv.status)) await prisma.invoice.update({ where:{id:inv.id}, data:{status:"PENDING_NRS_STAMP"}});
-        let job:any=null;
-        try { job = await invoiceQueue.requeueInvoice(inv.id, inv.tenantId); } catch {}
-        if (!job) {
-          const validated = invoiceIngestionSchema.parse({
-            tenantId: inv.tenantId, clientInvoiceNumber: inv.clientInvoiceId, documentNumber: inv.documentNumber || undefined,
-            invoiceType: inv.invoiceType as any, invoiceKind: inv.invoiceKind as any,
-            issueDate: inv.issueDate.toISOString().substring(0,10),
-            customerCode: inv.customerCode, customerName: inv.customerName, customerTin: inv.customerTin || undefined,
-            lineItems: inv.lineItems.map((li:any)=>({ itemCode: li.itemCode, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, discountAmount:0, hsOrServiceCode: li.hsOrServiceCode, codeType: (getCittaCodeType(li.hsOrServiceCode) || "SERVICE_CODE"), vatRate: li.vatRate })),
-          });
-          job = await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: inv.id }, { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}:retry:${Date.now()}` });
-        }
+        await invoiceQueue.clearInvoiceJobs(inv.id);
+        const validated = buildQueuePayloadFromInvoice(inv);
+        const job = await invoiceQueue.add("signInvoice", { ...validated, dbInvoiceId: inv.id }, { idempotencyKey: `${inv.tenantId}:${inv.clientInvoiceId}:retry:${Date.now()}` });
         try { await prisma.validationError.updateMany({ where: { tenantId: inv.tenantId, clientInvoiceNumber: inv.clientInvoiceId, status: "OPEN" }, data: { status: "RETRIED" } }); } catch {}
         results.push({ clientInvoiceNumber: inv.clientInvoiceId, success:true, jobId: job?.id });
       } catch (e:any) { results.push({ clientInvoiceNumber: inv.clientInvoiceId, success:false, error: e.message }); }
@@ -959,6 +1018,13 @@ router.post("/api/hub/v1/invoices", async (req, res) => {
       invoiceKind: body.invoiceKind || "B2B",
       invoiceType: body.invoiceType || "STANDARD",
       originalIrn: body.originalIrn || body.billingReferenceIrn,
+      billingReferenceIrns: Array.isArray(body.billingReferenceIrns)
+        ? body.billingReferenceIrns.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+        : typeof body.billingReferenceIrns === "string"
+          ? body.billingReferenceIrns.split(",").map((v: string) => v.trim()).filter(Boolean)
+          : body.billingReferenceIrn
+            ? [String(body.billingReferenceIrn)]
+            : undefined,
       issueDate: body.issueDate,
       customerCode: body.customerCode || body.customerCode || "CUST-EXTERNAL",
       customerName: body.customerName || body.customer_name,
@@ -986,6 +1052,7 @@ router.post("/api/hub/v1/invoices", async (req, res) => {
       customerName: mapped.customerName,
       customerTin: mapped.customerTin,
       originalIrn: mapped.originalIrn,
+      billingReferenceIrns: (mapped as any).billingReferenceIrns,
       lineItems: mapped.lineItems,
     });
     const dup = await prisma.invoice.findFirst({ where: { tenantId, clientInvoiceId: validated.clientInvoiceNumber } });
@@ -1008,6 +1075,11 @@ router.post("/api/hub/v1/invoices", async (req, res) => {
         subtotal,
         taxAmount: totalVat,
         totalAmount: grandTotal,
+        billingReferenceIrns:
+          Array.isArray((validated as any).billingReferenceIrns) &&
+          (validated as any).billingReferenceIrns.length
+            ? (validated as any).billingReferenceIrns.join(",")
+            : null,
         status: "PENDING_NRS_STAMP",
         ledgerWritebackStatus: "PENDING",
         lineItems: { create: validated.lineItems.map((li: any) => ({

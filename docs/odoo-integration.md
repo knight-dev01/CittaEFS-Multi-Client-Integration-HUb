@@ -71,8 +71,15 @@ How raw `account.move` / `account.move.line` data becomes a CittaEFS invoice.
 | `price_subtotal` | `taxableAmount` | — |
 | `price_total − price_subtotal` | `vatAmount` | `vatRate` is derived from the two. |
 | `move_type` | `invoiceType` | `out_refund` → `CREDIT_NOTE`, otherwise `STANDARD`. |
+| `reversed_entry_id` | `billingReferenceIrns` | On a refund, resolves the original move against the Hub's invoice and stores that invoice's CittaEFS IRN. |
 | `currency_id [id, code]` | `currency` | Falls back to `NGN` when unset. |
 | `write_date` | — | Drives the incremental sync's `>` filter; not stored on the invoice. |
+
+### Credit and debit notes
+
+CittaEFS rejects note types `380`, `384` and `393` unless they point at the IRN of the invoice they correct. The Hub fills that automatically when Odoo links the refund through `reversed_entry_id` and the original invoice is already stamped in the Hub.
+
+If the original was stamped before the link existed, or Odoo did not link the refund, open the note in the Hub's **Invoices** tab and paste the original invoice's CittaEFS IRN into **Original invoice reference**, then **Save and retry**. The reference is stored on the invoice and every later retry sends it. Saving replaces the previous queued attempt rather than adding another job.
 
 ## HS / service code rules
 
