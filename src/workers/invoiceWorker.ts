@@ -340,13 +340,13 @@ export async function processInvoiceJob(
       const isPermanentBusinessError =
         /already posted|already been posted|duplicate invoice|invoice number already|wm_001_ei_ar/i.test(errorMsg) ||
         /check constraint/i.test(errorMsg) ||
-        /unauthori[sz]ed|forbidden|invalid (api )?key|invalid token|bearer/i.test(errorMsg);
+        /unauthori[sz]ed|forbidden|invalid (api )?key|invalid token|bearer/i.test(errorMsg) ||
+        /invoice ?type.*(not configured|invalid|required|must be)|valid configured invoice type/i.test(errorMsg);
       const isRetryableValidation =
         !isPermanentBusinessError &&
         (/billing reference|billingreference|original irn|original invoice/i.test(errorMsg) ||
          /self[- ]billed|customer tin|\btin\b.*(invalid|required|missing)/i.test(errorMsg) ||
-         /hsorservice|hs code|service code|invalid product code|product code/i.test(errorMsg) ||
-         /invoice ?type.*(not configured|invalid|required|must be)|valid configured invoice type/i.test(errorMsg));
+         /hsorservice|hs code|service code|invalid product code|product code/i.test(errorMsg));
 
       if (isRetryableValidation) {
         // Allow auto-retry for correctable business validation errors.
