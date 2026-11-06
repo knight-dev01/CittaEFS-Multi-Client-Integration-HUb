@@ -177,8 +177,7 @@ export function describeGatewayFailure(
   ) {
     return {
       summary:
-        `CittaEFS says ${type} is not a configured invoice type for this company. Use a code ` +
-        `returned by \`GET /api/resources/invoice-types\` (381 is Commercial Invoice), then retry.`,
+        `CittaEFS does not accept this invoice type for your company. Please ask your CittaEFS administrator to enable the correct invoice type, then retry.`,
       technical: withoutPrefix,
     };
   }

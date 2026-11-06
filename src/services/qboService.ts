@@ -927,7 +927,7 @@ export async function writebackProblemToQbo(
 
   const note = [
     existingNote,
-    `CittaEFS Validation Problem — Invoice ${qboInvoiceId}: ${problem}`,
+    problem,
   ]
     .filter(Boolean)
     .join("\n");

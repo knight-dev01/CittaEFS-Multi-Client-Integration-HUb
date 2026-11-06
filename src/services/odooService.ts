@@ -654,7 +654,7 @@ export async function writebackProblemToOdoo(
   problem: string,
 ): Promise<void> {
   const creds = await getValidOdooCredentials(tenantId);
-  const body = `CittaEFS Validation Problem — Invoice ${odooInvoiceId}: ${problem}`;
+  const body = problem;
   const where = { tenantId, OR: [{ odooInvoiceId }, { clientInvoiceId: odooInvoiceId }] };
   try {
     await callOdoo(creds.url, "object", "execute_kw", [
