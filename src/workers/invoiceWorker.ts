@@ -337,30 +337,49 @@ export async function processInvoiceJob(
         gatewayStatus !== 408 &&
         gatewayStatus !== 429);
     if (refusedPayload) {
-      await invoiceQueue.moveToDLQ(job, errorMsg);
-      await prisma.invoice.update({
-        where: { id: job.data.dbInvoiceId },
-        data: { status: 'REJECTED' }
-      }).catch(() => {});
-      await writeProblemBackToSourceErp(job, errorMsg);
-      dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
-      try {
-        await prisma.validationError.create({
-          data: {
-            tenantId: job.tenantId,
-            clientInvoiceNumber: job.data.clientInvoiceNumber,
-            errorCategory: 'GATEWAY_REJECTED',
-            fieldAffected: 'gateway',
-            errorMessage: formatGatewayErrorMessage(errorMsg, {
-              invoiceType: job.data.invoiceType,
-              invoiceTypeCode: (job.data as any).invoiceTypeCode,
-            }).slice(0, 4000),
-            rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
-            status: 'OPEN',
-          }
-        });
-      } catch {}
-      return { jobId: job.id, success: false, error: errorMsg, movedToDLQ: true };
+      const isPermanentBusinessError =
+        /already posted|already been posted|duplicate invoice|invoice number already|wm_001_ei_ar/i.test(errorMsg) ||
+        /check constraint/i.test(errorMsg) ||
+        /unauthori[sz]ed|forbidden|invalid (api )?key|invalid token|bearer/i.test(errorMsg);
+      const isRetryableValidation =
+        !isPermanentBusinessError &&
+        (/billing reference|billingreference|original irn|original invoice/i.test(errorMsg) ||
+         /self[- ]billed|customer tin|\btin\b.*(invalid|required|missing)/i.test(errorMsg) ||
+         /hsorservice|hs code|service code|invalid product code|product code/i.test(errorMsg) ||
+         /invoice ?type.*(not configured|invalid|required|must be)|valid configured invoice type/i.test(errorMsg));
+
+      if (isRetryableValidation) {
+        // Allow auto-retry for correctable business validation errors.
+        // Write problem back each attempt so ERP stays in sync, but keep the job alive.
+        await writeProblemBackToSourceErp(job, errorMsg);
+        // fall through to backoff/retry logic below
+      } else {
+        // Permanent refusal — DLQ immediately.
+        await invoiceQueue.moveToDLQ(job, errorMsg);
+        await prisma.invoice.update({
+          where: { id: job.data.dbInvoiceId },
+          data: { status: 'REJECTED' }
+        }).catch(() => {});
+        await writeProblemBackToSourceErp(job, errorMsg);
+        dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
+        try {
+          await prisma.validationError.create({
+            data: {
+              tenantId: job.tenantId,
+              clientInvoiceNumber: job.data.clientInvoiceNumber,
+              errorCategory: 'GATEWAY_REJECTED',
+              fieldAffected: 'gateway',
+              errorMessage: formatGatewayErrorMessage(errorMsg, {
+                invoiceType: job.data.invoiceType,
+                invoiceTypeCode: (job.data as any).invoiceTypeCode,
+              }).slice(0, 4000),
+              rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
+              status: 'OPEN',
+            }
+          });
+        } catch {}
+        return { jobId: job.id, success: false, error: errorMsg, movedToDLQ: true };
+      }
     }
 
     // Check if max retries exceeded
