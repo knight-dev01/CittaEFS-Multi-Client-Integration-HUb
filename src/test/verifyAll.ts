@@ -80,6 +80,11 @@ function assert(
 }
 
 async function runAllTests() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_VERIFICATION_WRITES !== 'true') {
+    console.log('Verification test suite is disabled in production. Set ALLOW_VERIFICATION_WRITES=true to enable.');
+    await prisma.$disconnect();
+    return;
+  }
   console.log("====================================================");
   console.log("CITTA-EFS PRODUCTION SYSTEM VERIFICATION TEST SUITE");
   console.log("====================================================\n");
