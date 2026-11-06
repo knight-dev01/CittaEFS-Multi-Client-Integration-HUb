@@ -5,8 +5,41 @@ import { cittaEfsClient, CittaEfsResponse } from '../services/cittaEfsClient';
 import { dispatchMerchantWebhook } from '../services/merchantWebhook';
 import { isValidCittaCode, normalizeCittaCode, getCittaCodeType } from '../data/referenceData';
 import { formatGatewayErrorMessage } from '../lib/gatewayErrors';
+import { writeProblemBackToSourceErp as pushProblemToSourceErp } from '../lib/erpProblemWriteback';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
+
+/**
+ * Resolves the job's invoice row and hands it to the shared ERP problem
+ * writeback. Best-effort: the terminal failure is already recorded, so a dead
+ * ERP connection only leaves `ledgerWritebackStatus` as FAILED.
+ */
+async function writeProblemBackToSourceErp(
+  job: QueueJob<QueueablePayload>,
+  rawMessage: string,
+): Promise<void> {
+  const invoice = await prisma.invoice
+    .findUnique({
+      where: { id: job.data.dbInvoiceId },
+      select: {
+        sourceErp: true,
+        clientInvoiceId: true,
+        qboInvoiceId: true,
+        odooInvoiceId: true,
+      },
+    })
+    .catch(() => null);
+  if (!invoice) return;
+
+  await pushProblemToSourceErp(
+    { tenantId: job.tenantId, ...invoice },
+    rawMessage,
+    {
+      invoiceType: job.data.invoiceType,
+      invoiceTypeCode: (job.data as any).invoiceTypeCode,
+    },
+  );
+}
 
 export interface ProcessingResult {
   jobId: string;
@@ -253,6 +286,7 @@ export async function processInvoiceJob(
     if (errorMsg.includes('Invalid Product Code')) {
       await invoiceQueue.moveToDLQ(job, errorMsg);
       await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(()=>{});
+      await writeProblemBackToSourceErp(job, errorMsg);
       dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
       try {
         await prisma.validationError.create({
@@ -308,6 +342,7 @@ export async function processInvoiceJob(
         where: { id: job.data.dbInvoiceId },
         data: { status: 'REJECTED' }
       }).catch(() => {});
+      await writeProblemBackToSourceErp(job, errorMsg);
       dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
       try {
         await prisma.validationError.create({
@@ -335,6 +370,7 @@ export async function processInvoiceJob(
         where: { id: job.data.dbInvoiceId },
         data: { status: 'REJECTED' }
       }).catch(() => {});
+      await writeProblemBackToSourceErp(job, errorMsg);
       dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(()=>{});
       // Surface reason in hub — create ValidationError so Validation Errors tab + Invoices REJECTED filter shows why
       try {

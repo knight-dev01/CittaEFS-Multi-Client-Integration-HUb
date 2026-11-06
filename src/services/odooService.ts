@@ -655,12 +655,25 @@ export async function writebackProblemToOdoo(
 ): Promise<void> {
   const creds = await getValidOdooCredentials(tenantId);
   const body = `CittaEFS Validation Problem — Invoice ${odooInvoiceId}: ${problem}`;
-  await callOdoo(creds.url, "object", "execute_kw", [
-    creds.database, creds.uid, creds.apiKey,
-    "account.move", "message_post",
-    [[Number(odooInvoiceId)]],
-    { body },
-  ]);
+  const where = { tenantId, OR: [{ odooInvoiceId }, { clientInvoiceId: odooInvoiceId }] };
+  try {
+    await callOdoo(creds.url, "object", "execute_kw", [
+      creds.database, creds.uid, creds.apiKey,
+      "account.move", "message_post",
+      [[Number(odooInvoiceId)]],
+      { body },
+    ]);
+  } catch (e) {
+    await prisma.invoice
+      .updateMany({ where, data: { ledgerWritebackStatus: "FAILED" } })
+      .catch(() => {});
+    throw e;
+  }
+  // The note reached the client's ERP, so the writeback itself is done even
+  // though the invoice is rejected in the Hub.
+  await prisma.invoice
+    .updateMany({ where, data: { ledgerWritebackStatus: "SYNCED" } })
+    .catch(() => {});
 }
 
 /**

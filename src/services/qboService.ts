@@ -933,6 +933,7 @@ export async function writebackProblemToQbo(
     .join("\n");
 
   const url = `${baseUrl}/v3/company/${realmId}/invoice?minorversion=65`;
+  const where = { tenantId, OR: [{ qboInvoiceId }, { clientInvoiceId: qboInvoiceId }] };
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -950,8 +951,17 @@ export async function writebackProblemToQbo(
 
   if (!response.ok) {
     const errText = await response.text();
+    await prisma.invoice
+      .updateMany({ where, data: { ledgerWritebackStatus: "FAILED" } })
+      .catch(() => {});
     throw new Error(
       `QBO problem writeback failed (${response.status}): ${errText}`,
     );
   }
+
+  // The note reached the client's ERP, so the writeback itself is done even
+  // though the invoice is rejected in the Hub.
+  await prisma.invoice
+    .updateMany({ where, data: { ledgerWritebackStatus: "SYNCED" } })
+    .catch(() => {});
 }

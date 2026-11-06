@@ -417,7 +417,13 @@ export function InvoicesTab() {
 
                       <td className="py-3 pr-5">
                         <StatusBadge tone={writebackTone(inv.ledgerWritebackStatus)}>
-                          {inv.ledgerWritebackStatus === 'SYNCED' ? 'Synced to ERP' : 'Pending writeback'}
+                          {inv.ledgerWritebackStatus === 'SYNCED'
+                            ? ATTENTION_STATUSES.includes(inv.status)
+                              ? 'Error sent to ERP'
+                              : 'Synced to ERP'
+                            : inv.ledgerWritebackStatus === 'FAILED'
+                              ? 'Writeback failed'
+                              : 'Pending writeback'}
                         </StatusBadge>
                       </td>
                     </tr>

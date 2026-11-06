@@ -805,6 +805,10 @@ export class CittaEfsClient {
           data: { ledgerWritebackStatus: "FAILED" },
         });
       } catch {}
+      return {
+        synced: false,
+        message: `ERP writeback failed for invoice ${clientInvoiceNumber}: ${err?.message || "unknown error"}`,
+      };
     }
 
     return {

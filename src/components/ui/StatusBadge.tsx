@@ -46,5 +46,8 @@ export function statusTone(status?: string): StatusTone {
 }
 
 export function writebackTone(writeback?: string): StatusTone {
-  return String(writeback ?? '').toUpperCase() === 'SYNCED' ? 'ok' : 'pending';
+  const status = String(writeback ?? '').toUpperCase();
+  if (status === 'SYNCED') return 'ok';
+  if (status === 'FAILED') return 'fail';
+  return 'pending';
 }

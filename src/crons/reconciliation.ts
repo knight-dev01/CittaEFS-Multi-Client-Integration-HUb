@@ -107,10 +107,16 @@ export async function runNrsReconciliationCron(tenantId?: string): Promise<Recon
             const qr = match.qrCodeUrl || match.QrCodeUrl || match.qrUrl || `https://nrs.portal.gov/verify?irn=${irn}`;
             await prisma.invoice.update({
               where: { id: inv.id },
-              data: { status: 'APPROVED', irn, csid, qrCodeUrl: qr, ledgerWritebackStatus: 'SYNCED' },
+              data: { status: 'APPROVED', irn, csid, qrCodeUrl: qr },
             });
-            // Attempt writeback
-            await cittaEfsClient.executeClientLedgerWriteback(tid, inv.clientInvoiceId, irn, qr).catch(()=>{});
+            // Attempt writeback and surface result
+            const result = await cittaEfsClient.executeClientLedgerWriteback(tid, inv.clientInvoiceId, irn, qr).catch(()=>({ synced: false }));
+            if (!inv.sourceErp && result.synced) {
+              await prisma.invoice.update({
+                where: { id: inv.id },
+                data: { ledgerWritebackStatus: 'SYNCED' },
+              }).catch(()=>{});
+            }
             // Notify merchant webhook (Interswitch-style signed callback) — non-blocking
             try {
               const { dispatchMerchantWebhook } = await import('../services/merchantWebhook');

@@ -5,6 +5,8 @@ import { generateSha256, safeAuditLogCreate } from "../lib/serverHelpers";
 import { logger } from "../lib/logger";
 import { fetchAndIngestSpecificQboInvoice } from "../services/qboService";
 import { cittaEfsClient } from "../services/cittaEfsClient";
+import { writeProblemBackToSourceErp } from "../lib/erpProblemWriteback";
+import { dispatchMerchantWebhook } from "../services/merchantWebhook";
 
 const router = Router();
 
@@ -54,9 +56,14 @@ async function handleCittaEfsWebhook(req: any, res: any) {
 
     if (inv) {
       const updateData: any = {};
+      const rejected =
+        event === "invoice.validation.failed" ||
+        status === "REJECTED" ||
+        Boolean(errorMessage);
+
       if (event === "invoice.signed" || status === "SIGNED") { updateData.status = "APPROVED"; if (irn) updateData.irn = irn; if (qrCode) updateData.qrCodeUrl = `data:image/png;base64,${qrCode}`; if (transmittedAt) updateData.updatedAt = new Date(transmittedAt); }
-      else if (event === "invoice.transmitted" || status === "TRANSMITTED") { updateData.status = "APPROVED"; if (irn) updateData.irn = irn; if (qrCode) updateData.qrCodeUrl = `data:image/png;base64,${qrCode}`; updateData.ledgerWritebackStatus = "SYNCED"; }
-      else if (event === "invoice.validation.failed" || status === "REJECTED" || errorMessage) { updateData.status = "REJECTED"; }
+      else if (event === "invoice.transmitted" || status === "TRANSMITTED") { updateData.status = "APPROVED"; if (irn) updateData.irn = irn; if (qrCode) updateData.qrCodeUrl = `data:image/png;base64,${qrCode}`; }
+      else if (rejected) { updateData.status = "REJECTED"; }
       else if (event === "invoice.payment.updated" || paymentStatus) {
         logger.info(`[Webhook] Payment update`, { invoiceNumber, irn, paymentStatus, paymentReference }, { requestId: (req as any).requestId });
       }
@@ -64,8 +71,30 @@ async function handleCittaEfsWebhook(req: any, res: any) {
       if (irn && !updateData.irn) updateData.irn = irn;
       if (qrCode && !updateData.qrCodeUrl) updateData.qrCodeUrl = qrCode.startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`;
       if (Object.keys(updateData).length) {
-        if (updateData.status) updateData.ledgerWritebackStatus = "SYNCED";
         await prisma.invoice.update({ where: { id: inv.id }, data: updateData });
+      }
+
+      // Write a plain-English problem note back to the source ERP when the
+      // gateway rejects the invoice. The writeback functions set
+      // ledgerWritebackStatus to SYNCED/FAILED themselves; failures are logged
+      // and never block the webhook response.
+      if (rejected) {
+        try {
+          await writeProblemBackToSourceErp(
+            {
+              tenantId: inv.tenantId,
+              sourceErp: inv.sourceErp,
+              clientInvoiceId: inv.clientInvoiceId,
+              qboInvoiceId: (inv as any).qboInvoiceId,
+              odooInvoiceId: (inv as any).odooInvoiceId,
+            },
+            errorMessage || "CittaEFS rejected this invoice during validation.",
+            { invoiceType: inv.invoiceType },
+          );
+        } catch (e) {
+          logger.warn(`[Webhook] ERP problem writeback failed (non-blocking)`, { invoiceId: inv.id, error: (e as any)?.message }, { requestId: (req as any).requestId });
+        }
+        dispatchMerchantWebhook(inv.tenantId, inv.id, "invoice.rejected").catch(() => {});
       }
 
       // The current CittaEFS submit contract returns no inline IRN; the stamp
@@ -86,12 +115,14 @@ async function handleCittaEfsWebhook(req: any, res: any) {
               ? qrCode
               : `data:image/png;base64,${qrCode}`)) ||
           `https://nrs.portal.gov/verify?irn=${irn}`;
-        await cittaEfsClient
+        const result = await cittaEfsClient
           .executeClientLedgerWriteback(inv.tenantId, inv.clientInvoiceId, irn, qr)
-          .catch(() => {});
-        const { dispatchMerchantWebhook } = await import(
-          "../services/merchantWebhook"
-        );
+          .catch(() => ({ synced: false } as const));
+        if (result.synced && !inv.sourceErp) {
+          await prisma.invoice
+            .update({ where: { id: inv.id }, data: { ledgerWritebackStatus: "SYNCED" } })
+            .catch(() => {});
+        }
         dispatchMerchantWebhook(inv.tenantId, inv.id, "invoice.authorized").catch(
           () => {},
         );
