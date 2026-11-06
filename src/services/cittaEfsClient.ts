@@ -377,6 +377,7 @@ function httpsRequest(
 
 export class CittaEfsClient {
   private gatewayBaseUrl: string;
+  private resourceCache: Map<string, { data: any[]; expiresAt: number }> = new Map();
 
   constructor() {
     this.gatewayBaseUrl = "https://ei-api.azurewebsites.net";
@@ -650,17 +651,29 @@ export class CittaEfsClient {
    * authentication (documented in the CittaEFS API guide).
    */
   private async fetchResource(resource: string): Promise<any[]> {
+    const now = Date.now();
+    const cached = this.resourceCache.get(resource);
+    const ttl = 24 * 60 * 60 * 1000; // 24h
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
     const gatewayUrl = getGlobalGatewayBaseUrl(null);
     const url = `${gatewayUrl.replace(/\/$/, "")}/api/resources/${resource}`;
     const res = await httpsRequest(url, { method: "GET", headers: {} });
     if (!res.ok) {
+      if (cached) {
+        // stale fallback
+        return cached.data;
+      }
       throw new Error(
         `Failed to fetch CittaEFS resource '${resource}' (${res.status})`,
       );
     }
     const body = res.json<any>();
     const data = Array.isArray(body) ? body : body?.data;
-    return Array.isArray(data) ? data : [];
+    const result = Array.isArray(data) ? data : [];
+    this.resourceCache.set(resource, { data: result, expiresAt: now + ttl });
+    return result;
   }
 
   public getResourceCountries(): Promise<any[]> {

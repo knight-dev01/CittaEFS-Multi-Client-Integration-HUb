@@ -13,25 +13,42 @@ const router = Router();
 async function handleCittaEfsWebhook(req: any, res: any) {
   try {
     const signature = (req.headers["x-webhook-signature"] as string) || (req.headers["X-Webhook-Signature"] as string);
+    const webhookId = (req.headers["x-webhook-id"] as string) || (req.headers["X-Webhook-Id"] as string);
+    const webhookEvent = (req.headers["x-webhook-event"] as string) || (req.headers["X-Webhook-Event"] as string);
     const webhookSecret =
       process.env.CITTAEFS_WEBHOOK_SECRET || process.env.CITTA_WEBHOOK_SECRET || "CF35DF20-9309-4506-BCC8-5D17D1DA209A";
     const raw = (req as any).rawBody ? (req as any).rawBody.toString("utf8") : JSON.stringify(req.body);
     const payloadString = raw;
     const hmacHex = crypto.createHmac("sha256", webhookSecret).update(payloadString).digest("hex");
-    const hmacB64 = crypto.createHmac("sha256", webhookSecret).update(payloadString).digest("base64");
-    const expectedHex = `sha256=${hmacHex}`;
-    const expectedB64 = `sha256=${hmacB64}`;
-    const isValid = signature === hmacHex || signature === hmacB64 || signature === expectedHex || signature === expectedB64;
+
     if (!signature) {
       return res.status(401).json({ success: false, error: "Webhook signature missing" });
     }
+    const isValid = signature === hmacHex;
     if (!isValid) {
-      logger.warn(`[Webhook] Invalid signature`, { received: signature?.slice(0, 20), expectedB64: expectedB64.slice(0, 20) }, { requestId: (req as any).requestId });
-      if (process.env.NODE_ENV === "production") {
-        return res.status(401).json({ success: false, error: "Invalid webhook signature" });
-      }
-      logger.warn(`[Webhook] Dev mode — accepting despite invalid signature`);
+      logger.warn(`[Webhook] Invalid signature`, { received: signature?.slice(0, 20), expected: hmacHex.slice(0, 20) }, { requestId: (req as any).requestId });
+      return res.status(401).json({ success: false, error: "Invalid webhook signature" });
     }
+
+    if (webhookId) {
+      const existing = await prisma.webhookDelivery.findUnique({ where: { webhookId } });
+      if (existing) {
+        logger.info(`[Webhook] Duplicate delivery ignored`, { webhookId, event: webhookEvent }, { requestId: (req as any).requestId });
+        return res.json({ status: "ACCEPTED", eventProcessed: false, duplicate: true });
+      }
+      // Reserve the delivery idempotently before processing
+      await prisma.webhookDelivery.create({
+        data: {
+          webhookId,
+          eventType: webhookEvent || req.body?.event || req.body?.eventType,
+          tenantId: "pending",
+          invoiceNumber: req.body?.data?.invoiceNumber || req.body?.invoiceNumber,
+          irn: req.body?.data?.irn || req.body?.irn,
+          signature,
+        },
+      }).catch(() => {});
+    }
+
     logger.info(`[Webhook] CittaEFS event received`, { event: req.body?.event || req.body?.eventType, invoiceNumber: req.body?.data?.invoiceNumber || req.body?.invoiceNumber, irn: req.body?.data?.irn || req.body?.irn }, { requestId: (req as any).requestId });
 
     const event = req.body?.event || req.body?.eventType || req.body?.data?.eventType;
@@ -55,6 +72,13 @@ async function handleCittaEfsWebhook(req: any, res: any) {
     });
 
     if (inv) {
+      if (webhookId) {
+        await prisma.webhookDelivery.updateMany({
+          where: { webhookId },
+          data: { tenantId: inv.tenantId, invoiceNumber: invoiceNumber || null, irn: irn || null },
+        }).catch(() => {});
+      }
+
       const updateData: any = {};
       const rejected =
         event === "invoice.validation.failed" ||

@@ -317,3 +317,18 @@ model QueueJob {
   @@index([status, nextAttemptAt])
   @@map("queue_jobs")
 }
+
+model WebhookDelivery {
+  id            String   @id @default(uuid())
+  webhookId     String   @map("webhook_id") // X-Webhook-Id from CittaEFS
+  eventType     String   @map("event_type") // X-Webhook-Event
+  tenantId      String   @map("tenant_id")
+  invoiceNumber String?  @map("invoice_number")
+  irn           String?  @map("irn")
+  receivedAt    DateTime @default(now()) @map("received_at")
+  signature     String?  @map("signature")
+
+  @@unique([webhookId])
+  @@index([tenantId, receivedAt])
+  @@map("webhook_deliveries")
+}
