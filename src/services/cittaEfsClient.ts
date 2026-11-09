@@ -662,7 +662,7 @@ export class CittaEfsClient {
     const res = await httpsRequest(url, { method: "GET", headers: {} });
     if (!res.ok) {
       if (cached) {
-        // stale fallback
+        // serve cached copy on error
         return cached.data;
       }
       throw new Error(
