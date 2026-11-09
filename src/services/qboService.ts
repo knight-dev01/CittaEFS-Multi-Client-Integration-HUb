@@ -889,11 +889,41 @@ ${qrLine}`;
     data: { ledgerWritebackStatus: "SYNCED" },
   });
 
+  // 3a. Best-effort: attach the QR image to the invoice (QBO Attachable API),
+  // so it appears in the invoice's attachments panel. CittaEFS sends the QR as
+  // a base64 PNG. Never fails the writeback.
+  if (qrCodeUrl && qrCodeUrl.startsWith("data:image/")) {
+    try {
+      const png = Buffer.from(qrCodeUrl.slice(qrCodeUrl.indexOf(",") + 1), "base64");
+      const form = new FormData();
+      form.append(
+        "file_metadata_0",
+        new Blob([JSON.stringify({
+          AttachableRef: [{ EntityRef: { type: "Invoice", value: String(clientInvoiceId) } }],
+          FileName: `CittaEFS-QR-${irn.replace(/[^A-Za-z0-9_-]/g, "")}.png`,
+          ContentType: "image/png",
+        })], { type: "application/json" }),
+        "metadata.json",
+      );
+      form.append("file_content_0", new Blob([png], { type: "image/png" }), "qr.png");
+      const upRes = await fetch(`${baseUrl}/v3/company/${realmId}/upload?minorversion=65`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+        body: form,
+      });
+      if (!upRes.ok) {
+        console.warn(`QBO QR attachment skipped for ${clientInvoiceId} (${upRes.status}).`);
+      }
+    } catch (e: any) {
+      console.warn(`QBO QR attachment skipped for ${clientInvoiceId}: ${e?.message}`);
+    }
+  }
+
   // 3. Best-effort: also fill the IRN / QR custom fields when the company has
   // them defined. Failure here never fails the writeback (the note above
   // already carries the IRN).
   try {
-    const newSyncToken = data?.Invoice?.SyncToken || syncToken;
+    const newSyncToken = data?.Invoice?.SyncToken || syncToken; // attachments do not change the invoice SyncToken
     const cfRes = await fetch(url, {
       method: "POST",
       headers,

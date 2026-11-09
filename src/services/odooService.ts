@@ -696,12 +696,42 @@ export async function writebackToOdoo(
     throw new Error(`No Odoo invoice id on file for ${clientInvoiceId} (tenant ${tenantId})`);
   }
 
-  const body = `CittaEFS Compliance Stamp — IRN: ${irn} | QR Code: ${qrCodeUrl}`;
+  // CittaEFS delivers the QR as a base64 PNG (data URI). Attach it to the
+  // invoice as a real image file so it renders as a thumbnail in the chatter,
+  // and keep the message itself short and readable (IRN as text).
+  const isImage = typeof qrCodeUrl === "string" && qrCodeUrl.startsWith("data:image/");
+  const attachmentIds: number[] = [];
+  if (isImage) {
+    try {
+      const b64 = qrCodeUrl.slice(qrCodeUrl.indexOf(",") + 1);
+      const attId = await callOdoo(creds.url, "object", "execute_kw", [
+        creds.database, creds.uid, creds.apiKey,
+        "ir.attachment", "create",
+        [{
+          name: `CittaEFS-QR-${irn}.png`,
+          type: "binary",
+          datas: b64,
+          mimetype: "image/png",
+          res_model: "account.move",
+          res_id: Number(invoice.odooInvoiceId),
+        }],
+      ]);
+      if (attId) attachmentIds.push(Number(attId));
+    } catch (e: any) {
+      console.warn(`Odoo QR attachment skipped for ${clientInvoiceId}: ${e?.message}`);
+    }
+  }
+
+  const qrLine = isImage
+    ? (attachmentIds.length ? "QR code attached below." : "QR code available on the CittaEFS portal.")
+    : `QR code: ${qrCodeUrl}`;
+  const escapeHtml = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const body = `<p><b>CittaEFS Compliance Stamp</b><br/>IRN: ${escapeHtml(irn)}<br/>${escapeHtml(qrLine)}</p>`;
   await callOdoo(creds.url, "object", "execute_kw", [
     creds.database, creds.uid, creds.apiKey,
     "account.move", "message_post",
     [[Number(invoice.odooInvoiceId)]],
-    { body },
+    attachmentIds.length ? { body, attachment_ids: attachmentIds } : { body },
   ]);
 
   console.log(`Odoo Ledger Writeback completed successfully for invoice ${clientInvoiceId}`);
