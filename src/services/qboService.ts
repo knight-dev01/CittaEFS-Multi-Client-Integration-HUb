@@ -836,36 +836,39 @@ export async function writebackToQbo(
     );
   }
 
-  // 2. Perform Sparse Update with Custom Fields for IRN and QR Code
+  // 2. Primary writeback: PrivateNote. This field exists on every QBO plan and
+  // needs no custom-field setup, so the IRN is always visible on the invoice
+  // inside QuickBooks. Existing note text is preserved and the stamp is
+  // appended once (re-runs do not duplicate it).
   const url = `${baseUrl}/v3/company/${realmId}/invoice?minorversion=65`;
-  const updatePayload = {
-    Id: clientInvoiceId,
-    SyncToken: syncToken,
-    sparse: true,
-    CustomField: [
-      {
-        DefinitionId: "1",
-        Name: "IRN",
-        Type: "StringType",
-        StringValue: irn,
-      },
-      {
-        DefinitionId: "2",
-        Name: "QR_CODE_URL",
-        Type: "StringType",
-        StringValue: qrCodeUrl,
-      },
-    ],
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
   };
+
+  // A base64 data URI would blow past PrivateNote's size limit and is
+  // unreadable to a human, so only real links are written into the note.
+  const qrLine = qrCodeUrl && !qrCodeUrl.startsWith("data:")
+    ? `Verify: ${qrCodeUrl}`
+    : "QR code: available on the CittaEFS portal";
+  const stamp = `CittaEFS e-invoice stamped - IRN: ${irn}
+${qrLine}`;
+
+  let existingNote = "";
+  try {
+    const rawInvoice = await fetchSingleQboInvoice(tenantId, clientInvoiceId);
+    syncToken = rawInvoice.SyncToken || syncToken;
+    existingNote = rawInvoice.PrivateNote || "";
+  } catch {}
+  const note = existingNote.includes(irn)
+    ? existingNote
+    : [existingNote, stamp].filter(Boolean).join("\n");
 
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(updatePayload),
+    headers,
+    body: JSON.stringify({ Id: clientInvoiceId, SyncToken: syncToken, sparse: true, PrivateNote: note }),
   });
 
   if (!response.ok) {
@@ -885,6 +888,30 @@ export async function writebackToQbo(
     where: { tenantId, clientInvoiceId },
     data: { ledgerWritebackStatus: "SYNCED" },
   });
+
+  // 3. Best-effort: also fill the IRN / QR custom fields when the company has
+  // them defined. Failure here never fails the writeback (the note above
+  // already carries the IRN).
+  try {
+    const newSyncToken = data?.Invoice?.SyncToken || syncToken;
+    const cfRes = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        Id: clientInvoiceId,
+        SyncToken: newSyncToken,
+        sparse: true,
+        CustomField: [
+          { DefinitionId: "1", Name: "IRN", Type: "StringType", StringValue: irn.slice(0, 31) },
+        ],
+      }),
+    });
+    if (!cfRes.ok) {
+      console.warn(`QBO custom field writeback skipped for ${clientInvoiceId} (${cfRes.status}) - IRN is in PrivateNote.`);
+    }
+  } catch (e: any) {
+    console.warn(`QBO custom field writeback skipped for ${clientInvoiceId}: ${e?.message}`);
+  }
 
   return data;
 }

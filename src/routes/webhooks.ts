@@ -62,14 +62,13 @@ async function handleCittaEfsWebhook(req: any, res: any) {
     const errorMessage = data?.errorMessage || req.body?.errorMessage;
     const transmittedAt = data?.transmittedAt || data?.signedAt;
 
-    const inv = await prisma.invoice.findFirst({
-      where: {
-        OR: [
-          irn ? { irn } : {},
-          invoiceNumber ? { clientInvoiceId: invoiceNumber } : {},
-        ],
-      },
-    });
+    // Never query with an empty OR: an empty clause matches every invoice.
+    const lookupClauses: any[] = [];
+    if (irn) lookupClauses.push({ irn });
+    if (invoiceNumber) lookupClauses.push({ clientInvoiceId: invoiceNumber });
+    const inv = lookupClauses.length
+      ? await prisma.invoice.findFirst({ where: { OR: lookupClauses } })
+      : null;
 
     if (inv) {
       if (webhookId) {
