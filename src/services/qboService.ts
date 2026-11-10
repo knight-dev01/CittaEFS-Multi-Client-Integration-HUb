@@ -911,8 +911,10 @@ ${qrLine}`;
         headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
         body: form,
       });
-      if (!upRes.ok) {
-        console.warn(`QBO QR attachment skipped for ${clientInvoiceId} (${upRes.status}).`);
+      const upText = await upRes.text().catch(() => "");
+      // Intuit can answer 200 with a Fault inside the body (e.g. bad part names).
+      if (!upRes.ok || /"Fault"|<Fault/i.test(upText)) {
+        console.warn(`QBO QR attachment skipped for ${clientInvoiceId} (${upRes.status}): ${upText.slice(0, 300)}`);
       }
     } catch (e: any) {
       console.warn(`QBO QR attachment skipped for ${clientInvoiceId}: ${e?.message}`);
@@ -932,7 +934,7 @@ ${qrLine}`;
         SyncToken: newSyncToken,
         sparse: true,
         CustomField: [
-          { DefinitionId: "1", Name: "IRN", Type: "StringType", StringValue: irn.slice(0, 31) },
+          { DefinitionId: "1", Name: "IRN", Type: "StringType", StringValue: irn.slice(0, 30) },
         ],
       }),
     });
