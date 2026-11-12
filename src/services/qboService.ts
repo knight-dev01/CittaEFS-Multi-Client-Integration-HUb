@@ -824,17 +824,23 @@ export async function writebackToQbo(
   const realmId = integration.companyId;
   const baseUrl = await getQboBaseUrl(tenantId);
 
-  // 1. Fetch current invoice first to get the latest SyncToken
-  let syncToken = "0";
-  try {
-    const rawInvoice = await fetchSingleQboInvoice(tenantId, clientInvoiceId);
-    syncToken = rawInvoice.SyncToken || "0";
-  } catch (e) {
-    console.warn(
-      `Could not fetch latest SyncToken for invoice ${clientInvoiceId}, defaulting to '0':`,
-      e,
-    );
+  // The hub's business key is the QBO DocNumber, but QBO's API addresses
+  // invoices by their immutable internal Id. Writing with the DocNumber would
+  // update a different invoice (or fail), so resolve the stored QBO Id first.
+  const hubInvoice = await prisma.invoice.findFirst({
+    where: { tenantId, OR: [{ clientInvoiceId }, { qboInvoiceId: clientInvoiceId }] },
+    select: { clientInvoiceId: true, qboInvoiceId: true },
+  });
+  if (hubInvoice && !hubInvoice.qboInvoiceId) {
+    throw new Error(`No QBO invoice Id on file for ${clientInvoiceId} (tenant ${tenantId}) - cannot write back safely`);
   }
+  const qboId = hubInvoice?.qboInvoiceId || clientInvoiceId;
+  const hubClientInvoiceId = hubInvoice?.clientInvoiceId || clientInvoiceId;
+
+  // Fail loudly if the live invoice can't be read: a guessed SyncToken would be
+  // rejected by QBO as a stale update anyway.
+  const liveInvoice = await fetchSingleQboInvoice(tenantId, qboId);
+  const syncToken: string = liveInvoice.SyncToken || "0";
 
   // 2. Primary writeback: PrivateNote. This field exists on every QBO plan and
   // needs no custom-field setup, so the IRN is always visible on the invoice
@@ -855,12 +861,7 @@ export async function writebackToQbo(
   const stamp = `CittaEFS e-invoice stamped - IRN: ${irn}
 ${qrLine}`;
 
-  let existingNote = "";
-  try {
-    const rawInvoice = await fetchSingleQboInvoice(tenantId, clientInvoiceId);
-    syncToken = rawInvoice.SyncToken || syncToken;
-    existingNote = rawInvoice.PrivateNote || "";
-  } catch {}
+  const existingNote: string = liveInvoice.PrivateNote || "";
   const note = existingNote.includes(irn)
     ? existingNote
     : [existingNote, stamp].filter(Boolean).join("\n");
@@ -868,7 +869,7 @@ ${qrLine}`;
   const response = await fetch(url, {
     method: "POST",
     headers,
-    body: JSON.stringify({ Id: clientInvoiceId, SyncToken: syncToken, sparse: true, PrivateNote: note }),
+    body: JSON.stringify({ Id: qboId, SyncToken: syncToken, sparse: true, PrivateNote: note }),
   });
 
   if (!response.ok) {
@@ -885,7 +886,7 @@ ${qrLine}`;
 
   // Update invoice writeback status locally
   await prisma.invoice.updateMany({
-    where: { tenantId, clientInvoiceId },
+    where: { tenantId, clientInvoiceId: hubClientInvoiceId },
     data: { ledgerWritebackStatus: "SYNCED" },
   });
 
@@ -899,7 +900,7 @@ ${qrLine}`;
       form.append(
         "file_metadata_0",
         new Blob([JSON.stringify({
-          AttachableRef: [{ EntityRef: { type: "Invoice", value: String(clientInvoiceId) } }],
+          AttachableRef: [{ EntityRef: { type: "Invoice", value: String(qboId) } }],
           FileName: `CittaEFS-QR-${irn.replace(/[^A-Za-z0-9_-]/g, "")}.png`,
           ContentType: "image/png",
         })], { type: "application/json" }),
@@ -930,7 +931,7 @@ ${qrLine}`;
       method: "POST",
       headers,
       body: JSON.stringify({
-        Id: clientInvoiceId,
+        Id: qboId,
         SyncToken: newSyncToken,
         sparse: true,
         CustomField: [
