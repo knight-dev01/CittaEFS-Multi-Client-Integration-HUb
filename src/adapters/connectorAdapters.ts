@@ -103,13 +103,6 @@ export class QuickBooksAdapter implements ConnectorAdapter {
 
   transform(rawPayload: any): IngestedPayload {
     const docNumber = rawPayload.DocNumber || rawPayload.clientInvoiceNumber || `QBO-${rawPayload.Id || Date.now()}`;
-    const inferServiceCode = (sku: string, desc: string) => {
-      const text = `${sku} ${desc}`.toLowerCase();
-      if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
-      if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
-      if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
-      return "UNMAPPED";
-    };
     return {
       clientInvoiceNumber: docNumber,
       documentNumber: rawPayload.DocumentNumber || (rawPayload as any).documentNumber || docNumber,
@@ -135,7 +128,9 @@ export class QuickBooksAdapter implements ConnectorAdapter {
           description: desc,
           quantity: l.SalesItemLineDetail?.Qty ?? l.quantity ?? 1,
           unitPrice: l.SalesItemLineDetail?.UnitPrice ?? l.unitPrice ?? 100,
-          hsOrServiceCode: l.hsOrServiceCode && l.hsOrServiceCode !== 'SERV-DEFAULT' && l.hsOrServiceCode !== 'UNMAPPED' ? l.hsOrServiceCode : inferServiceCode(sku, desc),
+          // Only a code the ERP actually sent; otherwise the Item mapping decides later.
+          // No keyword guessing - a guessed tax code on a fiscal invoice is a compliance error.
+          hsOrServiceCode: l.hsOrServiceCode && l.hsOrServiceCode !== 'SERV-DEFAULT' ? l.hsOrServiceCode : 'UNMAPPED',
           vatRate: l.vatRate,
           lineNum: (l as any).lineNum,
           unitCode: (l as any).unitCode || 'EA',
@@ -191,13 +186,6 @@ export class OdooAdapter implements ConnectorAdapter {
   }
 
   transform(rawPayload: any): IngestedPayload {
-    const inferServiceCode = (sku: string, desc: string) => {
-      const text = `${sku} ${desc}`.toLowerCase();
-      if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
-      if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
-      if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
-      return "UNMAPPED";
-    };
     // Odoo's product_id is a many2one, returned as [id, display_name] (or false
     // when unset). display_name is conventionally "[REF] Name" when the product
     // has an internal reference (default_code) set — parse it out rather than
@@ -238,7 +226,8 @@ export class OdooAdapter implements ConnectorAdapter {
           description,
           quantity: Number(l.quantity ?? 1),
           unitPrice: Number(l.price_unit ?? priceSubtotal),
-          hsOrServiceCode: inferServiceCode(sku, description),
+          // Odoo lines carry no NRS code; the tenant's Item mapping supplies it in odooService.
+          hsOrServiceCode: 'UNMAPPED',
           vatRate,
           taxableAmount: priceSubtotal,
           vatAmount,

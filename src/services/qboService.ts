@@ -597,32 +597,22 @@ export async function ingestQboInvoice(
     transformed,
   );
 
-  // Validate unmapped HS/Service codes — Option B auto-map + service detection, Option A strict will be checked before enqueue
+  // Resolve HS/Service codes from the Item mapping; unmapped lines fail validation before enqueue
   const tenantItems = await prisma.item.findMany({ where: { tenantId } });
-  const inferServiceCode = (sku: string, desc: string) => {
-    const text = `${sku} ${desc}`.toLowerCase();
-    // Real CittaEFS/NRS codes — bare numeric, no "HS-"/"SRV-" prefix. Service detection expanded to cover landscape/lawn services.
-    if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
-    if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
-    if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
-    return "UNMAPPED";
-  };
   const processedLineItems = transformed.lineItems.map(
     (li: any, idx: number) => {
       let mapping = tenantItems.find((m) => m.clientSku === li.clientSku);
-      const inferredDefault = inferServiceCode(li.clientSku || "", li.description || "");
       const rawHs = li.hsOrServiceCode ? normalizeCittaCode(li.hsOrServiceCode) : "";
       const mappingCode = mapping?.hsOrServiceCode ? normalizeCittaCode(mapping.hsOrServiceCode) : "";
-      // Service inference takes precedence over HS laptop codes mis-mapped to services — prevents 8471.30 for Gardening/Pest Control etc.
-      const inferredIsService = inferredDefault !== "UNMAPPED" && getCittaCodeType(inferredDefault) === "SERVICE_CODE";
-      const mappingIsServiceMismatch = mappingCode && getCittaCodeType(mappingCode) === "HS_CODE" && inferredIsService;
-      const mappingIsGeneric = !mappingCode || !isValidCittaCode(mappingCode) || mappingIsServiceMismatch;
+      // Tax classification comes ONLY from the operator's Item mapping (wins) or a
+      // code the ERP sent. No keyword guessing: unmapped lines go to the validation
+      // queue and back to the ERP / client email for a human to classify.
       let hsOrServiceCode =
-        (rawHs && rawHs !== "UNMAPPED" && rawHs !== "SERV-DEFAULT" && isValidCittaCode(rawHs) && !mappingIsServiceMismatch
-          ? rawHs
-          : mappingIsGeneric
-            ? inferredDefault
-            : mappingCode) || inferredDefault;
+        mappingCode && isValidCittaCode(mappingCode)
+          ? mappingCode
+          : rawHs && isValidCittaCode(rawHs)
+            ? rawHs
+            : "UNMAPPED";
       hsOrServiceCode = normalizeCittaCode(hsOrServiceCode);
       const qty = Number(li.quantity || 1);
       const price = Number(li.unitPrice || 0);
