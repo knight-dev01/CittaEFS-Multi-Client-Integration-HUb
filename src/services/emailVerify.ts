@@ -4,8 +4,8 @@ import { promises as dns } from "dns";
  * Background "is this a real address?" check for feedback-email recipients.
  *
  *   valid   - well-formed and the domain publishes a mail server (MX, or an A/AAAA
- *             record, which RFC 5321 allows as a fallback)
- *   invalid - malformed, a placeholder / reserved domain, or a domain that does
+ *             record, which RFC 5321 accepts as an implicit MX)
+ *   invalid - malformed, a reserved / non-deliverable domain, or a domain that does
  *             not exist or explicitly accepts no mail (null MX)
  *   unknown - DNS could not be reached; the address is still used
  *
@@ -29,8 +29,8 @@ export interface DnsLike {
 
 const SYNTAX_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+)$/;
 
-// Reserved (RFC 2606 / 6761) and common placeholder domains that never receive real mail.
-const PLACEHOLDER_DOMAINS = new Set([
+// Reserved (RFC 2606 / 6761) and well-known domains that never receive real mail.
+const NON_DELIVERABLE_DOMAINS = new Set([
   "example.com", "example.org", "example.net", "test.com", "domain.com", "email.com",
   "yourdomain.com", "yourcompany.com", "company.com", "sample.com", "mailinator.com",
 ]);
@@ -74,8 +74,8 @@ export async function verifyEmailAddress(raw: string, resolver: DnsLike = dns): 
   }
   const domain = m[1];
   const tld = domain.split(".").pop() || "";
-  if (PLACEHOLDER_DOMAINS.has(domain) || RESERVED_TLDS.has(tld)) {
-    return { email, status: "invalid", reason: `${domain} is a placeholder domain, not a real mailbox` };
+  if (NON_DELIVERABLE_DOMAINS.has(domain) || RESERVED_TLDS.has(tld)) {
+    return { email, status: "invalid", reason: `${domain} is a reserved example domain, not a real mailbox` };
   }
   const hit = domainCache.get(domain);
   if (hit && Date.now() - hit.at < TTL_MS) return { email, ...hit.result };

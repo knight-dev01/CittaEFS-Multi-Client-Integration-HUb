@@ -66,7 +66,7 @@ describe('email "is it real?" check', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('rejects placeholder and reserved domains', async () => {
+  it('rejects reserved and non-deliverable domains', async () => {
     for (const p of ['admin@example.com', 'you@yourdomain.com', 'qa@shop.test', 'a@mailinator.com']) {
       expect((await verifyEmailAddress(p, dns)).status).toBe('invalid');
     }
