@@ -271,6 +271,79 @@ export async function fetchQboCompanyInfo(tenantId: string): Promise<any> {
   return data.CompanyInfo;
 }
 
+// ---------------------------------------------------------------------------
+// QuickBooks credit memos
+// ---------------------------------------------------------------------------
+// QBO keeps credit memos in their own entity (CreditMemo) with their own
+// numbering, so credit memo "1005" and invoice "1005" can coexist. The hub key
+// for a credit memo is therefore prefixed "CM-" (CittaEFS also needs a unique
+// number); the QBO DocNumber is kept as documentNumber.
+
+export type QboTxnEntity = "Invoice" | "CreditMemo";
+
+export function isQboCreditMemo(raw: any): boolean {
+  return String(raw?.TxnType || "") === "CreditMemo";
+}
+
+/** Hub business key (clientInvoiceId) for a raw QBO Invoice or CreditMemo. */
+export function qboClientInvoiceId(raw: any): string {
+  const docNumber = String(raw?.DocNumber || `QBO-${raw?.Id}`).trim();
+  if (!isQboCreditMemo(raw)) return docNumber;
+  return /^CM/i.test(docNumber) ? docNumber : `CM-${docNumber}`;
+}
+
+/** QBO entity for a hub invoice row. */
+export function qboEntityForInvoiceType(invoiceType?: string | null): QboTxnEntity {
+  return String(invoiceType || "").toUpperCase() === "CREDIT_NOTE" ? "CreditMemo" : "Invoice";
+}
+
+function tagEntity(rows: any[], entity: QboTxnEntity): any[] {
+  return entity === "CreditMemo" ? rows.map((r) => ({ ...r, TxnType: "CreditMemo" })) : rows;
+}
+
+async function qboQueryPage(
+  tenantId: string,
+  entity: QboTxnEntity,
+  startPosition: number,
+  maxResults: number,
+  sinceIso?: string,
+): Promise<any[]> {
+  const accessToken = await getValidQboAccessToken(tenantId);
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
+  if (!integration) throw new Error(`Integration details not found for tenant ${tenantId}`);
+  const baseUrl = await getQboBaseUrl(tenantId);
+  const where = sinceIso ? ` WHERE MetaData.LastUpdatedTime > '${sinceIso}'` : "";
+  const query = `SELECT * FROM ${entity}${where} STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+  const url = `${baseUrl}/v3/company/${integration.companyId}/query?query=${encodeURIComponent(query)}&minorversion=65`;
+  const response = await qboFetchWithRetry(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    if (response.status === 401 || response.status === 400) {
+      throw new Error("QuickBooks connection needs reauthorization");
+    }
+    throw new Error(`Could not reach QuickBooks, please try again (${response.status}): ${errText}`);
+  }
+  const data = (await response.json()) as any;
+  return tagEntity(data.QueryResponse?.[entity] || [], entity);
+}
+
+/** All QBO credit memos (optionally changed since a time), tagged TxnType=CreditMemo. */
+export async function fetchQboCreditMemos(tenantId: string, since?: Date | null): Promise<any[]> {
+  const sinceIso = since ? new Date(since).toISOString() : undefined;
+  const all: any[] = [];
+  const max = 1000;
+  for (let start = 1; ; start += max) {
+    const page = await qboQueryPage(tenantId, "CreditMemo", start, max, sinceIso);
+    all.push(...page);
+    if (page.length < max) break;
+  }
+  return all;
+}
+
+
 /**
  * Fetches recent invoices from QBO based on last sync date or a specific query.
  */
@@ -320,6 +393,9 @@ export async function fetchQboInvoices(
 
   const data = (await response.json()) as any;
   const rawInvoices = data.QueryResponse?.Invoice || [];
+  // Credit memos changed in the same window (same lastSyncAt cut-off).
+  const since = options?.lastSyncAt || integration.lastSyncAt || null;
+  rawInvoices.push(...(await fetchQboCreditMemos(tenantId, since)));
 
   await prisma.integration.update({
     where: { id: integration.id },
@@ -339,44 +415,17 @@ export async function fetchQboInvoicePage(
   cursor: number | null,
   options?: { maxResults?: number },
 ): Promise<{ records: any[]; nextCursor: number | null }> {
-  const accessToken = await getValidQboAccessToken(tenantId);
-  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
-
-  if (!integration) {
-    throw new Error(`Integration details not found for tenant ${tenantId}`);
-  }
-
-  const realmId = integration.companyId;
-  const baseUrl = await getQboBaseUrl(tenantId);
+  // Two phases share one numeric cursor: positive = Invoice STARTPOSITION,
+  // negative = CreditMemo STARTPOSITION (negated). Invoices first, then credit memos.
   const maxResults = options?.maxResults ?? 1000;
-  const startPosition = cursor ?? 1;
-
-  const query = `SELECT * FROM Invoice STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
-  const url = `${baseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(query)}&minorversion=65`;
-
-  const response = await qboFetchWithRetry(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    if (response.status === 401 || response.status === 400) {
-      throw new Error("QuickBooks connection needs reauthorization");
-    }
-    throw new Error(
-      `Could not reach QuickBooks, please try again (${response.status}): ${errText}`,
-    );
+  if (cursor !== null && cursor < 0) {
+    const start = -cursor;
+    const records = await qboQueryPage(tenantId, "CreditMemo", start, maxResults);
+    return { records, nextCursor: records.length < maxResults ? null : -(start + maxResults) };
   }
-
-  const data = (await response.json()) as any;
-  const records = data.QueryResponse?.Invoice || [];
-  const nextCursor = records.length < maxResults ? null : startPosition + maxResults;
-
-  return { records, nextCursor };
+  const startPosition = cursor ?? 1;
+  const records = await qboQueryPage(tenantId, "Invoice", startPosition, maxResults);
+  return { records, nextCursor: records.length < maxResults ? -1 : startPosition + maxResults };
 }
 
 /**
@@ -416,6 +465,7 @@ export async function fetchAllQboInvoicesPaginated(
 export async function fetchSingleQboInvoice(
   tenantId: string,
   qboInvoiceId: string,
+  entity: QboTxnEntity = "Invoice",
 ): Promise<any> {
   const accessToken = await getValidQboAccessToken(tenantId);
   const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
@@ -426,7 +476,7 @@ export async function fetchSingleQboInvoice(
 
   const realmId = integration.companyId;
   const baseUrl = await getQboBaseUrl(tenantId);
-  const url = `${baseUrl}/v3/company/${realmId}/invoice/${qboInvoiceId}?minorversion=65`;
+  const url = `${baseUrl}/v3/company/${realmId}/${entity.toLowerCase()}/${qboInvoiceId}?minorversion=65`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -439,12 +489,12 @@ export async function fetchSingleQboInvoice(
   if (!response.ok) {
     const errText = await response.text();
     throw new Error(
-      `Failed to fetch QBO Invoice ${qboInvoiceId} (${response.status}): ${errText}`,
+      `Failed to fetch QBO ${entity} ${qboInvoiceId} (${response.status}): ${errText}`,
     );
   }
 
   const data = (await response.json()) as any;
-  return data.Invoice;
+  return entity === "CreditMemo" ? { ...data.CreditMemo, TxnType: "CreditMemo" } : data.Invoice;
 }
 
 /**
@@ -542,7 +592,10 @@ export async function ingestQboInvoice(
 ): Promise<any> {
   const qboId = String(rawInvoice.Id);
   const docNumber = String(rawInvoice.DocNumber || `QBO-${qboId}`).trim();
-  const clientInvoiceId = docNumber; // DocNumber is business key — qboId preserved in qboInvoiceId column
+  const isCreditMemo = isQboCreditMemo(rawInvoice);
+  // DocNumber is the business key ("CM-" prefixed for credit memos, which QBO
+  // numbers separately) — qboId preserved in qboInvoiceId, DocNumber in documentNumber.
+  const clientInvoiceId = qboClientInvoiceId(rawInvoice);
 
   // Check if invoice already exists by DocNumber (primary) or by legacy qboId
   let existing = await prisma.invoice.findFirst({
@@ -550,7 +603,10 @@ export async function ingestQboInvoice(
   });
   if (!existing) {
     existing = await prisma.invoice.findFirst({
-      where: { tenantId, qboInvoiceId: qboId },
+      // QBO Ids are per entity, so an Invoice and a CreditMemo may share one.
+      where: isCreditMemo
+        ? { tenantId, qboInvoiceId: qboId, invoiceType: "CREDIT_NOTE" }
+        : { tenantId, qboInvoiceId: qboId, NOT: { invoiceType: "CREDIT_NOTE" } },
     });
     if (existing) {
       // Legacy row still keyed by numeric Id — will be backfilled by migration; update in place
@@ -575,7 +631,7 @@ export async function ingestQboInvoice(
     await prisma.validationError.create({
       data: {
         tenantId,
-        clientInvoiceNumber: docNumber,
+        clientInvoiceNumber: clientInvoiceId,
         errorCategory: "INVALID_TIN_FORMAT",
         fieldAffected: "metadata",
         errorMessage: `QuickBooks validation failed: ${errorMsg}`,
@@ -585,7 +641,7 @@ export async function ingestQboInvoice(
       },
     });
     throw new Error(
-      `Validation failed for QBO Invoice ${docNumber}: ${errorMsg}`,
+      `Validation failed for QBO ${isCreditMemo ? "Credit Memo" : "Invoice"} ${docNumber}: ${errorMsg}`,
     );
   }
 
@@ -748,7 +804,7 @@ export async function ingestQboInvoice(
   if (shouldAutoEnqueue) {
     const validatedPayload = invoiceIngestionSchema.parse({
       tenantId,
-      clientInvoiceNumber: docNumber,
+      clientInvoiceNumber: clientInvoiceId,
       documentNumber: docNumber,
       invoiceType: resolvedInvoiceType as any,
       invoiceKind: resolvedInvoiceKind as any,
@@ -769,7 +825,7 @@ export async function ingestQboInvoice(
         vatRate: li.vatRate,
       })),
     });
-    await invoiceQueue.add("signInvoice", { ...validatedPayload, dbInvoiceId: dbInvoice.id, tenantErpId }, { idempotencyKey: `${tenantId}:${docNumber}` });
+    await invoiceQueue.add("signInvoice", { ...validatedPayload, dbInvoiceId: dbInvoice.id, tenantErpId }, { idempotencyKey: `${tenantId}:${clientInvoiceId}` });
     console.log(`Successfully ingested and enqueued QBO Invoice ${clientInvoiceId} (qboId ${qboId}) for tenant ${tenantId} — auto-enqueue ON`);
   } else {
     console.log(`QBO Invoice ${clientInvoiceId} (qboId ${qboId}) ingested to preview inbox for tenant ${tenantId} — awaiting operator approval (autoEnqueue OFF)`);
@@ -783,11 +839,12 @@ export async function ingestQboInvoice(
 export async function fetchAndIngestSpecificQboInvoice(
   tenantId: string,
   qboInvoiceId: string,
+  entity: QboTxnEntity = "Invoice",
 ): Promise<any> {
   console.log(
     `Webhook Trigger: Fetching and ingesting specific QBO Invoice ${qboInvoiceId} for tenant ${tenantId}`,
   );
-  const rawInvoice = await fetchSingleQboInvoice(tenantId, qboInvoiceId);
+  const rawInvoice = await fetchSingleQboInvoice(tenantId, qboInvoiceId, entity);
   return ingestQboInvoice(tenantId, rawInvoice);
 }
 
@@ -817,10 +874,13 @@ export async function writebackToQbo(
   // The hub's business key is the QBO DocNumber, but QBO's API addresses
   // invoices by their immutable internal Id. Writing with the DocNumber would
   // update a different invoice (or fail), so resolve the stored QBO Id first.
-  const hubInvoice = await prisma.invoice.findFirst({
-    where: { tenantId, OR: [{ clientInvoiceId }, { qboInvoiceId: clientInvoiceId }] },
-    select: { clientInvoiceId: true, qboInvoiceId: true },
-  });
+  // Exact hub number first: a DocNumber like "45" can equal another record's
+  // QBO Id (Invoice and CreditMemo Ids are separate sequences).
+  const hubSelect = { clientInvoiceId: true, qboInvoiceId: true, invoiceType: true } as const;
+  const hubInvoice =
+    (await prisma.invoice.findFirst({ where: { tenantId, clientInvoiceId }, select: hubSelect })) ||
+    (await prisma.invoice.findFirst({ where: { tenantId, qboInvoiceId: clientInvoiceId }, select: hubSelect }));
+  const entity = qboEntityForInvoiceType(hubInvoice?.invoiceType);
   if (hubInvoice && !hubInvoice.qboInvoiceId) {
     throw new Error(`No QBO invoice Id on file for ${clientInvoiceId} (tenant ${tenantId}) - cannot write back safely`);
   }
@@ -829,14 +889,14 @@ export async function writebackToQbo(
 
   // Fail loudly if the live invoice can't be read: a guessed SyncToken would be
   // rejected by QBO as a stale update anyway.
-  const liveInvoice = await fetchSingleQboInvoice(tenantId, qboId);
+  const liveInvoice = await fetchSingleQboInvoice(tenantId, qboId, entity);
   const syncToken: string = liveInvoice.SyncToken || "0";
 
   // 2. Primary writeback: PrivateNote. This field exists on every QBO plan and
   // needs no custom-field setup, so the IRN is always visible on the invoice
   // inside QuickBooks. Existing note text is preserved and the stamp is
   // appended once (re-runs do not duplicate it).
-  const url = `${baseUrl}/v3/company/${realmId}/invoice?minorversion=65`;
+  const url = `${baseUrl}/v3/company/${realmId}/${entity.toLowerCase()}?minorversion=65`;
   const headers = {
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
@@ -890,7 +950,7 @@ ${qrLine}`;
       form.append(
         "file_metadata_0",
         new Blob([JSON.stringify({
-          AttachableRef: [{ EntityRef: { type: "Invoice", value: String(qboId) } }],
+          AttachableRef: [{ EntityRef: { type: entity, value: String(qboId) } }],
           FileName: `CittaEFS-QR-${irn.replace(/[^A-Za-z0-9_-]/g, "")}.png`,
           ContentType: "image/png",
         })], { type: "application/json" }),
@@ -916,7 +976,7 @@ ${qrLine}`;
   // them defined. Failure here never fails the writeback (the note above
   // already carries the IRN).
   try {
-    const newSyncToken = data?.Invoice?.SyncToken || syncToken; // attachments do not change the invoice SyncToken
+    const newSyncToken = data?.[entity]?.SyncToken || syncToken; // attachments do not change the invoice SyncToken
     const cfRes = await fetch(url, {
       method: "POST",
       headers,
@@ -950,6 +1010,7 @@ export async function writebackProblemToQbo(
   tenantId: string,
   qboInvoiceId: string,
   problem: string,
+  entity: QboTxnEntity = "Invoice",
 ): Promise<void> {
   const accessToken = await getValidQboAccessToken(tenantId);
   const integration = await prisma.integration.findFirst({
@@ -965,7 +1026,7 @@ export async function writebackProblemToQbo(
   let syncToken = "0";
   let existingNote = "";
   try {
-    const rawInvoice = await fetchSingleQboInvoice(tenantId, qboInvoiceId);
+    const rawInvoice = await fetchSingleQboInvoice(tenantId, qboInvoiceId, entity);
     syncToken = rawInvoice.SyncToken || "0";
     existingNote = rawInvoice.PrivateNote || "";
   } catch (e: any) {
@@ -982,7 +1043,7 @@ export async function writebackProblemToQbo(
     .filter(Boolean)
     .join("\n");
 
-  const url = `${baseUrl}/v3/company/${realmId}/invoice?minorversion=65`;
+  const url = `${baseUrl}/v3/company/${realmId}/${entity.toLowerCase()}?minorversion=65`;
   const where = { tenantId, OR: [{ qboInvoiceId }, { clientInvoiceId: qboInvoiceId }] };
   const response = await fetch(url, {
     method: "POST",

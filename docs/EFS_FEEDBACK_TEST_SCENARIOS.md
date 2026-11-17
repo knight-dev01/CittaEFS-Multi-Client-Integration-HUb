@@ -28,7 +28,7 @@ Goal: create invoices in each ERP, let the hub send them to CittaEFS, and confir
 
 ## 2. Invoice scenarios — QuickBooks Online
 
-The hub pulls **Invoices** from QBO (Sales → Invoices). It does **not** pull QBO *Credit memos* yet (see Known gaps).
+The hub pulls **Invoices** and **Credit memos** from QBO. Credit memos are stored in the hub as `CM-<number>` (QBO numbers them separately from invoices).
 
 | # | Create in QBO | Expected hub/EFS result | Expected email | Expected QBO writeback |
 |---|---------------|-------------------------|----------------|------------------------|
@@ -43,7 +43,10 @@ The hub pulls **Invoices** from QBO (Sales → Invoices). It does **not** pull Q
 | Q9 | **Bulk**: create 10 invoices quickly, 3 with unmapped items | 7 approved, 3 errors | **One** error email listing all 3 (not 3 emails); one approval email listing 7 | Per invoice |
 | Q10 | **Foreign currency** (USD customer) | Check it's approved with currency USD | Approval email shows `$` amount | IRN + QR |
 | Q11 | **Zero-rated / exempt line** (VAT 0%) | Approved, or a clear EFS rejection | Matching email | Matching writeback |
-| Q12 | **Invoice number with a dash** (`INV-1001`, QBO default style) | Confirm the hub accepts it (the template rule is caps + numbers only) — if rejected, the error email must say why | Error or approval | — |
+| Q12 | **Invoice number with a dash** (`INV-1001`) | Sent to EFS as `INV1001`; approved. Hub, ERP and email still show `INV-1001` | Approval email | IRN + QR |
+| Q13 | **Credit memo with a linked invoice**: Q1 approved, then create a Credit memo for the same customer and *apply it to that invoice* (so QBO links them) | Hub row `CM-<no>`, type 380, original IRN as billing reference; approved | Approval email listing `CM-<no>` | IRN + QR on the **credit memo** |
+| Q14 | **Credit memo not linked to any invoice** (most common in QBO) | EFS rejects: billing reference required | Error email asking for the original invoice; operator adds the original IRN in the hub and retries | Problem note on the credit memo |
+| Q15 | **Credit memo and invoice with the same number** (e.g. both `1005`) | Both ingested: `1005` and `CM-1005` | One email line each | Each to its own record |
 
 ## 3. Invoice scenarios — Odoo
 
@@ -61,7 +64,7 @@ The hub pulls customer invoices (`out_invoice`) and credit notes (`out_refund`).
 | O8 | **EFS/NRS rejection** | `GATEWAY_REJECTED` | Error email with EFS reason | Problem note |
 | O9 | **Draft invoice** (not confirmed) | Not picked up | No email | None |
 | O10 | **Fix and resend** O6/O7 | Approved | Approval email | IRN + QR |
-| O11 | **Odoo-style number** (`INV/2026/00012`) | Confirm accepted (slashes vs the caps+numbers rule) | Error or approval | — |
+| O11 | **Odoo-style number** (`INV/2026/00012`) | Sent to EFS as `INV202600012`; approved. Odoo and email still show `INV/2026/00012` | Approval email | IRN + QR |
 
 ## 4. Email behaviour checks
 
@@ -77,8 +80,8 @@ The hub pulls customer invoices (`out_invoice`) and credit notes (`out_refund`).
 | E8 | First deploy with existing history | No flood: old errors/approvals are pre-marked as sent by the migrations |
 | E9 | Reply to a feedback email | Email says not monitored; auto-replies suppressed |
 
-## Known gaps found while writing this
+## Notes
 
-- **QBO credit memos are not synced** — the QBO pull only queries `Invoice`. QBO credit notes need a `CreditMemo` query before Q-series credit-note tests are possible.
-- **Keyword HS-code guessing still exists in `src/adapters/connectorAdapters.ts`** (`inferServiceCode`) even though the worker no longer guesses. Q5/O6 may be auto-classified instead of erroring until that's removed.
-- **Invoice-number rule** (`INVOICE_NUMBER_PATTERN`: caps + digits only) may reject default QBO (`INV-1001`) and Odoo (`INV/2026/00012`) numbers — Q12/O11 will tell you.
+- **Tax codes are never guessed.** A line gets its HS/service code only from the Item mapping (Items page) or a code the ERP sent. Unmapped lines produce the `MISSING_HS_CODE` error email (Q5/O6) - map the item, then resend.
+- **Invoice numbers.** CittaEFS accepts A-Z and 0-9 only, so the hub sends `INV-1001` as `INV1001`. Two ERP numbers that differ only by symbols (`INV-1` and `INV1`) become the same EFS number, and EFS rejects the second as a duplicate - the error email says so.
+- **QBO credit memos** usually aren't linked to an invoice in QuickBooks. When they aren't, add the original IRN on the credit note in the hub and retry (Q14).

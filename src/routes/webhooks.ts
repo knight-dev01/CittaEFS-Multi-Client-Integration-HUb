@@ -251,13 +251,14 @@ router.post("/api/webhooks/qbo", async (req, res) => {
         const entities = notification.dataChangeEvent?.entities || [];
         for (const entity of entities) {
           if (
-            entity.name === "Invoice" &&
+            (entity.name === "Invoice" || entity.name === "CreditMemo") &&
             (entity.operation === "Create" || entity.operation === "Update")
           ) {
             try {
               await fetchAndIngestSpecificQboInvoice(
                 integration.tenantId,
                 entity.id,
+                entity.name,
               );
             } catch (err: any) {
               console.error(

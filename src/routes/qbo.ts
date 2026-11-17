@@ -12,6 +12,8 @@ import {
   fetchQboCompanyInfo,
   ingestQboInvoice,
   writebackProblemToQbo,
+  qboClientInvoiceId,
+  isQboCreditMemo,
   getTenantQboEnvironment,
   getQboCredentialsForEnvironment,
   QBO_OAUTH_PROVIDER,
@@ -214,14 +216,14 @@ router.post("/api/integrations/qbo/sync", async (req: any, res) => {
         }
       },
       // ingestQboInvoice dedupes on DocNumber, so the pipeline must count on it too.
-      dedupeKey: (raw) => String(raw.DocNumber || raw.Id),
+      dedupeKey: (raw) => qboClientInvoiceId(raw),
       ingest: (raw) => ingestQboInvoice(tenantId, raw),
       onRecordError: ({ record, key, error }) => {
         console.warn(`[QBO Sync Warning] Skipped invoice ${key}: ${error.message}`);
         // Mirror the rejection into QuickBooks on the invoice's PrivateNote so
         // the client can fix it without leaving QBO. Best-effort: a failed
         // writeback must not stop the rest of the sync.
-        writebackProblemToQbo(tenantId, String(record.Id), error.message).catch(
+        writebackProblemToQbo(tenantId, String(record.Id), error.message, isQboCreditMemo(record) ? "CreditMemo" : "Invoice").catch(
           (wbErr) =>
             console.warn(
               `[QBO Sync Warning] Could not write problem back for invoice ${key}: ${wbErr.message}`,

@@ -6,6 +6,7 @@ export interface ErpProblemInvoice {
   clientInvoiceId?: string | null;
   qboInvoiceId?: string | null;
   odooInvoiceId?: string | null;
+  invoiceType?: string | null;
 }
 
 /**
@@ -39,11 +40,14 @@ export async function writeProblemBackToSourceErp(
     }
 
     if (invoice.sourceErp === "qbo") {
-      const { writebackProblemToQbo } = await import("../services/qboService");
+      const { writebackProblemToQbo, qboEntityForInvoiceType } = await import("../services/qboService");
+      // Queue jobs carry the type under data.invoiceType; invoice rows at the top level.
+      const invoiceType = invoice.invoiceType ?? (invoice as any).data?.invoiceType ?? context.invoiceType;
       await writebackProblemToQbo(
         invoice.tenantId,
         String(invoice.qboInvoiceId || invoice.clientInvoiceId || ""),
         summary,
+        qboEntityForInvoiceType(invoiceType),
       );
       return true;
     }
