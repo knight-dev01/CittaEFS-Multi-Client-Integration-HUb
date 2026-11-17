@@ -288,7 +288,7 @@ export function SettingsTab() {
         <CardBody className="space-y-4">
           {notifyError && <Notice tone="fail" title="Notification problem">{notifyError}</Notice>}
           {recipients && !recipients.mailConfigured && (
-            <Notice tone="fail" title="Email is off">The server has no SMTP settings (SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM), so nothing is sent yet.</Notice>
+            <Notice tone="fail" title="Email is off">The server has no email settings (MAIL_FROM plus BREVO_API_KEY, or SMTP_HOST, SMTP_USER, SMTP_PASS), so nothing is sent yet.</Notice>
           )}
           <div className="rounded-md border border-gray-200 p-3 text-sm space-y-2">
             <div className="flex items-center justify-between gap-2">

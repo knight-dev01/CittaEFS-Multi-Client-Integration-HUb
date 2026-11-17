@@ -613,7 +613,7 @@ router.post("/api/system/error-digest/run", async (req: any, res) => {
     const tenantId = req.body?.tenantId ? String(req.body.tenantId) : undefined;
     if (tenantId && !canAccessTenant(req, tenantId)) return res.status(403).json({ success: false, error: "Forbidden" });
     const report = await runErrorDigestCron({ tenantId });
-    if (report.skipped) return res.status(503).json({ success: false, error: `Email not sent: ${report.skipped}. Set SMTP_HOST, SMTP_USER, SMTP_PASS and MAIL_FROM.`, report });
+    if (report.skipped) return res.status(503).json({ success: false, error: `Email not sent: ${report.skipped}. Set MAIL_FROM plus BREVO_API_KEY (or SMTP_HOST, SMTP_USER, SMTP_PASS).`, report });
     const approvals = await runApprovalDigestCron({ tenantId });
     res.json({ success: report.failures.length === 0 && approvals.failures.length === 0, report, approvals });
   } catch (e: any) {
@@ -656,7 +656,7 @@ router.post("/api/tenants/:id/feedback-test-email", async (req: any, res) => {
     const tenant = await prisma.tenant.findUnique({ where: { id }, select: { companyName: true, notificationEmail: true } });
     if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
     const { isMailConfigured, sendMail } = await import("../services/mailer");
-    if (!isMailConfigured()) return res.status(503).json({ success: false, error: "Email is not configured on the server (SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM)." });
+    if (!isMailConfigured()) return res.status(503).json({ success: false, error: "Email is not configured on the server (MAIL_FROM plus BREVO_API_KEY, or SMTP_HOST, SMTP_USER, SMTP_PASS)." });
     const { resolveRecipientsDetailed } = await import("../crons/errorDigest");
     const r = await resolveRecipientsDetailed(id, tenant.notificationEmail);
     if (!r.recipients.length) return res.status(400).json({ success: false, error: "No usable recipient. Add a notification email in Settings.", rejected: r.rejected });
