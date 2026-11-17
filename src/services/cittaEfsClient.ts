@@ -391,7 +391,9 @@ export class CittaEfsClient {
   ): Promise<CittaEfsResponse> {
     const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(payload.tenantId);
 
-    const invoiceNumber = payload.clientInvoiceNumber;
+    // EFS accepts A-Z/0-9 only; the ERP's own number goes as documentNumber.
+    const { toEfsInvoiceNumber } = await import("../lib/efsInvoiceNumber");
+    const invoiceNumber = toEfsInvoiceNumber(payload.clientInvoiceNumber);
     const issueDate = payload.issueDate;
     const customerCode = payload.customerCode;
     const originalIrn = payload.originalIrn;

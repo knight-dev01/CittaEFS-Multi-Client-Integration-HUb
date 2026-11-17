@@ -7,6 +7,7 @@ import { fetchAndIngestSpecificQboInvoice } from "../services/qboService";
 import { cittaEfsClient } from "../services/cittaEfsClient";
 import { writeProblemBackToSourceErp } from "../lib/erpProblemWriteback";
 import { dispatchMerchantWebhook } from "../services/merchantWebhook";
+import { toEfsInvoiceNumber } from "../lib/efsInvoiceNumber";
 
 const router = Router();
 
@@ -71,9 +72,21 @@ async function handleCittaEfsWebhook(req: any, res: any) {
     const lookupClauses: any[] = [];
     if (irn) lookupClauses.push({ irn });
     if (invoiceNumber) lookupClauses.push({ clientInvoiceId: invoiceNumber });
-    const inv = lookupClauses.length
+    // EFS echoes the ERP's original number as sourceNbr / documentNumber.
+    const sourceNbr = data?.sourceNbr || data?.documentNumber;
+    if (sourceNbr) lookupClauses.push({ clientInvoiceId: String(sourceNbr) });
+    let inv = lookupClauses.length
       ? await prisma.invoice.findFirst({ where: { OR: lookupClauses } })
       : null;
+    // EFS's invoiceNumber is the A-Z/0-9 form of the ERP number ("INV-1001" was
+    // sent as "INV1001"), so match on the same normalisation (expression-indexed).
+    if (!inv && invoiceNumber) {
+      const rows = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM invoices
+        WHERE UPPER(regexp_replace(client_invoice_id, '[^A-Za-z0-9]', '', 'g')) = ${toEfsInvoiceNumber(invoiceNumber)}
+        ORDER BY created_at DESC LIMIT 1`;
+      if (rows[0]) inv = await prisma.invoice.findUnique({ where: { id: rows[0].id } });
+    }
 
     if (inv) {
       if (webhookId) {

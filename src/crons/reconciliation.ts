@@ -95,12 +95,13 @@ export async function runNrsReconciliationCron(tenantId?: string): Promise<Recon
       byTenant.set(p.tenantId, arr);
     }
     const { cittaEfsClient } = await import('../services/cittaEfsClient');
+    const { toEfsInvoiceNumber } = await import('../lib/efsInvoiceNumber');
     for (const [tid, invoices] of byTenant) {
       try {
         const archive: any[] = await cittaEfsClient.getArchive(tid).catch(()=>[]);
         const archiveByNumber = new Map(archive.map((a: any) => [String(a.invoiceNumber || a.clientInvoiceNumber), a]));
         for (const inv of invoices) {
-          const match = archiveByNumber.get(String(inv.clientInvoiceId)) || archiveByNumber.get(String(inv.documentNumber || ''));
+          const match = archiveByNumber.get(toEfsInvoiceNumber(inv.clientInvoiceId)) || archiveByNumber.get(String(inv.clientInvoiceId)) || archiveByNumber.get(String(inv.documentNumber || ''));
           if (match && (match.irn || match.Irn)) {
             const irn = match.irn || match.Irn;
             const csid = match.csid || match.Csid || null;
