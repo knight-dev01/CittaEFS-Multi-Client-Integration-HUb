@@ -88,7 +88,7 @@ async function startServer() {
   // origin(s), e.g. "https://citta-hub.vercel.app". A blanket *.vercel.app match
   // would let any Vercel-hosted site make credentialed calls.
   const configuredOrigins=[process.env.ALLOWED_ORIGINS||"", process.env.APP_URL||""].join(",").split(",").map(s=>s.trim().replace(/\/$/,"")).filter(Boolean);
-  const defaultAllow=["https://cittaefs-multi-client-integration-hub.onrender.com", ...(process.env.NODE_ENV!=="production"?["http://localhost:3000","http://localhost:5173"]:[])];
+  const defaultAllow=["https://cittaefs-multi-client-integration-hub.onrender.com", "https://citta-efs-multi-client-integration.vercel.app",...(process.env.NODE_ENV!=="production"?["http://localhost:3000","http://localhost:5173"]:[])];
   const corsAllowList=Array.from(new Set([...configuredOrigins, ...defaultAllow]));
   if (process.env.NODE_ENV==="production" && !process.env.ALLOWED_ORIGINS) console.warn("[CORS] ALLOWED_ORIGINS not set — only", corsAllowList.join(", "), "may call the API cross-origin");
   function isOriginAllowed(origin?:string):boolean{ if(!origin) return true; if(corsAllowList.includes(origin)) return true; if(process.env.NODE_ENV!=="production") return true; return false; }
