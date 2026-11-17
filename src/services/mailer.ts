@@ -1,4 +1,3 @@
-import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
 /**
@@ -28,8 +27,13 @@ export function isMailConfigured(): boolean {
   );
 }
 
-function getTransport(): Transporter {
+async function getTransport(): Promise<Transporter> {
   if (cached) return cached;
+  // Loaded on first send, not at startup: if the library cannot load on this
+  // Node version, only sending fails (with the real reason) instead of leaving
+  // the feedback-email modules half-initialised.
+  const mod: any = await import("nodemailer");
+  const nodemailer = mod.default ?? mod;
   const port = Number(process.env.SMTP_PORT || 587);
   cached = nodemailer.createTransport({
     host: process.env.SMTP_HOST!.trim(),
@@ -45,7 +49,7 @@ function getTransport(): Transporter {
 
 export async function sendMail(mail: OutboundMail): Promise<{ messageId: string }> {
   if (!isMailConfigured()) throw new Error("SMTP is not configured (SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM)");
-  const info = await getTransport().sendMail({
+  const info = await (await getTransport()).sendMail({
     from: process.env.MAIL_FROM!.trim(),
     to: mail.to.join(", "),
     ...(process.env.MAIL_BCC?.trim() ? { bcc: process.env.MAIL_BCC.trim() } : {}),

@@ -617,6 +617,7 @@ router.post("/api/system/error-digest/run", async (req: any, res) => {
     const approvals = await runApprovalDigestCron({ tenantId });
     res.json({ success: report.failures.length === 0 && approvals.failures.length === 0, report, approvals });
   } catch (e: any) {
+    console.error("[FeedbackEmail] route error:", e?.stack || e);
     res.status(500).json({ success: false, error: e.message });
   }
 });
@@ -642,6 +643,7 @@ router.get("/api/tenants/:id/feedback-recipients", async (req: any, res) => {
       rejected: r.rejected,
     });
   } catch (e: any) {
+    console.error("[FeedbackEmail] route error:", e?.stack || e);
     res.status(500).json({ success: false, error: e.message });
   }
 });
