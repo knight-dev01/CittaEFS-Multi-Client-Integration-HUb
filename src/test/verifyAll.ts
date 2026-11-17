@@ -79,6 +79,18 @@ function assert(
   });
 }
 
+// The hub never guesses HS / service codes: an unmapped product is rejected
+// until the tenant maps it in the Item Dictionary. Tests map their items the
+// same way a real user does.
+async function mapTestItem(tenantId: string, clientSku: string, hsOrServiceCode: string) {
+  const existing = await prisma.item.findFirst({ where: { tenantId, clientSku } });
+  if (existing) {
+    await prisma.item.update({ where: { id: existing.id }, data: { hsOrServiceCode, isService: true, categoryType: "SERVICE" } });
+  } else {
+    await prisma.item.create({ data: { tenantId, clientSku, description: clientSku, hsOrServiceCode, isService: true, categoryType: "SERVICE" } });
+  }
+}
+
 async function runAllTests() {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_VERIFICATION_WRITES !== 'true') {
     console.log('Verification test suite is disabled in production. Set ALLOW_VERIFICATION_WRITES=true to enable.');
@@ -815,8 +827,10 @@ async function runAllTests() {
       "CittaEFS Gateway Client",
       "Inbound Client Ledger Writeback Contract",
       "Runtime",
-      wb.synced,
-      "Writeback succeeds with client ledger update",
+      // INV-HMAC-TEST-01 only exists on the gateway, not in the hub, so no ERP
+      // ledger can be updated. The client must say so rather than report success.
+      !wb.synced && wb.message.includes("No source-ERP writeback performed"),
+      "Reports that no ERP ledger was updated for an invoice the hub does not hold (no false success)",
       `Writeback result: ${wb.message}`,
     );
   } catch (err: any) {
@@ -1346,6 +1360,7 @@ async function runAllTests() {
       ],
     };
 
+    await mapTestItem("tenant_qbo", "SRV-CONSULT", "7020"); // 7020 = Management consultancy activities
     const ingested = await ingestQboInvoice("tenant_qbo", rawQboInvoice);
     assert(
       "QuickBooks Integration",
@@ -1583,6 +1598,7 @@ async function runAllTests() {
     );
 
     // 4. Ingestion test — full pipeline (validate, transform, HS inference, master-data upsert, DB insert)
+    await mapTestItem("tenant_qbo", "SRV-CONSULT", "7020");
     const ingested = await ingestOdooInvoice("tenant_qbo", composed);
     assert(
       "Odoo Integration",
