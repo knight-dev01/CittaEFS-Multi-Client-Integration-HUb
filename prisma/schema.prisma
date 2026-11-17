@@ -24,6 +24,7 @@ model Tenant {
   cittaMode        String   @default("live") @map("citta_mode") // live | test — which gateway credentials are currently active in cittaGatewayUrl/cittaApiKey
   cittaOtherModeConfig String? @map("citta_other_mode_config") // JSON {url, apiKey} snapshot of whichever mode (live/test) is NOT currently active — swapped in on toggle
   cittaWritebackTarget String @default("BOTH") @map("citta_writeback_target") // HUB | CITTAEFS | BOTH — default BOTH so Hub invoices forward to CittaEFS
+  notificationEmail String? @map("notification_email") // comma-separated recipients for EFS feedback emails; empty -> the connected ERP company email, then the tenant's hub users
   erpConfig        String?  @map("erp_config") // JSON string per-ERP config & matching rules (legacy single)
   lastSyncAt       DateTime @default(now()) @map("last_sync_at")
   createdAt        DateTime @default(now()) @map("created_at")
@@ -191,6 +192,7 @@ model Invoice {
   pdfSignedUrl          String?   @map("pdf_signed_url")
   rawPayloadHash        String?   @map("raw_payload_hash")
   ledgerWritebackStatus String    @default("PENDING") @map("ledger_writeback_status") // PENDING → SYNCED|FAILED
+  feedbackNotifiedAt    DateTime? @map("feedback_notified_at") // set once the approval (IRN issued) was included in an emailed EFS feedback summary
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
@@ -202,6 +204,7 @@ model Invoice {
   @@index([companyId])
   @@index([tenantErpId])
   @@index([status])
+  @@index([feedbackNotifiedAt, status])
   @@map("invoices")
 }
 
@@ -233,12 +236,14 @@ model ValidationError {
   rawPayloadSample    String   @map("raw_payload_sample")
   sourceErp           String?  @map("source_erp") // qbo | odoo | excel — which ingestion path this came from, so "resolve" knows whether it can re-run ingestion from rawPayloadSample when no Invoice was ever created (see src/routes/validation.ts)
   status              String   @default("OPEN")
+  notifiedAt          DateTime? @map("notified_at") // set once the error was included in an emailed digest
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([notifiedAt, status])
   @@map("validation_errors")
 }
 

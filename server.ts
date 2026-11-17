@@ -33,6 +33,9 @@ const { JWT_SECRET } = getAuthConfig();
 
 async function startServer() {
   const app = express();
+  // Behind Render/Vercel: trust exactly one proxy hop so req.ip is the real client
+  // and a forged X-Forwarded-For can't dodge the rate limiter.
+  app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
   const PORT = Number(process.env.PORT || 10000);
 
   app.use(express.json({ limit: "10mb", verify: (req:any,res,buf)=>{ req.rawBody = buf; }}));
@@ -54,7 +57,7 @@ async function startServer() {
     const reqId=crypto.randomUUID().slice(0,8);
     req.requestId=reqId;
     const tenantHint=(req.query.tenantId as string) || req.headers['x-tenant-id'] as string || '';
-    if (LOG_VERBOSE) logger.info(`→ ${req.method} ${req.originalUrl}`, { ip:(req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()||req.ip, query:req.query, body:sanitizeBody(req.body)}, { tenantId: tenantHint||undefined, requestId:reqId});
+    if (LOG_VERBOSE) logger.info(`→ ${req.method} ${req.originalUrl}`, { ip:req.ip, query:req.query, body:sanitizeBody(req.body)}, { tenantId: tenantHint||undefined, requestId:reqId});
     res.on('finish',()=>{
       const duration=Date.now()-start;
       const status=res.statusCode;
@@ -73,7 +76,7 @@ async function startServer() {
   setInterval(()=>{ const cutoff=Date.now()-60000; for(const [k,v] of rateBuckets){ const f=v.filter(t=>t>cutoff); if(f.length===0) rateBuckets.delete(k); else rateBuckets.set(k,f);} },60000).unref();
   app.use((req,res,next)=>{
     if (req.method==="OPTIONS" || req.path.startsWith("/health") || req.path==="/api/health") return next();
-    const ip=(req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()||req.ip||(req.socket as any)?.remoteAddress||"unknown";
+    const ip=req.ip||(req.socket as any)?.remoteAddress||"unknown";
     const isAuth=req.path.startsWith("/api/auth/");
     const limit=isAuth?30:300;
     const key=`${ip}:${isAuth?"auth":"api"}`;
@@ -81,10 +84,14 @@ async function startServer() {
     next();
   });
 
-  const allowedOrigins=(process.env.ALLOWED_ORIGINS||process.env.APP_URL||"").split(",").map(s=>s.trim()).filter(Boolean);
-  const defaultAllow=["http://localhost:3000","http://localhost:5173","https://cittaefs-multi-client-integration-hub.onrender.com"];
-  const corsAllowList=allowedOrigins.length>0?allowedOrigins:defaultAllow;
-  function isOriginAllowed(origin?:string):boolean{ if(!origin) return true; if(corsAllowList.includes(origin)) return true; if(origin.endsWith(".vercel.app")) return true; if(process.env.NODE_ENV!=="production") return true; return false; }
+  // Exact-match allow-list only. Set ALLOWED_ORIGINS to the production frontend
+  // origin(s), e.g. "https://citta-hub.vercel.app". A blanket *.vercel.app match
+  // would let any Vercel-hosted site make credentialed calls.
+  const configuredOrigins=[process.env.ALLOWED_ORIGINS||"", process.env.APP_URL||""].join(",").split(",").map(s=>s.trim().replace(/\/$/,"")).filter(Boolean);
+  const defaultAllow=["https://cittaefs-multi-client-integration-hub.onrender.com", ...(process.env.NODE_ENV!=="production"?["http://localhost:3000","http://localhost:5173"]:[])];
+  const corsAllowList=Array.from(new Set([...configuredOrigins, ...defaultAllow]));
+  if (process.env.NODE_ENV==="production" && !process.env.ALLOWED_ORIGINS) console.warn("[CORS] ALLOWED_ORIGINS not set — only", corsAllowList.join(", "), "may call the API cross-origin");
+  function isOriginAllowed(origin?:string):boolean{ if(!origin) return true; if(corsAllowList.includes(origin)) return true; if(process.env.NODE_ENV!=="production") return true; return false; }
   app.use((req,res,next)=>{
     const origin=req.headers.origin as string|undefined;
     if (origin && isOriginAllowed(origin)){ res.setHeader("Access-Control-Allow-Origin", origin); res.setHeader("Vary","Origin"); } else if (!origin){ res.setHeader("Access-Control-Allow-Origin", corsAllowList[0]||"*"); }
@@ -111,13 +118,26 @@ async function startServer() {
     next();
   });
 
+  // Routes reachable without a dashboard session. Everything else under /api
+  // requires a valid JWT — for EVERY method, reads included.
+  //  - webhooks verify their own HMAC; /api/v1 and /api/hub/v1 verify API keys
+  //  - QBO connect/callback are browser navigations (no Bearer header); the
+  //    callback is protected by the signed 15-minute OAuth state token.
+  const PUBLIC_API_PREFIXES=["/api/auth/login","/api/auth/refresh","/api/auth/logout","/api/health","/api/webhooks","/pay2/einvoicehookweb","/api/events","/api/integrations/qbo/connect","/api/integrations/qbo/callback","/api/v1/","/api/hub/v1/"];
   app.use("/api/*", (req,res,next)=>{
     const p=req.baseUrl||req.path;
-    if (req.method==="OPTIONS"||p.startsWith("/api/auth/login")||p.startsWith("/api/auth/refresh")||p.startsWith("/api/auth/register")||p.startsWith("/api/health")||p.startsWith("/api/webhooks")||p.startsWith("/pay2/einvoicehookweb")||p.startsWith("/api/events")||p.startsWith("/api/integrations/qbo/callback")||p.startsWith("/api/connectors")||p.startsWith("/api/cron")||p.startsWith("/api/v1/")||p.startsWith("/api/hub/v1/")) return next();
+    if (req.method==="OPTIONS"||PUBLIC_API_PREFIXES.some(prefix=>p.startsWith(prefix))) return next();
     const bearerToken=req.headers.authorization?.startsWith("Bearer ")? req.headers.authorization.split(" ")[1]:null;
     const token=bearerToken||req.cookies?.token||null;
-    if (!token){ (req as any).tenantId=(req.query.tenantId as string)||"tenant_qbo_smb"; if(req.method==="GET") return next(); return res.status(401).json({ success:false, error:"Authentication token required"}); }
-    try{ const decoded:any=jwt.verify(token,JWT_SECRET); (req as any).user=decoded; (req as any).tenantId=decoded.tenantId||(req.query.tenantId as string)||"tenant_qbo_smb"; next(); } catch(err){ if(req.method==="GET"){ (req as any).tenantId=(req.query.tenantId as string)||"tenant_qbo_smb"; return next(); } return res.clearCookie("token").status(401).json({ success:false, error:"Invalid or expired session token"}); }
+    if (!token) return res.status(401).json({ success:false, error:"Authentication token required"});
+    try{
+      const decoded:any=jwt.verify(token,JWT_SECRET);
+      if (decoded?.type==="refresh"||decoded?.type==="merchant_access") return res.status(401).json({ success:false, error:"Invalid session token"});
+      (req as any).user=decoded;
+      // Non-admins are pinned to their own tenant; admins may target one via ?tenantId=.
+      (req as any).tenantId = decoded.role==="ADMIN" ? (decoded.tenantId||(req.query.tenantId as string)) : decoded.tenantId;
+      next();
+    } catch(err){ return res.clearCookie("token").status(401).json({ success:false, error:"Invalid or expired session token"}); }
   });
 
   app.use(authRouter);
@@ -176,7 +196,7 @@ async function startServer() {
       for (const ig of odooIntegrations) {
         const { ingestOdooInvoice } = await import("./src/services/odooService");
         const rows = await fetchOdooInvoicesSince(ig.tenantId, ig.lastSyncAt || undefined);
-        for (const r of rows) { try { await ingestOdooInvoice(ig.tenantId, r); } catch{} }
+        for (const r of rows) { try { await ingestOdooInvoice(ig.tenantId, r); } catch(err:any){ console.error(`[Cron] Odoo ingest failed for tenant ${ig.tenantId} invoice ${r?.name ?? r?.id}:`, err?.message); } }
         if (rows.length>0) broadcastEvent({ type:"update", method:"CRON", path:"/odoo/reconcile"});
       }
     } catch(e:any){ console.warn("[Cron] Odoo reconcile error:", e.message); }
@@ -190,6 +210,18 @@ async function startServer() {
       if (report.needsReauth>0 || report.failed>0) broadcastEvent({ type:"update", method:"CRON", path:"/erp/health"});
     } catch(e:any){ console.warn("[Cron] ERP health error:", e.message); }
   }, 900000).unref(); // 15m ERP health probe
+  // EFS feedback emails — one packaged email per tenant, sent to the ERP's company email.
+  // Errors go out promptly (every 2 min batches a bulk sync into one email);
+  // approvals (IRN issued) are bundled hourly.
+  const runFeedbackCron = (kind: "error" | "approval") => async () => {
+    try {
+      const m = await import("./src/crons/errorDigest");
+      const r = kind === "error" ? await m.runErrorDigestCron() : await m.runApprovalDigestCron();
+      if (r.tenantsWithoutRecipients.length) console.warn(`[Cron] ${kind} feedback email: no recipients for ${r.tenantsWithoutRecipients.join(", ")} — no ERP company email found; set a notification email in Settings`);
+    } catch(e:any){ console.warn(`[Cron] ${kind} feedback email error:`, e.message); }
+  };
+  setInterval(runFeedbackCron("error"), Number(process.env.ERROR_DIGEST_INTERVAL_MS || 120000)).unref();
+  setInterval(runFeedbackCron("approval"), Number(process.env.APPROVAL_DIGEST_INTERVAL_MS || 3600000)).unref();
 
   (async()=>{
     const redisUrl=process.env.REDIS_URL?.trim()||process.env.REDIS_HOST?.trim();

@@ -699,7 +699,7 @@ export class CittaEfsClient {
   /**
    * Update CittaEFS webhook URL (so gateway knows where to POST invoice.* events)
    * Webhook URL in prod: https://cittastackhook.azurewebsites.net/pay2/einvoicehookweb
-   * Secret: CF35DF20-9309-4506-BCC8-5D17D1DA209A (HMAC-SHA256)
+   * Secret: CITTAEFS_WEBHOOK_SECRET env var (HMAC-SHA256)
    */
   public async updateWebhookUrl(tenantId: string, webhookUrl: string): Promise<any> {
     const { apiKey: decryptedApiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
@@ -728,9 +728,9 @@ export class CittaEfsClient {
 
   public getWebhookConfig(): { webhookUrl: string; secretPreview: string; gatewayUrl: string } {
     const webhookUrl = process.env.CITTA_WEBHOOK_URL?.trim() || process.env.CITTAEFS_WEBHOOK_URL?.trim() || "https://cittastackhook.azurewebsites.net/pay2/einvoicehookweb";
-    const secret = process.env.CITTAEFS_WEBHOOK_SECRET?.trim() || process.env.CITTA_WEBHOOK_SECRET?.trim() || "CF35DF20-9309-4506-BCC8-5D17D1DA209A";
+    const secret = process.env.CITTAEFS_WEBHOOK_SECRET?.trim() || process.env.CITTA_WEBHOOK_SECRET?.trim() || "";
     const gatewayUrl = process.env.CITTAEFS_GATEWAY_URL?.trim() || "https://ei-api.azurewebsites.net";
-    return { webhookUrl, secretPreview: secret.slice(0, 8) + "...", gatewayUrl };
+    return { webhookUrl, secretPreview: secret ? secret.slice(0, 4) + "..." : "NOT CONFIGURED", gatewayUrl };
   }
 
   /**
@@ -752,22 +752,24 @@ export class CittaEfsClient {
       if (tenant?.erpConfig) {
         try { const cfg = JSON.parse(tenant.erpConfig); cittaWritebackUrl = cfg.cittaWritebackUrl || cfg.writebackUrl || null; } catch {}
       }
-      if (!cittaWritebackUrl && tenant?.cittaGatewayUrl) cittaWritebackUrl = `${tenant.cittaGatewayUrl.replace(/\/$/, "")}/api/integration/writeback`;
+      // CittaEFS's published API has no writeback endpoint (it already holds the
+      // IRN it issued), so only POST here when a tenant explicitly configures one.
     } catch {}
     // CittaEFS writeback (hub -> CittaEFS) when target includes CITTAEFS
     if (writebackTarget === "CITTAEFS" || writebackTarget === "BOTH") {
       if (cittaWritebackUrl) {
         try {
           const { apiKey } = await getCittaEfsConfig(tenantId);
-          await httpsRequest(cittaWritebackUrl, {
+          const wbRes = await httpsRequest(cittaWritebackUrl, {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({ tenantId, clientInvoiceNumber, irn, qrCodeUrl, source: "hub" }),
-          }).catch(()=>{});
+          });
+          if (!wbRes.ok) console.warn(`[CittaEFS Writeback] ${cittaWritebackUrl} returned ${wbRes.status}`);
         } catch (e) { console.warn("[CittaEFS Writeback] failed:", (e as any)?.message); }
       }
       if (writebackTarget === "CITTAEFS") {
-        return { synced: true, message: `IRN ${irn} written back to CittaEFS (writebackTarget=CITTAEFS).` };
+        return { synced: false, message: `writebackTarget=CITTAEFS - source ERP ledger not updated for ${clientInvoiceNumber}.` };
       }
     }
     // Hub writeback (ERP ledger writeback) when target is HUB or BOTH — route
@@ -824,9 +826,11 @@ export class CittaEfsClient {
       };
     }
 
+    // Invoice not found, or it came from a source with no ERP writer (manual /
+    // API ingestion). Nothing was written - say so instead of claiming success.
     return {
-      synced: true,
-      message: `Client ledger (${tenantId}) invoice ${clientInvoiceNumber} successfully updated with IRN: ${irn} and QR URL.`,
+      synced: false,
+      message: `No source-ERP writeback performed for ${clientInvoiceNumber} (source ERP not QBO/Odoo or invoice not found). IRN ${irn} is stored in the hub.`,
     };
   }
 }

@@ -1,0 +1,327 @@
+// =============================================================================
+// CittaHub — STREAMLINED SCHEMA (proposal, not applied)
+// -----------------------------------------------------------------------------
+// The Hub is a pass-through: ERP -> validate/map -> CittaEFS -> write IRN back.
+// It only needs to persist:
+//   1. who the client is + their CittaEFS gateway credentials   (Tenant)
+//   2. how to reach their ERP                                    (ErpConnection)
+//   3. the references EFS needs that ERPs don't carry            (CustomerRef, ItemRef)
+//   4. what was submitted and what came back                     (Invoice, InvoiceLine)
+//   5. what went wrong, for operators to fix                     (ValidationError)
+//   6. who did what                                              (AuditLog, User)
+//   7. delivery plumbing                                         (QueueJob, WebhookDelivery)
+//
+// 13 models -> 11. Live schema: prisma/schema.prisma
+// =============================================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// 1. TENANT — the client company and its CittaEFS gateway credentials.
+// Removed: platformType (superseded by ErpConnection), erpConfig (moved to
+// ErpConnection.config), encryptedSecret (written at onboarding, never read),
+// lastSyncAt (lives per-connection), and the hardcoded sk_live_ default on
+// cittaApiKey (a real-looking secret committed to source).
+// -----------------------------------------------------------------------------
+model Tenant {
+  id               String   @id @default(uuid())
+  name             String
+  companyName      String   @map("company_name")
+  tin              String
+  marketTier       String   @map("market_tier")
+  onboardingStatus String   @default("PENDING") @map("onboarding_status")
+  defaultVatRate   Float    @default(7.5) @map("default_vat_rate")
+
+  // CittaEFS gateway — active mode + encrypted credentials
+  cittaMode            String  @default("live") @map("citta_mode")               // live | test
+  cittaGatewayUrl      String? @map("citta_gateway_url")
+  cittaApiKey          String  @map("citta_api_key")                             // encrypted, no default
+  cittaInactiveConfig  String? @map("citta_inactive_config")                     // encrypted JSON {url, apiKey} for the other mode
+  cittaWritebackTarget String  @default("BOTH") @map("citta_writeback_target")   // HUB | CITTAEFS | BOTH
+
+  // Usage quota
+  monthlyAllowance Int @default(1000) @map("monthly_allowance")
+  monthlyUsed      Int @default(0) @map("monthly_used")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  connections      ErpConnection[]
+  customers        CustomerRef[]
+  items            ItemRef[]
+  invoices         Invoice[]
+  validationErrors ValidationError[]
+  auditLogs        AuditLog[]
+  users            User[]
+  queueJobs        QueueJob[]
+
+  @@map("tenants")
+}
+
+// -----------------------------------------------------------------------------
+// 2. ERP CONNECTION — one row per connected ERP account.
+// Replaces THREE overlapping stores: Integration (tokens/API key),
+// TenantErp (status, autoEnqueue, config) and Tenant.erpConfig (Odoo URL/db/
+// username/uid, QBO realm). Today an Odoo connection is split across all three.
+// -----------------------------------------------------------------------------
+model ErpConnection {
+  id          String  @id @default(uuid())
+  tenantId    String  @map("tenant_id")
+  erp         String                                   // qbo | odoo | excel
+  companyId   String? @map("company_id")              // QBO realmId | Odoo database
+  displayName String? @map("display_name")
+
+  // Non-secret settings: Odoo {url, username, uid}; QBO {realmId}; field mapping
+  config String? @map("config")
+
+  // Secrets — always encrypted (AES-256-GCM). Odoo: apiKey only.
+  accessToken    String?   @map("access_token")
+  refreshToken   String?   @map("refresh_token")
+  tokenExpiresAt DateTime? @map("token_expires_at")   // null for static keys (Odoo)
+
+  status      String    @default("CONNECTED")          // CONNECTED | NEEDS_REAUTH | DISCONNECTED
+  autoEnqueue Boolean   @default(true) @map("auto_enqueue")
+  lastSyncAt  DateTime? @map("last_sync_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+
+  @@unique([tenantId, erp, companyId])
+  @@map("erp_connections")
+}
+
+// -----------------------------------------------------------------------------
+// 3a. CUSTOMER REFERENCE — replaces Customer + EntityMapping(CUSTOMER).
+// Per the revision plan, the Hub stores a reference, not a customer record.
+// Removed: street/city/postcode/country/countryCode/stateCode/LGA/email/ccEmail
+// columns (stateCode, localGovernmentCode, countryCode are never referenced;
+// the rest only feed the EFS registration export -> kept as one JSON snapshot).
+// -----------------------------------------------------------------------------
+model CustomerRef {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  sourceErp     String   @map("source_erp")
+  erpCustomerId String   @map("erp_customer_id")       // e.g. CUST42
+  name          String
+  tin           String?                                // present -> B2B
+  cittaRef      String?  @map("citta_ref")             // CittaEFS_Customer_ID once registered
+  status        String   @default("PENDING_REGISTRATION") // PENDING_REGISTRATION | MAPPED
+  exportDetails String?  @map("export_details")       // JSON address/contact snapshot for the EFS upload template
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, erpCustomerId])
+  @@index([tenantId, status])
+  @@map("customer_refs")
+}
+
+// -----------------------------------------------------------------------------
+// 3b. ITEM REFERENCE — the "Item Dictionary". Replaces Item + EntityMapping(ITEM).
+// This one is NOT optional: ERPs (Odoo especially) have no HS-code field, so
+// the SKU -> HS/service code mapping is data only the Hub holds.
+// Removed: taxCategoryCode, productCategory (never written by ingestion),
+// description (ERP owns it), categoryType (derivable from the code's type).
+// -----------------------------------------------------------------------------
+model ItemRef {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  sku             String                                // ERP SKU / Odoo internal reference
+  name            String?
+  hsOrServiceCode String?  @map("hs_or_service_code")  // null = UNMAPPED -> blocks invoices
+  isService       Boolean  @default(false) @map("is_service")
+  vatRate         Float    @default(7.5) @map("vat_rate")
+  unitCode        String   @default("EA") @map("unit_code")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, sku])
+  @@map("item_refs")
+}
+
+// -----------------------------------------------------------------------------
+// 4. INVOICE — the submission record (not a ledger).
+// Changed: qboInvoiceId + odooInvoiceId -> one erpRecordId (writeback target);
+// tenantErpId + companyId -> connectionId. Removed: pdfSignedUrl (never set).
+// -----------------------------------------------------------------------------
+model Invoice {
+  id           String  @id @default(uuid())
+  tenantId     String  @map("tenant_id")
+  connectionId String? @map("connection_id")          // null for API / Excel submissions
+  sourceErp    String? @map("source_erp")             // qbo | odoo | excel | api
+  erpRecordId  String? @map("erp_record_id")          // QBO Id | Odoo account.move id — writeback target
+
+  clientInvoiceId      String  @map("client_invoice_id")   // business key: QBO DocNumber | Odoo name
+  documentNumber       String? @map("document_number")
+  invoiceType          String  @default("STANDARD") @map("invoice_type") // STANDARD | CREDIT_NOTE | DEBIT_NOTE
+  invoiceTypeCode      String? @map("invoice_type_code")   // explicit EFS code (380/381/384/393) when given
+  invoiceKind          String  @default("B2B") @map("invoice_kind")
+  billingReferenceIrns String? @map("billing_reference_irns")
+
+  issueDate    DateTime  @map("issue_date")
+  dueDate      DateTime? @map("due_date")
+  customerCode String    @map("customer_code")
+  customerName String    @map("customer_name")
+  customerTin  String?   @map("customer_tin")
+
+  currency       String @default("NGN")
+  subtotal       Float
+  taxAmount      Float  @map("tax_amount")
+  totalAmount    Float  @map("total_amount")
+  headerDiscount Float  @default(0) @map("header_discount")
+  headerCharges  Float  @default(0) @map("header_charges")
+
+  // CittaEFS result
+  status    String  @default("PENDING_NRS_STAMP")       // PENDING_NRS_STAMP | APPROVED | SIGNED | REJECTED | CANCELLED
+  irn       String? @unique
+  csid      String?
+  qrCodeUrl String? @map("qr_code_url")
+
+  // Delivery back to the client
+  ledgerWritebackStatus String  @default("PENDING") @map("ledger_writeback_status") // PENDING | SYNCED | FAILED
+  callbackUrl           String? @map("callback_url")   // merchant API signed callback
+  rawPayloadHash        String? @map("raw_payload_hash")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connection ErpConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  lines      InvoiceLine[]
+
+  @@unique([tenantId, clientInvoiceId])
+  @@index([tenantId, status])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id              String @id @default(uuid())
+  invoiceId       String @map("invoice_id")
+  lineNum         Int    @map("line_num")
+  itemCode        String @map("item_code")
+  description     String
+  quantity        Float
+  unitPrice       Float  @map("unit_price")
+  taxableAmount   Float  @map("taxable_amount")
+  vatRate         Float  @map("vat_rate")
+  vatAmount       Float  @map("vat_amount")
+  totalAmount     Float  @map("total_amount")
+  hsOrServiceCode String @map("hs_or_service_code")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_line_items")
+}
+
+// -----------------------------------------------------------------------------
+// 5. VALIDATION ERROR — operator work queue.
+// Added: dedupeKey so a re-sync updates the open error instead of inserting a
+// new row each time (the duplicate-rows bug seen on Odoo syncs).
+// -----------------------------------------------------------------------------
+model ValidationError {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  clientInvoiceNumber String   @map("client_invoice_number")
+  sourceErp           String?  @map("source_erp")
+  errorCategory       String   @map("error_category")  // MISSING_HS_CODE | GATEWAY_REJECTED | ...
+  fieldAffected       String   @map("field_affected")
+  errorMessage        String   @map("error_message")
+  rawPayloadSample    String   @map("raw_payload_sample") // lets "resolve" re-run ingestion
+  status              String   @default("OPEN")          // OPEN | RESOLVED
+  dedupeKey           String?  @map("dedupe_key")        // tenant+invoice+category while OPEN; nulled on resolve
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status])
+  @@map("validation_errors")
+}
+
+// -----------------------------------------------------------------------------
+// 6. AUDIT + USERS — unchanged (internal-only hub, RBAC stays).
+// -----------------------------------------------------------------------------
+model AuditLog {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  action            String
+  entityType        String   @map("entity_type")
+  entityRef         String   @map("entity_ref")
+  details           String
+  sha256PayloadHash String   @map("sha256_payload_hash")
+  performedBy       String   @map("performed_by")
+  rawJson           String?  @map("raw_json")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")             // null = all-tenant staff (ADMIN)
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  role         String   @default("OPERATOR")           // ADMIN | INTEGRATION_MANAGER | OPERATOR | AUDITOR
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@map("users")
+}
+
+// -----------------------------------------------------------------------------
+// 7. DELIVERY PLUMBING
+// QueueJob is only used when REDIS_URL is unset (src/queues/invoiceQueue.ts).
+// If production always runs Redis/BullMQ, this table can go too.
+// -----------------------------------------------------------------------------
+model QueueJob {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  jobName       String   @map("job_name")
+  payload       String
+  attempts      Int      @default(0)
+  maxRetries    Int      @default(5) @map("max_retries")
+  status        String   @default("QUEUED")            // QUEUED | PROCESSING | COMPLETED | DLQ
+  lastError     String?  @map("last_error")
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@map("queue_jobs")
+}
+
+// Idempotency for inbound CittaEFS webhooks (one row per X-Webhook-Id).
+model WebhookDelivery {
+  id            String   @id @default(uuid())
+  webhookId     String   @unique @map("webhook_id")
+  eventType     String   @map("event_type")
+  tenantId      String   @map("tenant_id")
+  invoiceNumber String?  @map("invoice_number")
+  irn           String?
+  signature     String?
+  receivedAt    DateTime @default(now()) @map("received_at")
+
+  @@index([tenantId, receivedAt])
+  @@map("webhook_deliveries")
+}

@@ -15,8 +15,11 @@ async function handleCittaEfsWebhook(req: any, res: any) {
     const signature = (req.headers["x-webhook-signature"] as string) || (req.headers["X-Webhook-Signature"] as string);
     const webhookId = (req.headers["x-webhook-id"] as string) || (req.headers["X-Webhook-Id"] as string);
     const webhookEvent = (req.headers["x-webhook-event"] as string) || (req.headers["X-Webhook-Event"] as string);
-    const webhookSecret =
-      process.env.CITTAEFS_WEBHOOK_SECRET || process.env.CITTA_WEBHOOK_SECRET || "CF35DF20-9309-4506-BCC8-5D17D1DA209A";
+    const webhookSecret = (process.env.CITTAEFS_WEBHOOK_SECRET || process.env.CITTA_WEBHOOK_SECRET || "").trim();
+    if (!webhookSecret) {
+      logger.error(`[Webhook] CITTAEFS_WEBHOOK_SECRET is not configured — rejecting delivery`, {}, { requestId: (req as any).requestId });
+      return res.status(503).json({ success: false, error: "Webhook receiver not configured" });
+    }
     const raw = (req as any).rawBody ? (req as any).rawBody.toString("utf8") : JSON.stringify(req.body);
     const payloadString = raw;
     const hmacHex = crypto.createHmac("sha256", webhookSecret).update(payloadString).digest("hex");
@@ -24,9 +27,11 @@ async function handleCittaEfsWebhook(req: any, res: any) {
     if (!signature) {
       return res.status(401).json({ success: false, error: "Webhook signature missing" });
     }
-    const isValid = signature === hmacHex;
+    const sigBuf = Buffer.from(String(signature).trim().toLowerCase());
+    const expBuf = Buffer.from(hmacHex);
+    const isValid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
     if (!isValid) {
-      logger.warn(`[Webhook] Invalid signature`, { received: signature?.slice(0, 20), expected: hmacHex.slice(0, 20) }, { requestId: (req as any).requestId });
+      logger.warn(`[Webhook] Invalid signature`, { received: signature?.slice(0, 12) }, { requestId: (req as any).requestId });
       return res.status(401).json({ success: false, error: "Invalid webhook signature" });
     }
 
@@ -118,6 +123,22 @@ async function handleCittaEfsWebhook(req: any, res: any) {
           logger.warn(`[Webhook] ERP problem writeback failed (non-blocking)`, { invoiceId: inv.id, error: (e as any)?.message }, { requestId: (req as any).requestId });
         }
         dispatchMerchantWebhook(inv.tenantId, inv.id, "invoice.rejected").catch(() => {});
+        // Record the rejection so it is emailed to the client (EFS feedback email).
+        // Skip repeats: an invoice already REJECTED was recorded on the first event.
+        if (inv.status !== "REJECTED") {
+          await prisma.validationError.create({
+            data: {
+              tenantId: inv.tenantId,
+              clientInvoiceNumber: inv.clientInvoiceId,
+              errorCategory: "GATEWAY_REJECTED",
+              fieldAffected: "gateway",
+              errorMessage: String(errorMessage || "CittaEFS rejected this invoice during validation.").slice(0, 4000),
+              rawPayloadSample: JSON.stringify(req.body).slice(0, 2000),
+              sourceErp: inv.sourceErp,
+              status: "OPEN",
+            },
+          }).catch((e: any) => logger.warn(`[Webhook] Could not record rejection for feedback email`, { invoiceId: inv.id, error: e?.message }, { requestId: (req as any).requestId }));
+        }
       }
 
       // The current CittaEFS submit contract returns no inline IRN; the stamp

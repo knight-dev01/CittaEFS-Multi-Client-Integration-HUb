@@ -58,8 +58,7 @@ router.get('/api/auth/me', async (req,res)=>{
 
 router.get('/api/users', async (req:any,res)=>{
   try {
-    const userRole = req.user?.role || 'ADMIN';
-    if (req.user && userRole !== 'ADMIN') return res.status(403).json({ success:false, error:'Forbidden: Admin access required'});
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ success:false, error:'Forbidden: Admin access required'});
     const tenantId = req.tenantId || (req.query.tenantId as string) || 'tenant_qbo_smb';
     const users = await prisma.user.findMany({ where:{ tenantId }, select:{ id:true, email:true, name:true, role:true, organization:true, tenantId:true, createdAt:true }});
     res.json(users);
@@ -68,8 +67,7 @@ router.get('/api/users', async (req:any,res)=>{
 
 router.post('/api/users', async (req:any,res)=>{
   try {
-    const userRole = req.user?.role || 'ADMIN';
-    if (req.user && userRole !== 'ADMIN') return res.status(403).json({ success:false, error:'Forbidden: Admin access required'});
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ success:false, error:'Forbidden: Admin access required'});
     const { email, password, name, role, organization, tenantId } = req.body;
     if (!email || !password || !name) return res.status(400).json({ success:false, error:'Email, password, and name are required'});
     const validRoles = ['ADMIN','INTEGRATION_MANAGER','OPERATOR','AUDITOR'];

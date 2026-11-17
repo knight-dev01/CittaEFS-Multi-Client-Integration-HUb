@@ -193,7 +193,7 @@ export async function fetchOdooCompanyInfo(tenantId: string): Promise<any> {
     creds.database, creds.uid, creds.apiKey,
     "res.company", "search_read",
     [[]],
-    { fields: ["name", "currency_id"], limit: 1 },
+    { fields: ["name", "currency_id", "email"], limit: 1 },
   ]);
   return companyIds?.[0] || null;
 }

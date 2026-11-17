@@ -147,7 +147,7 @@ Audit logs show *what happened*; tests + CI show *what and what fails and when*:
 | **Full audit** `verifyAll.ts` | `invoiceQueue 5 retries`, `QBO OAuth decrypt`, `reconciliation orphans`, `cittaEfsClient 15s` | Queue DLQ, token refresh, NRS `archive 200 pending` | CI `verify-all` + `test:all` |
 
 **GitHub Actions** `.github/workflows/ci.yml` (push `main`/`PR`): `lint → checkNoFallbacks → tsc → vitest unit --coverage → postgres:16 verifyAll + gateway.test → build → deploy-gate` (Render auto-deploy). On-demand `.github/workflows/test.yml` `workflow_dispatch` `all|unit|verifyAll|gateway`. Coverage `coverage/` artifact + badge `CI` above.
-* **Security**: AES-256-GCM `packEncryptedString` `Integration companyId`, `JWT 8h/7d` `cookie`, `HMAC intuit-signature|CF35DF20 citta` `CORS * .vercel.app` `rate-limit 300/min`
+* **Security**: AES-256-GCM `packEncryptedString` `Integration companyId`, `JWT 8h/7d` `cookie`, `HMAC intuit-signature|CITTAEFS_WEBHOOK_SECRET citta` `CORS * .vercel.app` `rate-limit 300/min`
 
 ---
 
@@ -193,7 +193,7 @@ curl -H "Authorization: Bearer <CITTAEFS_API_KEY>" https://ei-api.azurewebsites.
 * **Start:** `node start.cjs` loads `dist/server.cjs` `PORT 10000`
 * **Env:** `NODE_ENV=production DATABASE_URL JWT_SECRET ENCRYPTION_KEY CITTAEFS_API_KEY CITTAEFS_GATEWAY_URL QBO_CLIENT_ID QBO_CLIENT_SECRET QBO_WEBHOOK_VERIFIER REDIS_URL?`
 * **Intuit Portal:** Webhooks `https://<hub>.onrender.com/api/webhooks/qbo` `intuit-signature` `QBO_WEBHOOK_VERIFIER`
-* **Citta Webhook:** `POST /api/einvoice/webhook` `https://<hub>/api/webhooks/cittaefs|/pay2/einvoicehookweb` `CF35DF20`
+* **Citta Webhook:** `POST /api/einvoice/webhook` `https://<hub>/api/webhooks/cittaefs|/pay2/einvoicehookweb` (HMAC via `CITTAEFS_WEBHOOK_SECRET`)
 
 ---
 

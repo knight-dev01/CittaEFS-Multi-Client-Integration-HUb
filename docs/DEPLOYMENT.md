@@ -256,7 +256,7 @@ Expected response:
 1. Navigate to `https://<project-name>.vercel.app`
 2. Login with default admin credentials:
    - **Email**: `admin@cittaefs.com`
-   - **Password**: `Admin123!` (or your configured password)
+   - **Password**: the value of `DEFAULT_ADMIN_PASSWORD` (required, 12+ chars — the admin is not seeded without it)
 3. Verify all dashboard tabs load correctly
 4. Check browser console for any API errors
 

@@ -153,7 +153,7 @@ router.post("/api/tenants/onboard", async (req, res) => {
 router.patch("/api/tenants/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { companyName, tin, platformType, marketTier, defaultVatRate } =
+    const { companyName, tin, platformType, marketTier, defaultVatRate, notificationEmail } =
       req.body;
 
     const existing = await prisma.tenant.findUnique({ where: { id } });
@@ -169,10 +169,12 @@ router.patch("/api/tenants/:id", async (req, res) => {
       tin !== undefined ? tin.trim().toUpperCase() : existing.tin;
 
     const errors: string[] = [];
-    if (trimmedName.length < 2 || trimmedName.length > 100) {
+    // Only validate fields the caller is changing, so e.g. saving a notification
+    // email doesn't fail on a legacy TIN stored before this format rule existed.
+    if (companyNameProvided && (trimmedName.length < 2 || trimmedName.length > 100)) {
       errors.push("Client entity name must be between 2 and 100 characters.");
     }
-    if (!/^[A-Z]\d{9}[A-Z]$/.test(normalizedTin)) {
+    if (tin !== undefined && !/^[A-Z]\d{9}[A-Z]$/.test(normalizedTin)) {
       errors.push("TIN must be one letter, 9 digits, one letter (e.g. P051123456Z).");
     }
 
@@ -183,6 +185,31 @@ router.patch("/api/tenants/:id", async (req, res) => {
         errors.push("Default VAT rate must be a number between 0 and 100.");
       } else {
         normalizedVatRate = rate;
+      }
+    }
+
+    let normalizedNotificationEmail = existing.notificationEmail;
+    if (notificationEmail !== undefined) {
+      const raw = String(notificationEmail ?? "").trim();
+      if (!raw) {
+        normalizedNotificationEmail = null;
+      } else {
+        const { parseRecipientList } = await import("../lib/errorDigestFormat");
+        const parsed = parseRecipientList(raw);
+        const typed = raw.split(/[,;\s]+/).filter(Boolean);
+        const invalid = typed.filter(t => parseRecipientList(t).length === 0);
+        if (parsed.length === 0 || invalid.length > 0) {
+          errors.push(`Notification email must be valid addresses separated by commas${invalid.length ? ` (invalid: ${invalid.join(", ")})` : ""}.`);
+        } else {
+          // Background "is it real?" check: the domain must accept email.
+          const { verifyEmailAddresses } = await import("../services/emailVerify");
+          const notReal = (await verifyEmailAddresses(parsed)).filter(c => c.status === "invalid");
+          if (notReal.length) {
+            errors.push(`These addresses do not look real: ${notReal.map(c => `${c.email} - ${c.reason}`).join("; ")}.`);
+          } else {
+            normalizedNotificationEmail = parsed.join(", ");
+          }
+        }
       }
     }
 
@@ -199,6 +226,7 @@ router.patch("/api/tenants/:id", async (req, res) => {
         platformType: platformType || existing.platformType,
         marketTier: marketTier || existing.marketTier,
         defaultVatRate: normalizedVatRate,
+        notificationEmail: normalizedNotificationEmail,
         monthlyAllowance:
           marketTier === "Enterprise"
             ? 10000
@@ -575,6 +603,83 @@ router.patch("/api/tenants/:id/citta-config", async (req: any, res) => {
   }
 });
 
+// POST /api/system/error-digest/run — send pending EFS feedback now (errors and approvals; optionally one tenant)
+router.post("/api/system/error-digest/run", async (req: any, res) => {
+  try {
+    if (!["ADMIN", "INTEGRATION_MANAGER"].includes(req.user?.role)) {
+      return res.status(403).json({ success: false, error: "Forbidden: Admin or Integration Manager role required" });
+    }
+    const { runErrorDigestCron, runApprovalDigestCron } = await import("../crons/errorDigest");
+    const tenantId = req.body?.tenantId ? String(req.body.tenantId) : undefined;
+    if (tenantId && !canAccessTenant(req, tenantId)) return res.status(403).json({ success: false, error: "Forbidden" });
+    const report = await runErrorDigestCron({ tenantId });
+    if (report.skipped) return res.status(503).json({ success: false, error: `Email not sent: ${report.skipped}. Set SMTP_HOST, SMTP_USER, SMTP_PASS and MAIL_FROM.`, report });
+    const approvals = await runApprovalDigestCron({ tenantId });
+    res.json({ success: report.failures.length === 0 && approvals.failures.length === 0, report, approvals });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/tenants/:id/feedback-recipients — who EFS feedback emails go to, and whether each address checks out
+router.get("/api/tenants/:id/feedback-recipients", async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!canAccessTenant(req, id)) return res.status(403).json({ success: false, error: "Forbidden" });
+    const tenant = await prisma.tenant.findUnique({ where: { id }, select: { notificationEmail: true } });
+    if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
+    const { resolveRecipientsDetailed } = await import("../crons/errorDigest");
+    const { verifyEmailAddresses } = await import("../services/emailVerify");
+    const { isMailConfigured } = await import("../services/mailer");
+    const r = await resolveRecipientsDetailed(id, tenant.notificationEmail);
+    res.json({
+      success: true,
+      mailConfigured: isMailConfigured(),
+      source: r.source,
+      recipients: r.recipients,
+      configured: await verifyEmailAddresses(r.configured),
+      erpEmails: await verifyEmailAddresses(r.erpEmails),
+      rejected: r.rejected,
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// POST /api/tenants/:id/feedback-test-email — send a test email to the active recipients (proves the mailbox receives mail)
+router.post("/api/tenants/:id/feedback-test-email", async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!canAccessTenant(req, id)) return res.status(403).json({ success: false, error: "Forbidden" });
+    const tenant = await prisma.tenant.findUnique({ where: { id }, select: { companyName: true, notificationEmail: true } });
+    if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found" });
+    const { isMailConfigured, sendMail } = await import("../services/mailer");
+    if (!isMailConfigured()) return res.status(503).json({ success: false, error: "Email is not configured on the server (SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM)." });
+    const { resolveRecipientsDetailed } = await import("../crons/errorDigest");
+    const r = await resolveRecipientsDetailed(id, tenant.notificationEmail);
+    if (!r.recipients.length) return res.status(400).json({ success: false, error: "No usable recipient. Add a notification email in Settings.", rejected: r.rejected });
+    const text = `Hello ${tenant.companyName},
+
+This is a test from CittaEFS. Invoice feedback from CittaEFS / NRS (rejections and approvals) will be sent to this address.
+
+No action is needed.
+
+- CittaEFS
+
+This is an automated message. Please do not reply.`;
+    const info = await sendMail({
+      to: r.recipients,
+      subject: `[CittaEFS] Test email - ${tenant.companyName}`,
+      text,
+      html: `<p>${text.split("\n\n").map(p => p.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" } as any)[c])).join("</p><p>")}</p>`,
+    });
+    res.json({ success: true, sentTo: r.recipients, source: r.source, messageId: info.messageId, rejected: r.rejected });
+  } catch (e: any) {
+    // SMTP servers sometimes reject an unknown mailbox at send time (550) - surface that.
+    res.status(502).json({ success: false, error: `Send failed: ${e.message}` });
+  }
+});
+
 // GET /api/system/citta-config
 router.get("/api/system/citta-config", async (req: any, res) => {
   try {
@@ -694,11 +799,11 @@ router.post("/api/system/citta-config/toggle-mode", async (req: any, res) => {
 router.get("/api/system/webhook-config", async (req: any, res) => {
   try {
     const webhookUrl = process.env.CITTA_WEBHOOK_URL?.trim() || process.env.CITTAEFS_WEBHOOK_URL?.trim() || "https://cittastackhook.azurewebsites.net/pay2/einvoicehookweb";
-    const secret = process.env.CITTAEFS_WEBHOOK_SECRET?.trim() || process.env.CITTA_WEBHOOK_SECRET?.trim() || "CF35DF20-9309-4506-BCC8-5D17D1DA209A";
+    const secret = process.env.CITTAEFS_WEBHOOK_SECRET?.trim() || process.env.CITTA_WEBHOOK_SECRET?.trim() || "";
     const gatewayUrl = process.env.CITTAEFS_GATEWAY_URL?.trim() || "https://ei-api.azurewebsites.net";
     res.json({
       webhookUrl,
-      secretPreview: secret.slice(0, 8) + "...",
+      secretPreview: secret ? secret.slice(0, 4) + "..." : "NOT CONFIGURED",
       gatewayUrl,
       events: ["invoice.created", "invoice.signed", "invoice.transmitted", "invoice.payment.updated", "invoice.validation.failed"],
       hubEndpoints: ["/api/webhooks/cittaefs", "/pay2/einvoicehookweb"],

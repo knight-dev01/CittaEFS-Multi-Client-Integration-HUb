@@ -30,6 +30,7 @@ export interface Tenant {
   monthlyAllowance: number;
   monthlyUsed: number;
   defaultVatRate: number;
+  notificationEmail?: string | null;
   lastSyncAt: string;
   tenantErps?: TenantErp[];
 }

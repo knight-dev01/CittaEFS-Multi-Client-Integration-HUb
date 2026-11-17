@@ -7,7 +7,29 @@ import { Card, CardHeader, CardBody } from './ui/Card';
 import { Button } from './ui/Button';
 import { Field, Input, Select } from './ui/Field';
 import { Notice } from './ui/Notice';
-import { Save, RefreshCw } from 'lucide-react';
+import { Save, RefreshCw, Mail, Send } from 'lucide-react';
+
+interface EmailCheck { email: string; status: 'valid' | 'invalid' | 'unknown'; reason: string }
+interface FeedbackRecipients {
+  mailConfigured: boolean;
+  source: 'settings' | 'erp' | 'hub_users' | 'none';
+  recipients: string[];
+  configured: EmailCheck[];
+  erpEmails: EmailCheck[];
+  rejected: EmailCheck[];
+}
+
+const SOURCE_LABEL: Record<FeedbackRecipients['source'], string> = {
+  settings: 'the override below',
+  erp: 'the company email in the connected ERP',
+  hub_users: 'hub users linked to this workspace (no ERP company email found)',
+  none: 'nobody - no usable address found',
+};
+const CHECK_STYLE: Record<EmailCheck['status'], string> = {
+  valid: 'text-emerald-700',
+  invalid: 'text-red-700',
+  unknown: 'text-amber-700',
+};
 
 interface CittaGatewayConfig {
   mode: string;
@@ -30,6 +52,14 @@ export function SettingsTab() {
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
+  const [notifyEmail, setNotifyEmail] = useState('');
+  const [isSavingNotify, setIsSavingNotify] = useState(false);
+  const [isSendingDigest, setIsSendingDigest] = useState(false);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
+  const [recipients, setRecipients] = useState<FeedbackRecipients | null>(null);
+  const [isCheckingRecipients, setIsCheckingRecipients] = useState(false);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+
   const [gatewayUrl, setGatewayUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [writebackTarget, setWritebackTarget] = useState<'HUB' | 'CITTAEFS' | 'BOTH'>('BOTH');
@@ -45,7 +75,10 @@ export function SettingsTab() {
     setTin(activeTenant?.tin || '');
     setVatRate(String(activeTenant?.defaultVatRate ?? 7.5));
     setWorkspaceError(null);
-  }, [activeTenant?.id, activeTenant?.companyName, activeTenant?.name, activeTenant?.tin, activeTenant?.defaultVatRate]);
+    setNotifyEmail(activeTenant?.notificationEmail || '');
+    setNotifyError(null);
+    setRecipients(null);
+  }, [activeTenant?.id, activeTenant?.companyName, activeTenant?.name, activeTenant?.tin, activeTenant?.defaultVatRate, activeTenant?.notificationEmail]);
 
   const loadGatewayConfig = async () => {
     setIsLoadingGateway(true);
@@ -90,6 +123,72 @@ export function SettingsTab() {
       setWorkspaceError(e?.message || 'Save failed');
     } finally {
       setIsSavingWorkspace(false);
+    }
+  };
+
+  const loadRecipients = async () => {
+    if (!activeTenant?.id) return;
+    setIsCheckingRecipients(true);
+    try {
+      const res = await fetchWithAuth(`/api/tenants/${activeTenant.id}/feedback-recipients`);
+      setRecipients(await parseJsonResponse<FeedbackRecipients>(res));
+    } catch (e: any) {
+      setNotifyError(e?.message || 'Could not check recipients');
+    } finally {
+      setIsCheckingRecipients(false);
+    }
+  };
+
+  useEffect(() => { loadRecipients(); }, [activeTenant?.id]);
+
+  const handleSendTest = async () => {
+    setNotifyError(null);
+    setIsSendingTest(true);
+    try {
+      const res = await fetchWithAuth(`/api/tenants/${activeTenant.id}/feedback-test-email`, { method: 'POST' });
+      const data = await parseJsonResponse<{ sentTo: string[] }>(res);
+      toastGlobal('success', 'Test email sent', `Sent to ${data.sentTo.join(', ')}. Ask them to confirm it arrived.`);
+    } catch (e: any) {
+      setNotifyError(e?.message || 'Test email failed');
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
+  const handleSaveNotify = async () => {
+    setNotifyError(null);
+    setIsSavingNotify(true);
+    try {
+      await updateTenant(activeTenant.id, { notificationEmail: notifyEmail.trim() });
+      await loadRecipients();
+    } catch (e: any) {
+      setNotifyError(e?.message || 'Save failed');
+    } finally {
+      setIsSavingNotify(false);
+    }
+  };
+
+  const handleSendDigestNow = async () => {
+    setNotifyError(null);
+    setIsSendingDigest(true);
+    try {
+      const res = await fetchWithAuth('/api/system/error-digest/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: activeTenant.id }),
+      });
+      type Report = { errorsEmailed: number; tenantsWithoutRecipients: string[]; failures: { error: string }[] };
+      const data = await parseJsonResponse<{ report: Report; approvals: Report }>(res);
+      const r = data.report;
+      const a = data.approvals;
+      if (r.failures.length || a.failures.length) setNotifyError((r.failures[0] || a.failures[0]).error);
+      else if (r.tenantsWithoutRecipients.length || a.tenantsWithoutRecipients.length) setNotifyError('No recipient: no ERP company email was found - add an override email above.');
+      else if (r.errorsEmailed === 0 && a.errorsEmailed === 0) toastGlobal('success', 'Nothing to send', 'There is no new CittaEFS feedback for this workspace.');
+      else toastGlobal('success', 'Feedback sent', `${r.errorsEmailed} issue(s) and ${a.errorsEmailed} approval(s) emailed.`);
+    } catch (e: any) {
+      setNotifyError(e?.message || 'Send failed');
+    } finally {
+      setIsSendingDigest(false);
     }
   };
 
@@ -179,6 +278,65 @@ export function SettingsTab() {
             <Button onClick={handleSaveWorkspace} disabled={isSavingWorkspace}>
               <Save className="h-3.5 w-3.5" />
               {isSavingWorkspace ? 'Saving…' : 'Save workspace'}
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="CittaEFS feedback emails" meta="Rejections are emailed within minutes; approvals (IRN issued) in an hourly summary" />
+        <CardBody className="space-y-4">
+          {notifyError && <Notice tone="fail" title="Notification problem">{notifyError}</Notice>}
+          {recipients && !recipients.mailConfigured && (
+            <Notice tone="fail" title="Email is off">The server has no SMTP settings (SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM), so nothing is sent yet.</Notice>
+          )}
+          <div className="rounded-md border border-gray-200 p-3 text-sm space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium">Currently sending to</span>
+              <Button variant="secondary" onClick={loadRecipients} disabled={isCheckingRecipients}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                {isCheckingRecipients ? 'Checking…' : 'Re-check'}
+              </Button>
+            </div>
+            {recipients ? (
+              <>
+                <p>{recipients.recipients.length ? recipients.recipients.join(', ') : '—'} <span className="text-gray-500">via {SOURCE_LABEL[recipients.source]}</span></p>
+                {[...recipients.erpEmails.map(c => ({ ...c, from: 'ERP' })), ...recipients.configured.map(c => ({ ...c, from: 'Override' }))].map(c => (
+                  <p key={c.from + c.email} className={CHECK_STYLE[c.status]}>
+                    {c.from}: {c.email} — {c.status === 'valid' ? 'looks real' : c.status === 'invalid' ? 'not real' : 'could not check'} ({c.reason})
+                  </p>
+                ))}
+                {recipients.erpEmails.length === 0 && <p className="text-gray-500">No company email found in the connected ERP. Set one in QuickBooks (Settings → Company → Contact info) or Odoo (Settings → Companies), or use the override below.</p>}
+              </>
+            ) : (
+              <p className="text-gray-500">{isCheckingRecipients ? 'Checking…' : 'Not checked yet.'}</p>
+            )}
+          </div>
+          <Field
+            label="Override email(s) (optional)"
+            htmlFor="settings-notify-email"
+            hint="Leave empty to use the company email from the client's ERP. Separate several addresses with commas. Each address is checked before it is saved."
+          >
+            <Input
+              id="settings-notify-email"
+              type="text"
+              value={notifyEmail}
+              onChange={e => setNotifyEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </Field>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={handleSendTest} disabled={isSendingTest}>
+              <Send className="h-3.5 w-3.5" />
+              {isSendingTest ? 'Sending…' : 'Send test email'}
+            </Button>
+            <Button variant="secondary" onClick={handleSendDigestNow} disabled={isSendingDigest}>
+              <Mail className="h-3.5 w-3.5" />
+              {isSendingDigest ? 'Sending…' : 'Send pending feedback now'}
+            </Button>
+            <Button onClick={handleSaveNotify} disabled={isSavingNotify}>
+              <Save className="h-3.5 w-3.5" />
+              {isSavingNotify ? 'Saving…' : 'Save notifications'}
             </Button>
           </div>
         </CardBody>

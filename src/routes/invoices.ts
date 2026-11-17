@@ -959,21 +959,29 @@ router.delete("/api/invoices/:id", async (req:any,res)=>{
 // ==========================================
 // HUB EXTERNAL API FOR EXISTING CITTAEFS SYSTEMS
 // ==========================================
+// Hub API auth: a key is ALWAYS required. The key is the tenant's cittaApiKey
+// (or the env CITTAEFS_API_KEY when the deployment runs one shared key).
+// An explicit tenant id (URL param / body / query) is honoured only when the
+// presented key is valid for that tenant — ids are public, keys are not.
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
 async function resolveHubTenant(req: any): Promise<string | null> {
-  const apiKey = (req.headers["x-hub-api-key"] as string) || (req.headers["x-api-key"] as string) || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : null);
-  if (apiKey) {
-    const tenant = await prisma.tenant.findFirst({ where: { cittaApiKey: apiKey } });
-    if (tenant) return tenant.id;
+  const apiKey = ((req.headers["x-hub-api-key"] as string) || (req.headers["x-api-key"] as string) || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "") || "").trim();
+  if (!apiKey) return null;
+  const envKey = (process.env.CITTAEFS_API_KEY || process.env.CITTA_EFS_API_KEY || "").trim();
+  const isEnvKey = !!envKey && safeEqual(apiKey, envKey);
+  const explicitId = (req.params?.tenantId || req.body?.tenantId || req.query?.tenantId) as string | undefined;
+  if (explicitId) {
+    const t = await prisma.tenant.findUnique({ where: { id: String(explicitId) } });
+    if (!t) return null;
+    if (isEnvKey || (t.cittaApiKey && safeEqual(apiKey, String(t.cittaApiKey)))) return t.id;
+    return null;
   }
-  if (req.body?.tenantId) {
-    const t = await prisma.tenant.findUnique({ where: { id: req.body.tenantId } });
-    if (t) return t.id;
-  }
-  if (req.query?.tenantId) {
-    const t = await prisma.tenant.findUnique({ where: { id: req.query.tenantId as string } });
-    if (t) return t.id;
-  }
-  return null;
+  const keyTenant = await prisma.tenant.findFirst({ where: { cittaApiKey: apiKey } });
+  return keyTenant?.id ?? null;
 }
 
 router.get("/api/hub/v1/health", async (req, res) => {
@@ -982,7 +990,8 @@ router.get("/api/hub/v1/health", async (req, res) => {
 
 router.get("/api/hub/v1/tenants/:tenantId/invoices", async (req, res) => {
   try {
-    const tenantId = await resolveHubTenant(req) || req.params.tenantId;
+    const tenantId = await resolveHubTenant(req);
+    if (!tenantId) return res.status(401).json({ success: false, error: "Missing or invalid X-Hub-Api-Key for this tenant." });
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) return res.status(404).json({ success: false, error: "Tenant not found or invalid API key" });
     const { skip, take, page, limit } = parsePagination(req);
@@ -998,7 +1007,8 @@ router.get("/api/hub/v1/tenants/:tenantId/invoices", async (req, res) => {
 
 router.get("/api/hub/v1/tenants/:tenantId/invoices/:clientInvoiceNumber", async (req, res) => {
   try {
-    const tenantId = await resolveHubTenant(req) || req.params.tenantId;
+    const tenantId = await resolveHubTenant(req);
+    if (!tenantId) return res.status(401).json({ success: false, error: "Missing or invalid X-Hub-Api-Key for this tenant." });
     const inv = await prisma.invoice.findFirst({ where: { tenantId, clientInvoiceId: req.params.clientInvoiceNumber }, include: { lineItems: true } });
     if (!inv) return res.status(404).json({ success: false, error: "Invoice not found" });
     res.json(formatInvoice(inv));

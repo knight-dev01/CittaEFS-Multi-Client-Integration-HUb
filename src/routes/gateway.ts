@@ -61,8 +61,7 @@ async function resolveMerchantTenant(req: any): Promise<string | null> {
   if (apiKey) {
     const byKey = await prisma.tenant.findFirst({ where: { cittaApiKey: apiKey } });
     if (byKey) return byKey.id;
-    const byId = await prisma.tenant.findUnique({ where: { id: apiKey } });
-    if (byId) return byId.id;
+    // A tenant id is public (it appears in URLs and as merchantCode) — never accept it as a credential.
   }
   const auth = req.headers.authorization as string | undefined;
   if (auth?.startsWith("Bearer ")) {
@@ -73,7 +72,7 @@ async function resolveMerchantTenant(req: any): Promise<string | null> {
       try {
         const { JWT_SECRET } = getAuthConfig();
         const decoded: any = jwt.verify(token, JWT_SECRET);
-        const tid = decoded.merchantCode || decoded.tenantId || decoded.userId || decoded.id;
+        const tid = decoded.merchantCode || decoded.tenantId;
         if (tid) {
           const t = await prisma.tenant.findUnique({ where: { id: String(tid) } });
           if (t) return t.id;
@@ -83,17 +82,30 @@ async function resolveMerchantTenant(req: any): Promise<string | null> {
       }
     }
   }
-  const bodyId = req.body?.merchantCode || req.body?.tenantId || req.body?.merchant_code;
-  if (bodyId) {
-    const t = await prisma.tenant.findUnique({ where: { id: String(bodyId) } });
-    if (t) return t.id;
-  }
-  const qId = (req.query?.merchantCode as string) || (req.query?.tenantId as string);
-  if (qId) {
-    const t = await prisma.tenant.findUnique({ where: { id: String(qId) } });
-    if (t) return t.id;
-  }
+  // No credential → no tenant. Body/query merchant ids are identifiers, not authentication.
   return null;
+}
+
+// Onboarding mints a tenant + live API key, so it must never be anonymous.
+// Allowed callers: a dashboard ADMIN JWT, or a partner holding GATEWAY_ONBOARD_SECRET.
+function isOnboardingAuthorized(req: any): boolean {
+  const secret = process.env.GATEWAY_ONBOARD_SECRET?.trim();
+  const provided = (req.headers["x-onboard-secret"] as string | undefined)?.trim();
+  if (secret && provided) {
+    const a = Buffer.from(secret);
+    const b = Buffer.from(provided);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+  }
+  const auth = req.headers.authorization as string | undefined;
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7).trim() : req.cookies?.token;
+  if (!token) return false;
+  try {
+    const { JWT_SECRET } = getAuthConfig();
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    return decoded?.role === "ADMIN";
+  } catch {
+    return false;
+  }
 }
 
 // GET /api/v1/health
@@ -159,6 +171,9 @@ router.post("/api/v1/auth/token", async (req, res) => {
 // POST /api/v1/merchants/onboard — self-service merchant creation (same Tenant flow as /api/tenants/onboard)
 router.post("/api/v1/merchants/onboard", async (req, res) => {
   try {
+    if (!isOnboardingAuthorized(req)) {
+      return res.status(401).json({ success: false, error: "Merchant onboarding requires an ADMIN session token or X-Onboard-Secret." });
+    }
     const businessName = req.body?.businessName || req.body?.companyName || req.body?.company_name;
     const tin = req.body?.tin || req.body?.customerTin;
     const platformType = req.body?.platformType || req.body?.channel || "QuickBooks Online";
@@ -348,8 +363,8 @@ router.post("/api/v1/transactions/initialize", async (req, res) => {
 router.get("/api/v1/transactions/status/:transactionRef", async (req, res) => {
   try {
     const tenantId = await resolveMerchantTenant(req);
-    const where: any = { clientInvoiceId: req.params.transactionRef };
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return res.status(401).json({ success: false, ResponseCode: "07", error: "Missing or invalid credentials." });
+    const where: any = { clientInvoiceId: req.params.transactionRef, tenantId };
     const inv = await prisma.invoice.findFirst({ where, include: { lineItems: true } });
     if (!inv) return res.status(404).json({ success: false, ResponseCode: "25", error: "Transaction not found" });
     const rc = toResponseCode(inv.status);
@@ -377,7 +392,8 @@ router.get("/api/v1/merchants/:merchantCode/transactions", async (req, res) => {
   try {
     const authed = await resolveMerchantTenant(req);
     const merchantCode = req.params.merchantCode;
-    if (authed && authed !== merchantCode) {
+    if (!authed) return res.status(401).json({ success: false, error: "Missing or invalid credentials." });
+    if (authed !== merchantCode) {
       return res.status(403).json({ success: false, error: "Forbidden for this merchant" });
     }
     const tenant = await prisma.tenant.findUnique({ where: { id: merchantCode } });

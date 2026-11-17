@@ -69,28 +69,16 @@ export async function processInvoiceJob(
     const _d:any = job.data as any;
     try {
       const items = await prisma.item.findMany({ where: { tenantId: job.data.tenantId } });
-      const inferServiceCode = (sku: string, desc: string) => {
-        const text = `${sku} ${desc}`.toLowerCase();
-        if (/gardening|garden|sod|rocks|rock|fountain|pump|sprinkler|landscap|trimming|trim|pest|control|lawn|concrete|design|lumber/.test(text)) return "8130"; // Landscape care and maintenance service activities
-        if ((sku || "").toUpperCase().startsWith("SRV")) return "6209"; // Other information technology and computer service activities
-        if (/laptop|notebook|macbook|computer|desktop|router|switch|\bserver\b/.test(text)) return "8471.30"; // Automatic data processing machines; portable
-        return "UNMAPPED";
-      };
+      // Tax classification comes ONLY from the operator's Item mapping or the
+      // code the source ERP sent. No keyword guessing: a guessed HS/service code
+      // on a fiscal invoice is a compliance error, so unmapped lines go to the
+      // validation queue (and back to the ERP) for a human to classify.
       for (const li of (job.data.lineItems as any[])) {
         li.hsOrServiceCode = normalizeCittaCode(li.hsOrServiceCode);
         const mapping = items.find(m => m.clientSku === li.itemCode);
         const mappingCode = mapping?.hsOrServiceCode ? normalizeCittaCode(mapping.hsOrServiceCode) : "";
-        const inferred = inferServiceCode(li.itemCode || "", li.description || "");
-        const inferredIsService = inferred !== "UNMAPPED" && getCittaCodeType(inferred) === "SERVICE_CODE";
-        const mappingIsServiceMismatch = mappingCode && getCittaCodeType(mappingCode) === "HS_CODE" && inferredIsService;
-        if (inferredIsService && mappingIsServiceMismatch) {
-          li.hsOrServiceCode = inferred;
-        } else if (mappingCode && isValidCittaCode(mappingCode) && !mappingIsServiceMismatch) {
-          li.hsOrServiceCode = normalizeCittaCode(mappingCode);
-        } else if (!isValidCittaCode(li.hsOrServiceCode) && isValidCittaCode(inferred)) {
-          li.hsOrServiceCode = inferred;
-        } else {
-          li.hsOrServiceCode = normalizeCittaCode(li.hsOrServiceCode);
+        if (mappingCode && isValidCittaCode(mappingCode)) {
+          li.hsOrServiceCode = mappingCode;
         }
       }
       // Strict check — if still invalid, don't retry 5x, go straight to DLQ as validation (Option A)
