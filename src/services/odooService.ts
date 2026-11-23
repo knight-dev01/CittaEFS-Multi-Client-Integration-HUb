@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { PrismaClient } from "@prisma/client";
 import { getDatabaseUrl } from "../config/dbConfig";
 import {
@@ -342,6 +343,49 @@ export async function fetchAllOdooInvoicesPaginated(tenantId: string): Promise<a
 /**
  * Fetches posted invoices updated since the last sync (write_date domain filter).
  */
+/**
+ * Loads one posted customer invoice / credit note by its Odoo id, composed the
+ * same way as the poll. Returns null when the record is not (yet) a posted
+ * customer invoice, e.g. a draft or a vendor bill.
+ */
+export async function fetchOdooInvoiceById(tenantId: string, moveId: number): Promise<any | null> {
+  const creds = await getValidOdooCredentials(tenantId);
+  const moves = await callOdoo(creds.url, "object", "execute_kw", [
+    creds.database, creds.uid, creds.apiKey,
+    "account.move", "search_read",
+    [[...POSTED_INVOICE_DOMAIN, ["id", "=", moveId]]],
+    { fields: INVOICE_FIELDS, limit: 1 },
+  ]);
+  if (!moves?.length) return null;
+  const [composed] = await composeInvoicePage(creds, moves);
+  return composed || null;
+}
+
+/**
+ * Odoo's "Send Webhook Notification" automation action cannot sign requests or
+ * add headers, so each tenant gets a long random token that is part of the
+ * webhook URL. The payload itself is never trusted: the Hub re-reads the
+ * invoice from Odoo over the authenticated JSON-RPC connection.
+ */
+export async function getOdooWebhookToken(tenantId: string, opts: { rotate?: boolean } = {}): Promise<string> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { erpConfig: true } });
+  const cfg = readTenantErpConfig(tenant?.erpConfig);
+  if (cfg.odooWebhookToken && !opts.rotate) return String(cfg.odooWebhookToken);
+  const token = crypto.randomBytes(24).toString("hex");
+  await updateTenantOdooConfig(tenantId, { odooWebhookToken: token });
+  return token;
+}
+
+export async function verifyOdooWebhookToken(tenantId: string, token: string): Promise<boolean> {
+  if (!token) return false;
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { erpConfig: true } });
+  const expected = readTenantErpConfig(tenant?.erpConfig).odooWebhookToken;
+  if (!expected) return false;
+  const a = Buffer.from(String(expected));
+  const b = Buffer.from(String(token));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 /** Odoo returns write_date as "YYYY-MM-DD HH:MM:SS" in UTC. */
 export function latestOdooWriteDate(moves: Array<{ write_date?: string | false }>): Date | null {
   let newest: Date | null = null;
@@ -477,7 +521,25 @@ async function resolveOdooBillingReferenceIrns(
  * Mirrors ingestQboInvoice's pipeline: dedup, validate, transform, HS/service-code
  * inference + validation, master-data upsert, and conditional auto-enqueue.
  */
-export async function ingestOdooInvoice(
+// The webhook and the poll can see the same invoice at the same moment. Calls
+// for the same Odoo invoice share one in-flight ingest instead of racing to
+// create the same row.
+const inFlightOdooIngests = new Map<string, Promise<any>>();
+
+export function ingestOdooInvoice(
+  tenantId: string,
+  rawMove: any,
+  opts?: { autoEnqueue?: boolean },
+): Promise<any> {
+  const key = `${tenantId}:${rawMove?.id}`;
+  const running = inFlightOdooIngests.get(key);
+  if (running) return running;
+  const p = ingestOdooInvoiceOnce(tenantId, rawMove, opts).finally(() => inFlightOdooIngests.delete(key));
+  inFlightOdooIngests.set(key, p);
+  return p;
+}
+
+async function ingestOdooInvoiceOnce(
   tenantId: string,
   rawMove: any,
   opts?: { autoEnqueue?: boolean },

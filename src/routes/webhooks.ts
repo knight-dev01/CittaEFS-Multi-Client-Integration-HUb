@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { generateSha256, safeAuditLogCreate } from "../lib/serverHelpers";
 import { logger } from "../lib/logger";
+import { broadcastEvent } from "../lib/eventBus";
 import { fetchAndIngestSpecificQboInvoice } from "../services/qboService";
 import { cittaEfsClient } from "../services/cittaEfsClient";
 import { writeProblemBackToSourceErp } from "../lib/erpProblemWriteback";
@@ -275,6 +276,59 @@ router.post("/api/webhooks/qbo", async (req, res) => {
   } catch (e: any) {
     console.error("[QBO Webhook Error]:", e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Odoo instant sync. Called by an Odoo automation rule ("Send Webhook
+// Notification") the moment an invoice is posted. The URL token proves the
+// caller; the body is only used for the record id — the invoice itself is
+// re-read from Odoo over the tenant's authenticated JSON-RPC connection, so a
+// forged body cannot inject invoice data. The 1-second poll still runs as a
+// backstop, and ingestion is idempotent, so a duplicate call is harmless.
+router.post("/api/webhooks/odoo/:tenantId", async (req: any, res) => {
+  const tenantId = String(req.params.tenantId || "");
+  const token = String(req.query.token || req.get("x-hub-token") || "");
+  try {
+    const {
+      verifyOdooWebhookToken, fetchOdooInvoiceById, ingestOdooInvoice, writebackProblemToOdoo,
+    } = await import("../services/odooService");
+    if (!(await verifyOdooWebhookToken(tenantId, token))) {
+      return res.status(401).json({ error: "Invalid webhook token" });
+    }
+    const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "ODOO" } });
+    if (!integration || integration.status !== "CONNECTED") {
+      return res.status(409).json({ error: "Odoo is not connected for this workspace" });
+    }
+
+    const body = req.body || {};
+    if (body._model && body._model !== "account.move") {
+      return res.json({ received: true, ignored: `model ${body._model}` });
+    }
+    const moveId = Number(body._id ?? body.id);
+    if (!Number.isInteger(moveId) || moveId <= 0) {
+      return res.status(400).json({ error: "Missing record id (_id)" });
+    }
+
+    const move = await fetchOdooInvoiceById(tenantId, moveId);
+    if (!move) {
+      return res.json({ received: true, ignored: "not a posted customer invoice or credit note" });
+    }
+
+    try {
+      const invoice = await ingestOdooInvoice(tenantId, move);
+      broadcastEvent({ type: "update", method: "WEBHOOK", path: "/odoo/webhook" });
+      const { runWorkerBatch } = await import("../workers/invoiceWorker");
+      runWorkerBatch()
+        .then((r) => { if (r.length > 0) broadcastEvent({ type: "update", method: "WORKER", path: "/queue/drain" }); })
+        .catch((err) => logger.error("[Odoo Webhook] worker drain failed", { err: err?.message }));
+      return res.json({ received: true, invoice: invoice?.clientInvoiceId || move.name, status: invoice?.status });
+    } catch (e: any) {
+      writebackProblemToOdoo(tenantId, String(moveId), e.message).catch(() => {});
+      return res.status(422).json({ received: true, error: e.message });
+    }
+  } catch (e: any) {
+    logger.error("[Odoo Webhook] failed", { err: e?.message, tenantId });
+    return res.status(500).json({ error: e.message });
   }
 });
 

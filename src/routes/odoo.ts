@@ -9,6 +9,7 @@ import {
   fetchOdooInvoicePage,
   ingestOdooInvoice,
   writebackProblemToOdoo,
+  getOdooWebhookToken,
 } from "../services/odooService";
 
 const router = Router();
@@ -80,6 +81,44 @@ router.get("/api/integrations/odoo/status", async (req: any, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// Odoo ERP — instant-sync webhook settings. Returns the URL to paste into an
+// Odoo automation rule ("Send Webhook Notification" on Customer Invoice when
+// Status is set to Posted). POST rotates the token, revoking the old URL.
+async function odooWebhookSettings(req: any, res: any) {
+  try {
+    const tenantId = (req.body?.tenantId as string) || (req.query.tenantId as string) || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+    if (req.user && req.user.role !== "ADMIN" && tenantId !== req.user.tenantId) {
+      return res.status(403).json({ error: "Forbidden: tenant isolation" });
+    }
+    if (req.user && !["ADMIN", "INTEGRATION_MANAGER"].includes(req.user.role)) {
+      return res.status(403).json({ error: "Forbidden: Admin or Integration Manager role required" });
+    }
+    const rotate = req.method === "POST";
+    const token = await getOdooWebhookToken(tenantId, { rotate });
+    const base = (process.env.HUB_API_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    if (rotate) {
+      await safeAuditLogCreate(prisma, {
+        tenantId,
+        action: "ODOO_WEBHOOK_ROTATED",
+        entityType: "INTEGRATION",
+        entityRef: tenantId,
+        details: "Odoo instant-sync webhook URL regenerated; the previous URL no longer works.",
+        sha256PayloadHash: generateSha256(`odoo-webhook-rotate:${tenantId}:${Date.now()}`),
+        performedBy: req.user?.email || "Integration Manager",
+      });
+    }
+    res.json({
+      url: `${base}/api/webhooks/odoo/${encodeURIComponent(tenantId)}?token=${token}`,
+      model: "account.move",
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+}
+router.get("/api/integrations/odoo/webhook", odooWebhookSettings);
+router.post("/api/integrations/odoo/webhook", odooWebhookSettings);
 
 // Odoo ERP — sync (historical on first run, incremental thereafter)
 router.post("/api/integrations/odoo/sync", async (req: any, res) => {

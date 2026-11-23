@@ -28,6 +28,86 @@ function Row({ label, children, mono = false, tone }: { label: string; children:
   );
 }
 
+function OdooWebhookPanel({ tenantId }: { tenantId: string }) {
+  const confirm = useConfirm();
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async (rotate = false) => {
+    setBusy(true);
+    try {
+      const res = await fetchWithAuth(`/api/integrations/odoo/webhook?tenantId=${encodeURIComponent(tenantId)}`, {
+        method: rotate ? 'POST' : 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        ...(rotate ? { body: JSON.stringify({ tenantId }) } : {}),
+      });
+      const data = await parseJsonResponse(res);
+      if (!res.ok) throw new Error(data?.error || 'Could not load the webhook URL');
+      setUrl(data.url);
+      if (rotate) toastGlobal('success', 'New webhook URL created', 'Update it in your Odoo automation rule.');
+    } catch (e: any) {
+      toastGlobal('error', 'Webhook URL', e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copy = async () => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toastGlobal('success', 'Webhook URL copied');
+    } catch {
+      toastGlobal('error', 'Copy failed', 'Select the URL and copy it manually.');
+    }
+  };
+
+  const rotate = async () => {
+    const ok = await confirm({
+      title: 'Regenerate webhook URL?',
+      message: 'The current URL stops working immediately. Paste the new one into your Odoo automation rule, or instant sync pauses (the 1-second poll keeps running).',
+      confirmLabel: 'Regenerate',
+      tone: 'danger',
+    });
+    if (ok) load(true);
+  };
+
+  return (
+    <div className="mt-4 border-t border-line pt-3 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium text-ink">Instant sync (Odoo webhook)</p>
+        {!url && (
+          <Button size="sm" variant="ghost" onClick={() => load(false)} disabled={busy}>
+            {busy ? 'Loading…' : 'Set up'}
+          </Button>
+        )}
+      </div>
+      {url && (
+        <div className="mt-2 space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={url}
+              onFocus={(e) => e.currentTarget.select()}
+              className="min-w-0 flex-1 rounded-md border border-line bg-panel-muted px-2 py-1 font-mono text-[11px] text-ink"
+              aria-label="Odoo webhook URL"
+            />
+            <Button size="sm" variant="secondary" onClick={copy}>Copy</Button>
+          </div>
+          <ol className="list-decimal space-y-1 pl-4 text-ink-soft">
+            <li>In Odoo, open <b>Settings → Technical → Automation Rules</b> and click <b>New</b>.</li>
+            <li>Model: <b>Journal Entry</b>. Trigger: <b>State is set to</b> → <b>Status</b> = <b>Posted</b>.</li>
+            <li>Add an action: <b>Send Webhook Notification</b>, and paste this URL.</li>
+            <li>Save. Confirmed invoices now reach the Hub in about a second; the poll keeps running as a backstop.</li>
+          </ol>
+          <p className="text-ink-faint">Keep this URL private: it lets Odoo tell the Hub to fetch an invoice. The Hub always re-reads the invoice from Odoo itself.</p>
+          <Button size="sm" variant="ghost" onClick={rotate} disabled={busy}>Regenerate URL</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ConnectorStatus {
   qbo: { connected: boolean; status: string; companyId: string | null; lastSyncAt: string | null; environment?: 'sandbox' | 'production' };
   odoo: { connected: boolean; status: string; database: string | null; lastSyncAt: string | null };
@@ -341,6 +421,7 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
                 <Row label="Database" mono>{status?.odoo.database || 'N/A'}</Row>
                 <Row label="Last sync">{formatWhen(status?.odoo.lastSyncAt ?? null)}</Row>
               </dl>
+              {status?.odoo.connected && <OdooWebhookPanel tenantId={activeTenant.id} />}
             </CardBody>
             <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
               {status?.odoo.connected ? (
