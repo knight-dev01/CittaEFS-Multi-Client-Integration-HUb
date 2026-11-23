@@ -8,9 +8,12 @@ import {
 import { getCittaCodeType, isValidCittaCode } from "../data/referenceData";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { buildQueuePayloadFromInvoice } from "../lib/invoiceQueuePayload";
+import { getUptime } from "../services/connectivityService";
+import { ERP_HEALTH_INTERVAL_MS } from "../crons/erpHealth";
 import { ingestOdooInvoice } from "../services/odooService";
 import { ingestQboInvoice } from "../services/qboService";
 import { OdooAdapter, QuickBooksAdapter } from "../adapters/connectorAdapters";
+import { markSuggestionAccepted, ensureSuggestions, parseLines } from "../services/codeIntelligence";
 
 // Reconstructs a signInvoice queue job from a persisted Invoice row and
 // enqueues it directly, instead of only resetting the DB status and hoping
@@ -31,6 +34,31 @@ async function requeuePersistedInvoice(invoiceId: string): Promise<boolean> {
 }
 
 const router = Router();
+
+// GET /api/code-intelligence/suggestions?validationErrorId=...
+// HS / service-code suggestions for a MISSING_HS_CODE error. Computed by the
+// background sweep; computed on demand here if the sweep has not reached it.
+router.get("/api/code-intelligence/suggestions", async (req: any, res) => {
+  try {
+    const id = String(req.query.validationErrorId || "");
+    if (!id) return res.status(400).json({ success: false, error: "validationErrorId is required" });
+    const error = await prisma.validationError.findUnique({ where: { id }, select: { tenantId: true } });
+    if (!error) return res.status(404).json({ success: false, error: "Validation error not found" });
+    const scoped = getScopedTenantWhere(req, error.tenantId);
+    if (scoped.tenantId && scoped.tenantId !== error.tenantId) return res.status(404).json({ success: false, error: "Validation error not found" });
+    const row = await ensureSuggestions(id, req.query.refresh === "1");
+    res.json({
+      success: true,
+      provider: row?.provider || "none",
+      model: row?.model || null,
+      status: row?.status || "OPEN",
+      lines: parseLines(row),
+    });
+  } catch (e: any) {
+    console.error("[API Error] GET /api/code-intelligence/suggestions failed:", e);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
 
 // ==========================================
 // 6. VALIDATION ERRORS QUEUE API (DB Backed)
@@ -147,6 +175,10 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
           const namedItem = errRecord.errorMessage.match(/for (.+?)\)/)?.[1]?.trim().toLowerCase();
           const namedMatch = namedItem ? invalidLines.find((li: any) => (li.clientSku || '').toLowerCase() === namedItem) : undefined;
           let skus: string[];
+          // Keep the real wording so the code memory can match other SKUs with it.
+          const descriptionBySku = new Map<string, string>(
+            lines.filter((li: any) => li.clientSku).map((li: any) => [li.clientSku, String(li.description || li.clientSku)]),
+          );
           if (namedMatch) {
             skus = [namedMatch.clientSku];
           } else if (invalidLines.length) {
@@ -159,8 +191,10 @@ router.post("/api/validation-errors/resolve", async (req: any, res) => {
           }
           for (const sku of skus) {
             const existing = await prisma.item.findFirst({ where: { tenantId: errRecord.tenantId, clientSku: sku } });
-            if (existing) await prisma.item.update({ where: { id: existing.id }, data: { hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService } });
-            else await prisma.item.create({ data: { tenantId: errRecord.tenantId, clientSku: sku, description: "Mapped via validation fix", hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService, defaultVatRate: 7.5 } as any });
+            const lineDescription = descriptionBySku.get(sku);
+            if (existing) await prisma.item.update({ where: { id: existing.id }, data: { hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService, ...(lineDescription && /mapped via validation fix/i.test(existing.description) ? { description: lineDescription } : {}) } });
+            else await prisma.item.create({ data: { tenantId: errRecord.tenantId, clientSku: sku, description: lineDescription || sku, hsOrServiceCode: cleanHs, categoryType: isService ? "SERVICE" : "GOODS", isService, defaultVatRate: 7.5 } as any });
+            await markSuggestionAccepted(errRecord.id, cleanHs).catch(() => {});
           }
 
           if (rawPayload && (errRecord.sourceErp === "odoo" || errRecord.sourceErp === "qbo")) {
@@ -240,6 +274,25 @@ router.post("/api/validation-errors/bulk-resolve", async (req: any, res) => {
 // ==========================================
 // 8. METRICS API (DB Backed)
 // ==========================================
+// GET /api/metrics/uptime?tenantId=&hours=24|168 — connectivity uptime of each
+// source ERP connection and of the CittaEFS gateway, from ConnectivityProbe rows.
+router.get("/api/metrics/uptime", async (req: any, res) => {
+  try {
+    const scoped = getScopedTenantWhere(req, req.query.tenantId as string | undefined);
+    const hours = Number(req.query.hours) === 168 ? 168 : 24;
+    const targets = await getUptime(scoped.tenantId, hours);
+    res.json({
+      windowHours: hours,
+      probeIntervalMs: ERP_HEALTH_INTERVAL_MS,
+      generatedAt: new Date().toISOString(),
+      targets,
+    });
+  } catch (e: any) {
+    console.error("[API Error] GET /api/metrics/uptime failed:", e);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
 router.get("/api/metrics", async (req: any, res) => {
   try {
     const scoped = getScopedTenantWhere(req, req.query.tenantId as string | undefined);

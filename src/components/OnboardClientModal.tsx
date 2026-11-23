@@ -1,3 +1,4 @@
+import { toastGlobal } from './ui/Toast';
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useHub } from '../lib/store';
 import { fetchWithAuth, parseJsonResponse, getApiBaseUrl } from '../lib/api';
@@ -118,7 +119,7 @@ export function OnboardClientModal({ onClose, resumeTenant }: OnboardClientModal
       setCompanySaved(true);
       return newTenant;
     } catch (err: any) {
-      alert(`Failed to save client organization: ${err?.message || 'Please check details and try again.'}`);
+      toastGlobal('error', 'Could not save the organization', err?.message || 'Please check the details and try again.');
       return null;
     }
   };

@@ -24,6 +24,7 @@ import { Input, Select } from './ui/Field';
 import { Card } from './ui/Card';
 import { EmptyState } from './ui/EmptyState';
 import { Notice } from './ui/Notice';
+import { useConfirm } from './ui/ConfirmDialog';
 
 type QuickView = 'ALL' | 'PENDING' | 'APPROVED' | 'ATTENTION';
 
@@ -57,6 +58,7 @@ function formatDate(value?: string | null): string {
 
 export function InvoicesTab() {
   const { invoices, activeTenant, refreshAll, isBgRefreshing, retryInvoice, retryBulkInvoices } = useHub() as any;
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [quickView, setQuickView] = useState<QuickView>('ALL');
@@ -117,11 +119,11 @@ export function InvoicesTab() {
 
   const handleRetryAllFailed = async () => {
     if (!attentionInvoices.length || !activeTenant) return;
-    const proceed = window.confirm(
-      `Retry ${attentionInvoices.length} failed invoice(s) for ${activeTenant.name}?\n\n` +
-      `They are re-queued for CittaEFS stamping and move back to PENDING_NRS_STAMP. ` +
-      `Anything still wrong at the gateway will fail again with a new error.`
-    );
+    const proceed = await confirm({
+      title: `Retry ${attentionInvoices.length} failed invoice(s)?`,
+      message: `They are re-queued for CittaEFS stamping for ${activeTenant.name} and move back to PENDING_NRS_STAMP. Anything still wrong at the gateway will fail again with a new error.`,
+      confirmLabel: `Retry ${attentionInvoices.length}`,
+    });
     if (!proceed) return;
     setIsBulkRetrying(true);
     try {

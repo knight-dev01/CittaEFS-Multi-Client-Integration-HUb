@@ -1,3 +1,4 @@
+import { toastGlobal } from './ui/Toast';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useHub } from '../lib/store';
 import { getErpForTenant, groupTenantsByErp } from '../config/erpRegistry';
@@ -20,6 +21,7 @@ import {
   ScrollText,
   Boxes
 } from 'lucide-react';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface NavbarProps {
   activeTab: string;
@@ -40,6 +42,7 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
     logout,
     deleteTenant
   } = useHub() as any;
+  const confirm = useConfirm();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -82,18 +85,19 @@ export function Navbar({ activeTab, setActiveTab, onOpenOnboardModal }: NavbarPr
   const handleDeleteActiveTenant = async () => {
     if (!activeTenant) return;
     if (userRole !== 'ADMIN') return;
-    const confirmMsg = `Delete tenant "${activeTenant.name}" (${activeTenant.id})?\n\nThis will permanently delete the tenant and CASCADE delete its invoices, customers, items, queue jobs and integrations. This cannot be undone.`;
-    if (!window.confirm(confirmMsg)) return;
-    const doubleConfirm = window.prompt(`Type DELETE to confirm removal of "${activeTenant.name}":`, "");
-    if (doubleConfirm !== 'DELETE') {
-      if (doubleConfirm !== null) alert('Cancelled — type DELETE exactly to confirm.');
-      return;
-    }
+    const proceed = await confirm({
+      title: `Delete "${activeTenant.name}"?`,
+      message: `This permanently deletes the workspace (${activeTenant.id}) and all of its invoices, customers, items, queue jobs and integrations. This cannot be undone.`,
+      confirmLabel: 'Delete workspace',
+      tone: 'danger',
+      requireText: 'DELETE',
+    });
+    if (!proceed) return;
     setIsDeletingTenant(true);
     try {
       await deleteTenant(activeTenant.id);
     } catch (e: any) {
-      alert(e.message || 'Failed to delete tenant');
+      toastGlobal('error', 'Could not delete workspace', e?.message || 'Failed to delete tenant');
     } finally {
       setIsDeletingTenant(false);
     }

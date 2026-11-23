@@ -337,3 +337,42 @@ model WebhookDelivery {
   @@index([tenantId, receivedAt])
   @@map("webhook_deliveries")
 }
+
+/// One connectivity probe of a source ERP connection or the CittaEFS gateway.
+/// Written by the connectivity cron and the Connections "Test" button; read by
+/// GET /api/metrics/uptime to compute uptime. Rows older than 30 days are pruned.
+model ConnectivityProbe {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  target      String   @map("target") // ERP | CITTAEFS
+  tenantErpId String?  @map("tenant_erp_id") // set when target = ERP
+  label       String   @map("label")
+  ok          Boolean  @map("ok")
+  latencyMs   Int      @map("latency_ms")
+  error       String?  @map("error")
+  checkedAt   DateTime @default(now()) @map("checked_at")
+
+  @@index([tenantId, checkedAt])
+  @@index([checkedAt])
+  @@map("connectivity_probes")
+}
+
+/// HS / service-code suggestions for an open MISSING_HS_CODE validation error,
+/// computed automatically (local retrieval + optional model re-ranking). A
+/// person confirms one with a click; the confirmed code is saved to the Item
+/// dictionary and reused automatically from then on.
+model CodeSuggestion {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  validationErrorId String   @unique @map("validation_error_id")
+  linesJson         String   @map("lines_json") // [{ sku, description, descriptionKey, candidates: [...] }]
+  provider          String   @map("provider") // gemini | anthropic | none
+  model             String?  @map("model")
+  status            String   @default("OPEN") @map("status") // OPEN | ACCEPTED
+  acceptedCode      String?  @map("accepted_code")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@map("code_suggestions")
+}

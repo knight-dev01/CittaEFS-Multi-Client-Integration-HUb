@@ -17,6 +17,7 @@ import { Card, CardHeader, CardBody } from './ui/Card';
 import { Notice } from './ui/Notice';
 import { ErpConnectionsPanel } from './ErpConnectionsPanel';
 import { PLANNED_ERPS } from '../config/erpRegistry';
+import { useConfirm } from './ui/ConfirmDialog';
 
 function Row({ label, children, mono = false, tone }: { label: string; children: ReactNode; mono?: boolean; tone?: string }) {
   return (
@@ -40,6 +41,7 @@ function formatWhen(iso: string | null): string {
 
 export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => void } = {}) {
   const { activeTenant } = useHub();
+  const confirm = useConfirm();
 
   const [status, setStatus] = useState<ConnectorStatus | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
@@ -100,7 +102,7 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
     } catch (err: any) {
       setSyncingQbo(false);
       const isReauth = err.message?.toLowerCase().includes('reauthorization');
-      if (isReauth && confirm(`QuickBooks needs reauthorization:\n${err.message}\n\nReconnect now?`)) {
+      if (isReauth && await confirm({ title: 'QuickBooks needs reauthorization', message: err.message, confirmLabel: 'Reconnect now' })) {
         window.location.href = `/api/integrations/qbo/connect?tenantId=${activeTenant.id}`;
         return;
       }
@@ -135,10 +137,15 @@ export function ConnectionsTab({ onResumeConnect }: { onResumeConnect?: () => vo
     const current = status?.qbo.environment || 'sandbox';
     const target = current === 'sandbox' ? 'production' : 'sandbox';
     const connected = !!status?.qbo.connected;
-    const confirmMsg = connected
-      ? `Switch QuickBooks from ${current.toUpperCase()} to ${target.toUpperCase()}?\n\nSandbox and production use separate Intuit credentials — your current connection will need to be reauthorized.`
-      : `Switch QuickBooks to ${target.toUpperCase()} before connecting?`;
-    if (!confirm(confirmMsg)) return;
+    const proceed = await confirm(connected
+      ? {
+          title: `Switch QuickBooks to ${target}?`,
+          message: `You are on ${current}. Sandbox and production use separate Intuit credentials, so the current connection will need to be reauthorized.`,
+          confirmLabel: `Switch to ${target}`,
+          tone: 'danger',
+        }
+      : { title: `Switch QuickBooks to ${target} before connecting?`, confirmLabel: `Switch to ${target}` });
+    if (!proceed) return;
     setTogglingQboEnv(true);
     try {
       const res = await fetchWithAuth('/api/integrations/qbo/environment', {

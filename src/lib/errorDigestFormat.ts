@@ -12,6 +12,18 @@ const CATEGORY_GUIDE: Record<string, { title: string; action: string }> = {
     title: "Invalid customer TIN",
     action: "Correct the customer's Tax Identification Number on the customer record in your ERP, then resend the invoice.",
   },
+  EFS_FORMAT: {
+    title: "Invoice data CittaEFS cannot accept",
+    action: "The hub checked this invoice against CittaEFS's rules before sending it. Correct the items listed below in your ERP, then resend the invoice.",
+  },
+  TAX_MISMATCH: {
+    title: "Amounts do not add up",
+    action: "CittaEFS requires taxable amount = quantity x unit price - line discount, and tax = taxable amount x VAT rate. Correct the line in your ERP, then resend the invoice.",
+  },
+  INVALID_DATE: {
+    title: "Invalid issue date",
+    action: "Set a real issue date (not in the future) on the invoice in your ERP, then resend it.",
+  },
   GATEWAY_REJECTED: {
     title: "Rejected by CittaEFS / NRS",
     action: "Review the reason below, correct the invoice in your ERP, and resend it.",

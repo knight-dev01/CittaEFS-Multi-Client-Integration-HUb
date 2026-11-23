@@ -24,6 +24,8 @@ import {
   toJson,
   toXlsx,
 } from "../lib/efsExport";
+import { toEfsInvoiceNumber } from "../lib/efsInvoiceNumber";
+import { toEfsDate } from "../lib/efsPreflight";
 
 const router = Router();
 
@@ -1021,10 +1023,13 @@ router.post("/api/hub/v1/invoices", async (req, res) => {
     if (!tenantId) return res.status(401).json({ success: false, error: "Missing or invalid X-Hub-Api-Key. Provide tenant's cittaApiKey." });
     req.body.tenantId = tenantId;
     const body = req.body;
+    // Same normalisation as ERP-sourced invoices: CittaEFS's A-Z/0-9 number (the
+    // caller's own number is kept as documentNumber) and a YYYY-MM-DD date.
+    const callerNumber = String(body.clientInvoiceNumber || body.invoiceNumber || body.clientInvoiceId || "").trim();
     const mapped = {
       tenantId,
-      clientInvoiceNumber: body.clientInvoiceNumber || body.invoiceNumber || body.clientInvoiceId,
-      documentNumber: body.documentNumber,
+      clientInvoiceNumber: callerNumber ? toEfsInvoiceNumber(callerNumber) : callerNumber,
+      documentNumber: body.documentNumber || (callerNumber && callerNumber !== toEfsInvoiceNumber(callerNumber) ? callerNumber : undefined),
       invoiceKind: body.invoiceKind || "B2B",
       invoiceType: body.invoiceType || "STANDARD",
       originalIrn: body.originalIrn || body.billingReferenceIrn,
@@ -1035,8 +1040,8 @@ router.post("/api/hub/v1/invoices", async (req, res) => {
           : body.billingReferenceIrn
             ? [String(body.billingReferenceIrn)]
             : undefined,
-      issueDate: body.issueDate,
-      customerCode: body.customerCode || body.customerCode || "CUST-EXTERNAL",
+      issueDate: toEfsDate(body.issueDate) || body.issueDate,
+      customerCode: body.customerCode || "CUST-EXTERNAL",
       customerName: body.customerName || body.customer_name,
       customerTin: body.customerTin || body.customer_tin,
       lineItems: (body.lineItems || body.items || []).map((li: any) => ({

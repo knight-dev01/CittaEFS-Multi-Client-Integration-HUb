@@ -6,6 +6,10 @@ import { dispatchMerchantWebhook } from '../services/merchantWebhook';
 import { isValidCittaCode, normalizeCittaCode, getCittaCodeType } from '../data/referenceData';
 import { formatGatewayErrorMessage } from '../lib/gatewayErrors';
 import { writeProblemBackToSourceErp as pushProblemToSourceErp } from '../lib/erpProblemWriteback';
+import { findRememberedCode } from "../lib/codeMemory";
+import { preflightInvoice } from '../lib/efsPreflight';
+import { loadEfsCatalog } from '../services/efsResources';
+import { safeAuditLogCreate } from '../lib/serverHelpers';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
@@ -79,6 +83,10 @@ export async function processInvoiceJob(
         const mappingCode = mapping?.hsOrServiceCode ? normalizeCittaCode(mapping.hsOrServiceCode) : "";
         if (mappingCode && isValidCittaCode(mappingCode)) {
           li.hsOrServiceCode = mappingCode;
+        } else if (!isValidCittaCode(li.hsOrServiceCode)) {
+          // Same wording as an item a person already classified.
+          const remembered = findRememberedCode(items, null, li.description);
+          if (remembered) li.hsOrServiceCode = remembered.code;
         }
       }
       // Strict check — if still invalid, don't retry 5x, go straight to DLQ as validation (Option A)
@@ -88,6 +96,47 @@ export async function processInvoiceJob(
       }
     } catch (e:any) {
       if (e.message && e.message.includes("Invalid Product Code")) throw e;
+    }
+
+    // 0.4 CittaEFS pre-flight — bring the payload into CittaEFS's exact format
+    // (API guide rules + CittaEFS's live configured code lists). Safe fixes are
+    // applied and logged; anything no rule can repair holds the invoice with a
+    // specific validation error instead of a gateway rejection. Deterministic:
+    // no model is involved, and the bundled lists are used if CittaEFS's are
+    // unreachable.
+    {
+      const catalog = await loadEfsCatalog();
+      const preflight = preflightInvoice(job.data as any, { catalog });
+      Object.assign(job.data as any, preflight.data);
+      if (preflight.fixes.length) {
+        await safeAuditLogCreate(prisma, {
+          tenantId: job.tenantId,
+          action: 'EFS_PREFLIGHT_NORMALISED',
+          entityType: 'Invoice',
+          entityRef: job.data.clientInvoiceNumber,
+          details: preflight.fixes.map(f => `${f.field}: "${f.from}" -> "${f.to}" (${f.rule})`).join('\n').slice(0, 4000),
+        }).catch(() => {});
+      }
+      if (preflight.issues.length) {
+        const message = `CittaEFS pre-flight: ${preflight.issues.length} problem(s) must be fixed in the ERP before this invoice can be stamped:\n` +
+          preflight.issues.map(i => `- ${i.message}`).join('\n');
+        await invoiceQueue.moveToDLQ(job, message);
+        await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(() => {});
+        await writeProblemBackToSourceErp(job, message);
+        dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(() => {});
+        await prisma.validationError.create({
+          data: {
+            tenantId: job.tenantId,
+            clientInvoiceNumber: job.data.clientInvoiceNumber,
+            errorCategory: preflight.issues[0].category,
+            fieldAffected: preflight.issues.map(i => i.field).join(', ').slice(0, 250),
+            errorMessage: message.slice(0, 4000),
+            rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
+            status: 'OPEN',
+          },
+        }).catch(() => {});
+        return { jobId: job.id, success: false, error: message, movedToDLQ: true };
+      }
     }
 
     // 0.6 Item registration tracking — non-blocking, unlike the customer gate

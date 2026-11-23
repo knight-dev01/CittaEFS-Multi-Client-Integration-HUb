@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma";
 import { readHealth, withHealth } from "../lib/erpConnectionConfig";
 import { fetchQboCompanyInfo } from "./qboService";
 import { fetchOdooCompanyInfo } from "./odooService";
+import { recordProbe } from "./connectivityService";
 
 const LIVE_ERP_IDS = new Set(["qbo", "odoo"]);
 
@@ -114,6 +115,7 @@ export async function checkErpConnection(tenantErpId: string): Promise<ErpHealth
       where: { id: row.id },
       data: { config, status },
     });
+    await recordProbe({ tenantId: row.tenantId, target: "ERP", tenantErpId: row.id, label: platformLabel, ok: true, latencyMs });
 
     return {
       success: true,
@@ -146,6 +148,7 @@ export async function checkErpConnection(tenantErpId: string): Promise<ErpHealth
       where: { id: row.id },
       data: { config, status },
     });
+    await recordProbe({ tenantId: row.tenantId, target: "ERP", tenantErpId: row.id, label: platformLabel, ok: false, latencyMs, error: technicalDetail });
 
     return {
       success: false,

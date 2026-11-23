@@ -9,6 +9,8 @@ import { ToastProvider, useToast, setGlobalToast } from './components/ui/Toast';
 import { Button } from './components/ui/Button';
 import { Card } from './components/ui/Card';
 import { EmptyState } from './components/ui/EmptyState';
+import { ConfirmProvider } from './components/ui/ConfirmDialog';
+import { ApiDocsPage } from './components/ApiDocsPage';
 
 function LoadingScreen() {
   return (
@@ -184,12 +186,18 @@ function ToastBridge({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // Public developer docs: no login, no workspace data.
+  if (typeof window !== 'undefined' && /^\/docs\/?$/.test(window.location.pathname)) {
+    return <ApiDocsPage />;
+  }
   return (
     <ToastProvider>
       <ToastBridge>
-        <HubProvider>
-          <HubMainContent />
-        </HubProvider>
+        <ConfirmProvider>
+          <HubProvider>
+            <HubMainContent />
+          </HubProvider>
+        </ConfirmProvider>
       </ToastBridge>
     </ToastProvider>
   );

@@ -5,7 +5,7 @@
 const esbuild = require("esbuild");
 const pkg = require("../package.json");
 
-const BUNDLED = new Set(["nodemailer"]);
+const BUNDLED = new Set(["nodemailer", "@anthropic-ai/sdk", "@google/genai"]);
 
 // If the host's installer skipped a bundled package, install it now so the
 // bundle is complete (fails the build loudly if that is impossible).

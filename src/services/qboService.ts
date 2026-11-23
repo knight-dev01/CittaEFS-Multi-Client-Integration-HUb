@@ -12,6 +12,7 @@ import {
   ensureFreshAccessToken,
 } from "../connectors";
 import type { OAuthProvider } from "../connectors";
+import { findRememberedCode } from "../lib/codeMemory";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -668,7 +669,7 @@ export async function ingestQboInvoice(
           ? mappingCode
           : rawHs && isValidCittaCode(rawHs)
             ? rawHs
-            : "UNMAPPED";
+            : findRememberedCode(tenantItems, null, li.description)?.code || "UNMAPPED";
       hsOrServiceCode = normalizeCittaCode(hsOrServiceCode);
       const qty = Number(li.quantity || 1);
       const price = Number(li.unitPrice || 0);

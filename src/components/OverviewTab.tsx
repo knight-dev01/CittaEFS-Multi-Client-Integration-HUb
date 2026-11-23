@@ -8,6 +8,7 @@ import { Button } from './ui/Button';
 import { EmptyState } from './ui/EmptyState';
 import { Notice } from './ui/Notice';
 import { StatusBadge } from './ui/StatusBadge';
+import { ConnectivityUptimeCard } from './ConnectivityUptimeCard';
 import { Activity, Clock, RefreshCw } from 'lucide-react';
 
 function formatLag(seconds: number | null): string {
@@ -126,6 +127,8 @@ export function OverviewTab() {
               note={metrics.pendingValidationCount > 0 ? 'Fix them on the Validation tab' : 'Nothing blocking'}
             />
           </div>
+
+          <ConnectivityUptimeCard tenantId={activeTenant.id} />
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <Card className="xl:col-span-2">

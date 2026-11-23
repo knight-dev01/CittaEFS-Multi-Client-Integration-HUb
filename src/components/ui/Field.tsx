@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, Ref } from 'react';
 
 const CONTROL =
   'w-full rounded-lg border border-line-strong bg-panel px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-panel-muted disabled:text-ink-faint';
@@ -31,7 +31,7 @@ export function Field({
   );
 }
 
-export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
   return <input className={`${CONTROL} h-9 ${className}`} {...props} />;
 }
 

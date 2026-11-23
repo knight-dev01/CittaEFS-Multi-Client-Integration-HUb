@@ -201,15 +201,24 @@ async function startServer() {
       }
     } catch(e:any){ console.warn("[Cron] Odoo reconcile error:", e.message); }
   }, 60000).unref(); // 60s Odoo continuous poll (no webhook)
-  // ERP connection health — every 15 minutes, per connection. Updates
-  // TenantErp.status and the health block inside TenantErp.config.
-  setInterval(async ()=>{
+  // Connectivity probe — live, every 60s by default (ERP_HEALTH_INTERVAL_MS): each
+  // live ERP connection plus the CittaEFS gateway. Updates TenantErp health and
+  // records ConnectivityProbe rows; clients refresh the uptime card on each round.
+  let connectivityProbeRunning = false;
+  const runConnectivityProbe = async ()=>{
+    if (connectivityProbeRunning) return; // a slow round never overlaps the next
+    connectivityProbeRunning = true;
     try {
       const { runErpHealthCron } = await import("./src/crons/erpHealth");
       const report = await runErpHealthCron();
-      if (report.needsReauth>0 || report.failed>0) broadcastEvent({ type:"update", method:"CRON", path:"/erp/health"});
-    } catch(e:any){ console.warn("[Cron] ERP health error:", e.message); }
-  }, 900000).unref(); // 15m ERP health probe
+      broadcastEvent({ type:"connectivity", method:"CRON", path:"/erp/health" });
+      // Full dashboard refresh only when a connection status changed (reauth needed).
+      if (report.needsReauth>0) broadcastEvent({ type:"update", method:"CRON", path:"/erp/health"});
+    } catch(e:any){ console.warn("[Cron] connectivity probe error:", e.message); }
+    finally { connectivityProbeRunning = false; }
+  };
+  setTimeout(runConnectivityProbe, 15000).unref(); // first reading shortly after boot
+  setInterval(runConnectivityProbe, Number(process.env.ERP_HEALTH_INTERVAL_MS || 60000)).unref();
   // EFS feedback emails — one packaged email per tenant, sent to the ERP's company email.
   // Errors go out promptly (every 2 min batches a bulk sync into one email);
   // approvals (IRN issued) are bundled hourly.
@@ -222,6 +231,19 @@ async function startServer() {
   };
   setInterval(runFeedbackCron("error"), Number(process.env.ERROR_DIGEST_INTERVAL_MS || 120000)).unref();
   setInterval(runFeedbackCron("approval"), Number(process.env.APPROVAL_DIGEST_INTERVAL_MS || 3600000)).unref();
+  // Code intelligence: suggest HS / service codes for every open MISSING_HS_CODE
+  // error in the background (local search, plus the configured model if any).
+  let suggestionSweepRunning = false;
+  setInterval(async ()=>{
+    if (suggestionSweepRunning) return;
+    suggestionSweepRunning = true;
+    try {
+      const { runSuggestionSweep } = await import("./src/services/codeIntelligence");
+      const { computed } = await runSuggestionSweep();
+      if (computed>0) broadcastEvent({ type:"update", method:"CRON", path:"/code-intelligence/suggestions"});
+    } catch(e:any){ console.warn("[Cron] code suggestion sweep error:", e.message); }
+    finally { suggestionSweepRunning = false; }
+  }, Number(process.env.CODE_SUGGESTION_INTERVAL_MS || 60000)).unref();
 
   (async()=>{
     const redisUrl=process.env.REDIS_URL?.trim()||process.env.REDIS_HOST?.trim();

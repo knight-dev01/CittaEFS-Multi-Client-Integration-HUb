@@ -519,6 +519,32 @@ export class CittaEfsClient {
   }
 
   /**
+   * Connectivity probe for the uptime card: one authenticated, read-only
+   * archive query for today. Up means the gateway answered 2xx with our key;
+   * a missing key, a 4xx/5xx or a timeout all count as down, because invoices
+   * cannot be stamped in any of those states.
+   */
+  public async probeConnectivity(
+    tenantId: string,
+  ): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+    const startedAt = Date.now();
+    try {
+      const { apiKey, gatewayUrl } = await getCittaEfsConfig(tenantId);
+      const today = new Date().toISOString().slice(0, 10);
+      const url = `${gatewayUrl.replace(/\/$/, "")}/api/einvoice/archive?fromDate=${today}&toDate=${today}`;
+      const res = await httpsRequest(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      const latencyMs = Date.now() - startedAt;
+      if (!res.ok) return { ok: false, latencyMs, error: `CittaEFS gateway answered HTTP ${res.status}` };
+      return { ok: true, latencyMs };
+    } catch (error: any) {
+      return { ok: false, latencyMs: Date.now() - startedAt, error: String(error?.message || error) };
+    }
+  }
+
+  /**
    * Fetches validation errors
    */
   public async getValidationErrors(

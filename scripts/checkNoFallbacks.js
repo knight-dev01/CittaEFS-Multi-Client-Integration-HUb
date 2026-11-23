@@ -38,6 +38,10 @@ const ALLOWLIST = [
 
   // Static reference data constants used for reference UI components
   'src/data/referenceData.ts',
+
+  // Anthropic Messages API parameter names ("fallbacks", "server-side-fallback-*"
+  // beta) — an external API's refusal routing, not substitute data.
+  'src/services/aiCodeRanker.ts',
 ];
 
 function walkDir(dir, fileList = []) {

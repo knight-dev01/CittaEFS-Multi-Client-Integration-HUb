@@ -161,7 +161,7 @@ export interface ValidationErrorItem {
   id: string;
   tenantId: TenantId;
   clientInvoiceNumber: string;
-  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH' | 'DUPLICATE_INVOICE' | 'GATEWAY_REJECTED' | 'GATEWAY_NOT_CONFIGURED' | 'TRANSMIT_FAILED';
+  errorCategory: 'MISSING_HS_CODE' | 'INVALID_TIN_FORMAT' | 'INVALID_DATE' | 'MISSING_B2B_TIN' | 'TAX_MISMATCH' | 'DUPLICATE_INVOICE' | 'GATEWAY_REJECTED' | 'GATEWAY_NOT_CONFIGURED' | 'TRANSMIT_FAILED' | 'EFS_FORMAT';
   fieldAffected: string;
   errorMessage: string;
   rawPayloadSample: any;
@@ -220,6 +220,34 @@ export interface ErpHealthRow {
   status: string;
   lastSyncAt: string | null;
   lagSec: number | null;
+}
+
+export interface UptimeBucket {
+  start: string;
+  probes: number;
+  up: number;
+}
+
+export interface UptimeTarget {
+  key: string;
+  target: 'ERP' | 'CITTAEFS';
+  tenantErpId: string | null;
+  label: string;
+  currentlyUp: boolean | null;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+  uptimePct: number | null;
+  uptimePct7d: number | null;
+  avgLatencyMs: number | null;
+  probes: number;
+  buckets: UptimeBucket[];
+}
+
+export interface ConnectivityUptime {
+  windowHours: number;
+  probeIntervalMs: number;
+  generatedAt: string;
+  targets: UptimeTarget[];
 }
 
 export interface SystemMetrics {

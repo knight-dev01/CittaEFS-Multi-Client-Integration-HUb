@@ -10,6 +10,9 @@ import {
   UserSession
 } from '../types';
 
+/** Fired on window when the server finishes a connectivity probe round. */
+export const CONNECTIVITY_EVENT = 'citta:connectivity';
+
 interface HubContextType {
   currentUser: UserSession | null;
   login: (session: UserSession, token?: string, refreshToken?: string) => void;
@@ -270,6 +273,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
           try {
             const data = JSON.parse(event.data);
             if (data.type === 'update') debouncedRefresh();
+          if (data.type === 'connectivity') window.dispatchEvent(new CustomEvent(CONNECTIVITY_EVENT));
           } catch (e) {
             console.error('[WS] Error processing event data:', e);
           }
@@ -308,6 +312,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'update') debouncedRefresh();
+          if (data.type === 'connectivity') window.dispatchEvent(new CustomEvent(CONNECTIVITY_EVENT));
         } catch (e) {
           console.error('[SSE] Error processing event data:', e);
         }

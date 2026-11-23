@@ -7,7 +7,8 @@ import {
 import { OdooAdapter } from "../adapters/connectorAdapters";
 import { invoiceQueue } from "../queues/invoiceQueue";
 import { invoiceIngestionSchema } from "../schemas/invoice.schema";
-import { isValidCittaCode, getCittaCodeType } from "../data/referenceData";
+import { isValidCittaCode, getCittaCodeType, normalizeCittaCode } from "../data/referenceData";
+import { findRememberedCode } from "../lib/codeMemory";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -504,7 +505,12 @@ export async function ingestOdooInvoice(
     const mapping = tenantItems.find((m) => m.clientSku === li.clientSku);
     const mappingCode = mapping?.hsOrServiceCode;
     const mappingIsGeneric = !mappingCode || !isValidCittaCode(mappingCode);
-    const hsOrServiceCode = mappingIsGeneric ? li.hsOrServiceCode : mappingCode;
+    const erpCode = li.hsOrServiceCode ? normalizeCittaCode(li.hsOrServiceCode) : "";
+    const hsOrServiceCode = !mappingIsGeneric
+      ? mappingCode
+      : erpCode && isValidCittaCode(erpCode)
+        ? erpCode
+        : findRememberedCode(tenantItems, null, li.description)?.code || li.hsOrServiceCode;
     const qty = Number(li.quantity || 1);
     const price = Number(li.unitPrice || 0);
     const taxable = li.taxableAmount !== undefined ? Number(li.taxableAmount) : qty * price;

@@ -1,4 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { fetchWithAuth, parseJsonResponse } from '../lib/api';
 import { useHub } from '../lib/store';
 import type { ValidationErrorItem } from '../types';
 import { ShieldAlert, RefreshCw, ChevronDown, ChevronRight, Wand2 } from 'lucide-react';
@@ -9,6 +10,7 @@ import { Input, Select } from './ui/Field';
 import { Card } from './ui/Card';
 import { EmptyState } from './ui/EmptyState';
 import { splitGatewayErrorMessage } from '../lib/gatewayErrors';
+import { useConfirm } from './ui/ConfirmDialog';
 
 type QuickView = 'OPEN' | 'RESOLVED' | 'ALL';
 
@@ -28,12 +30,86 @@ const CATEGORY_LABELS: Record<string, string> = {
   GATEWAY_REJECTED: 'CittaEFS rejected',
   GATEWAY_NOT_CONFIGURED: 'Gateway key missing',
   TRANSMIT_FAILED: 'Transmit failed',
+  EFS_FORMAT: 'CittaEFS format',
 };
 
 function formatDate(value?: string | null): string {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+interface SuggestedCode {
+  code: string;
+  name: string;
+  type: 'HS_CODE' | 'SERVICE_CODE';
+  confidence: number;
+  reason: string;
+  source: 'MODEL' | 'HISTORY' | 'CATALOG';
+}
+interface LineSuggestion { sku: string | null; description: string; candidates: SuggestedCode[] }
+
+const SOURCE_LABEL: Record<SuggestedCode['source'], string> = {
+  MODEL: 'AI ranked',
+  HISTORY: 'Your history',
+  CATALOG: 'Code list match',
+};
+
+/** Automatic code suggestions; the operator confirms one with a click. */
+function CodeSuggestions({ errorId, onUse, disabled }: { errorId: string; onUse: (code: string) => void; disabled: boolean }) {
+  const [lines, setLines] = useState<LineSuggestion[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithAuth(`/api/code-intelligence/suggestions?validationErrorId=${encodeURIComponent(errorId)}`);
+        const data = await parseJsonResponse<{ lines: LineSuggestion[] }>(res);
+        if (!cancelled) setLines(data.lines || []);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [errorId]);
+
+  if (failed) return null;
+  if (!lines) return <p className="text-xs text-ink-faint">Finding matching codes…</p>;
+  if (!lines.some(l => l.candidates.length)) return <p className="text-xs text-ink-faint">No close match in the code list. Enter the code below.</p>;
+
+  return (
+    <div className="space-y-3">
+      {lines.map((line, index) => (
+        <div key={`${line.sku}-${index}`}>
+          <p className="text-xs text-ink-soft">
+            Suggested for <span className="font-medium text-ink">{line.description}</span>
+            {line.sku && line.sku !== line.description ? <span className="font-mono text-ink-faint"> ({line.sku})</span> : null}
+          </p>
+          <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
+            {line.candidates.map(c => (
+              <button
+                key={c.code}
+                type="button"
+                disabled={disabled}
+                onClick={() => onUse(c.code)}
+                title={c.reason}
+                className="cursor-pointer rounded-lg border border-line bg-panel p-2.5 text-left hover:border-accent hover:bg-panel-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-sm font-semibold text-ink">{c.code}</span>
+                  <span className="text-[11px] font-medium text-ink-soft">{Math.round(c.confidence * 100)}%</span>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-xs text-ink-soft">{c.name}</p>
+                <p className="mt-1 text-[11px] text-ink-faint">{SOURCE_LABEL[c.source]} · {c.type === 'HS_CODE' ? 'Goods' : 'Service'}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <p className="text-[11px] text-ink-faint">Choosing a code saves it for this item, so later invoices with it are sent automatically.</p>
+    </div>
+  );
 }
 
 function FixForm({ error, onResolve }: { error: ValidationErrorItem; onResolve: (hsOrServiceCode?: string, correctedTin?: string) => Promise<void> }) {
@@ -52,7 +128,18 @@ function FixForm({ error, onResolve }: { error: ValidationErrorItem; onResolve: 
     }
   };
 
+  const useSuggestion = async (code: string) => {
+    setSubmitting(true);
+    try {
+      await onResolve(code, undefined);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
+    <div className="space-y-3">
+    {!isTinFix && <CodeSuggestions errorId={error.id} onUse={useSuggestion} disabled={submitting} />}
     <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
       <div className="flex-1">
         <label className="block text-xs font-medium text-ink-soft" htmlFor={`fix-${error.id}`}>
@@ -70,11 +157,13 @@ function FixForm({ error, onResolve }: { error: ValidationErrorItem; onResolve: 
         {submitting ? 'Applying…' : 'Apply fix'}
       </Button>
     </div>
+    </div>
   );
 }
 
 export function ValidationTab() {
   const { validationErrors, activeTenant, resolveValidationError, bulkResolveValidationErrors, autoMapItems, refreshAll, isBgRefreshing } = useHub() as any;
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [quickView, setQuickView] = useState<QuickView>('OPEN');
@@ -112,7 +201,12 @@ export function ValidationTab() {
   };
 
   const handleBulkDismiss = async () => {
-    if (!confirm(`Dismiss all ${openCount} open error(s) for ${activeTenant.name}?\n\nThis marks them RESOLVED without applying any correction — use it to clear stale entries, not to fix data.`)) return;
+    if (!(await confirm({
+      title: `Dismiss all ${openCount} open error(s)?`,
+      message: `This marks them RESOLVED for ${activeTenant.name} without applying any correction. Use it to clear stale entries, not to fix data.`,
+      confirmLabel: 'Dismiss all',
+      tone: 'danger',
+    }))) return;
     setBulkDismissing(true);
     try { await bulkResolveValidationErrors(activeTenant.id); } finally { setBulkDismissing(false); }
   };
