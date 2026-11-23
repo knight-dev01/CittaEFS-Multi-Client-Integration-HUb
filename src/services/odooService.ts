@@ -342,6 +342,17 @@ export async function fetchAllOdooInvoicesPaginated(tenantId: string): Promise<a
 /**
  * Fetches posted invoices updated since the last sync (write_date domain filter).
  */
+/** Odoo returns write_date as "YYYY-MM-DD HH:MM:SS" in UTC. */
+export function latestOdooWriteDate(moves: Array<{ write_date?: string | false }>): Date | null {
+  let newest: Date | null = null;
+  for (const m of moves) {
+    if (!m?.write_date) continue;
+    const d = new Date(`${String(m.write_date).replace(" ", "T")}Z`);
+    if (!Number.isNaN(d.getTime()) && (!newest || d > newest)) newest = d;
+  }
+  return newest;
+}
+
 export async function fetchOdooInvoicesSince(tenantId: string, lastSyncAt?: Date): Promise<any[]> {
   const creds = await getValidOdooCredentials(tenantId);
   const integration = await prisma.integration.findFirst({
@@ -368,7 +379,15 @@ export async function fetchOdooInvoicesSince(tenantId: string, lastSyncAt?: Date
 
   const composed = await composeInvoicePage(creds, moves || []);
 
-  await prisma.integration.update({ where: { id: integration.id }, data: { lastSyncAt: new Date() } });
+  // Advance the cursor with Odoo's own clock (newest write_date seen), not the
+  // Hub's, so clock drift between the two servers can never skip an invoice.
+  // When nothing changed the cursor stays put, which keeps each poll cheap.
+  const newest = latestOdooWriteDate(moves || []);
+  if (newest && (!since || newest > new Date(since))) {
+    await prisma.integration.update({ where: { id: integration.id }, data: { lastSyncAt: newest } });
+  } else if (!since) {
+    await prisma.integration.update({ where: { id: integration.id }, data: { lastSyncAt: new Date() } });
+  }
 
   return composed;
 }

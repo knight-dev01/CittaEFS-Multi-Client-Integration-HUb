@@ -58,3 +58,12 @@ describe('postOdooInvoiceMessage', () => {
     expect(calls.at(-1).kw).toEqual({ body: 'Problem' });
   });
 });
+
+describe('latestOdooWriteDate', () => {
+  it('reads Odoo UTC timestamps and picks the newest', async () => {
+    const { latestOdooWriteDate } = await import('../../services/odooService');
+    expect(latestOdooWriteDate([{ write_date: '2026-11-23 10:00:05' }, { write_date: '2026-11-23 10:00:09' }, { write_date: false }])
+      ?.toISOString()).toBe('2026-11-23T10:00:09.000Z');
+    expect(latestOdooWriteDate([])).toBeNull();
+  });
+});

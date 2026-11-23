@@ -23,7 +23,7 @@ The hub is a thin pipe, not a system of record:
 
 ```
   QuickBooks Online                 Odoo
-  OAuth2 + webhook + 60s poll       JSON-RPC API key + 60s poll
+  OAuth2 + webhook + 60s poll       JSON-RPC API key + 1s poll  
             \                         /
              v                       v
   +-----------------------------------------------------------+
@@ -51,7 +51,7 @@ The hub is a thin pipe, not a system of record:
 
 ### Pipeline
 
-1. **Ingest.** QuickBooks: OAuth2 connect, a webhook at `POST /api/webhooks/qbo` (HMAC `intuit-signature`), plus a 60-second `LastUpdatedTime` poll. Odoo: JSON-RPC with an API key, polled every 60 seconds on `write_date`. Adapters are in `src/adapters/connectorAdapters.ts`, `src/services/qboService.ts` and `src/services/odooService.ts`. QuickBooks credit memos sync as credit notes.
+1. **Ingest.** QuickBooks: OAuth2 connect, a webhook at `POST /api/webhooks/qbo` (HMAC `intuit-signature`), plus a 60-second `LastUpdatedTime` poll. Odoo: JSON-RPC with an API key, polled every second (`ODOO_POLL_INTERVAL_MS`) on `write_date`, using Odoo's own clock as the cursor. New invoices go to the worker immediately. Adapters are in `src/adapters/connectorAdapters.ts`, `src/services/qboService.ts` and `src/services/odooService.ts`. QuickBooks credit memos sync as credit notes.
 2. **Normalise.** The ERP's own invoice number is kept everywhere (UI, writeback, emails). CittaEFS only accepts `A-Z0-9`, so it receives a stripped form (`INV-1001` becomes `INV1001`), and the original goes as `documentNumber` (`src/lib/efsInvoiceNumber.ts`). HS and service codes are sent bare (`8471.30`, not `HS-8471.30`). There is no keyword guessing of HS codes: a line without a mapped code is a validation error.
 3. **Validate and gate.** B2B buyers need a 10–14 digit TIN, VAT is 7.5%, invoice-type rules apply. Before submission, B2B/B2G invoices whose customer has no `MAPPED` `EntityMapping` are parked as `NEEDS_EFS_REGISTRATION`. They are requeued automatically once the customer is confirmed registered (`/api/entity-mappings`, `src/services/entityMappingService.ts`).
 4. **Submit.** `src/queues/invoiceQueue.ts` with a 5-second worker (`src/workers/invoiceWorker.ts`). There are 5 retries with backoff `[5s, 30s, 2m, 10m, 30m]`, then the invoice goes to the DLQ and is marked `REJECTED`. A gateway **4xx** is terminal and goes straight to `REJECTED` with the gateway's message. Only 5xx, 408 and 429 are retried. The queue is persisted in `QueueJob` and recovered after a restart. BullMQ is used when `REDIS_URL` is set.
@@ -156,6 +156,7 @@ npm run dev                 # http://localhost:3000 (Express + Vite)
 | `BREVO_API_KEY` *or* `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`, plus `MAIL_FROM` | Feedback email transport |
 | `REDIS_URL` *(optional)* | Use BullMQ instead of the DB-backed queue |
 | `ERP_HEALTH_INTERVAL_MS` *(optional, default 60000)* | Connectivity probe interval |
+| `ODOO_POLL_INTERVAL_MS` *(optional, default 1000)* | How often each connected Odoo is checked for new posted invoices |
 | `ERROR_DIGEST_INTERVAL_MS`, `APPROVAL_DIGEST_INTERVAL_MS` *(optional)* | Feedback email cadence (default 2 min / 1 h) |
 | `DEFAULT_ADMIN_EMAIL`, `DEFAULT_ADMIN_PASSWORD`, `DEFAULT_ADMIN_NAME`, `DEFAULT_ADMIN_ORG` | Seeded admin |
 

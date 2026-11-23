@@ -188,19 +188,38 @@ async function startServer() {
       if (res.recoveredCount>0) broadcastEvent({ type:"update", method:"CRON", path:"/qbo/reconcile"});
     } catch(e:any){ console.warn("[Cron] QBO reconcile error:", e.message); }
   }, 60000).unref(); // 60s QBO continuous sync
+  // Odoo continuous poll — every second by default (ODOO_POLL_INTERVAL_MS).
+  // A tick is skipped while the previous one is still running, and a tenant
+  // whose Odoo is unreachable is paused for 30s instead of erroring every tick.
+  // Newly ingested invoices are sent to the worker straight away.
+  let odooPollRunning = false;
+  const odooPausedUntil = new Map<string, number>();
   setInterval(async ()=>{
+    if (odooPollRunning) return;
+    odooPollRunning = true;
     try {
-      const { fetchOdooInvoicesSince } = await import("./src/services/odooService");
+      const { fetchOdooInvoicesSince, ingestOdooInvoice } = await import("./src/services/odooService");
       const prisma = (await import("./src/lib/prisma")).prisma;
       const odooIntegrations = await prisma.integration.findMany({ where: { sourceSystem: "ODOO", status: "CONNECTED" } });
-      for (const ig of odooIntegrations) {
-        const { ingestOdooInvoice } = await import("./src/services/odooService");
-        const rows = await fetchOdooInvoicesSince(ig.tenantId, ig.lastSyncAt || undefined);
-        for (const r of rows) { try { await ingestOdooInvoice(ig.tenantId, r); } catch(err:any){ console.error(`[Cron] Odoo ingest failed for tenant ${ig.tenantId} invoice ${r?.name ?? r?.id}:`, err?.message); } }
-        if (rows.length>0) broadcastEvent({ type:"update", method:"CRON", path:"/odoo/reconcile"});
+      let ingested = 0;
+      await Promise.all(odooIntegrations.map(async (ig)=>{
+        if ((odooPausedUntil.get(ig.tenantId) || 0) > Date.now()) return;
+        try {
+          const rows = await fetchOdooInvoicesSince(ig.tenantId, ig.lastSyncAt || undefined);
+          odooPausedUntil.delete(ig.tenantId);
+          for (const r of rows) { try { await ingestOdooInvoice(ig.tenantId, r); ingested++; } catch(err:any){ console.error(`[Cron] Odoo ingest failed for tenant ${ig.tenantId} invoice ${r?.name ?? r?.id}:`, err?.message); } }
+        } catch(e:any){
+          odooPausedUntil.set(ig.tenantId, Date.now() + 30000);
+          console.warn(`[Cron] Odoo poll error for tenant ${ig.tenantId} (retrying in 30s):`, e.message);
+        }
+      }));
+      if (ingested>0) {
+        broadcastEvent({ type:"update", method:"CRON", path:"/odoo/reconcile"});
+        runWorkerBatch().then(results=>{ if(results.length>0) broadcastEvent({ type:"update", method:"WORKER", path:"/queue/drain"}); }).catch(err=>console.error("[Worker] Queue drain error:",err));
       }
     } catch(e:any){ console.warn("[Cron] Odoo reconcile error:", e.message); }
-  }, 60000).unref(); // 60s Odoo continuous poll (no webhook)
+    finally { odooPollRunning = false; }
+  }, Number(process.env.ODOO_POLL_INTERVAL_MS || 1000)).unref();
   // Connectivity probe — live, every 60s by default (ERP_HEALTH_INTERVAL_MS): each
   // live ERP connection plus the CittaEFS gateway. Updates TenantErp health and
   // records ConnectivityProbe rows; clients refresh the uptime card on each round.

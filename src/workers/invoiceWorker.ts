@@ -472,7 +472,33 @@ export async function processInvoiceJob(
 /**
  * Worker Loop: Process all pending items in queue
  */
-export async function runWorkerBatch(): Promise<ProcessingResult[]> {
+// Only one batch runs at a time. Two overlapping batches could both pick up
+// the same QUEUED job and submit it to CittaEFS twice. A call that arrives
+// while a batch is running asks for one more pass and shares its promise.
+let activeBatch: Promise<ProcessingResult[]> | null = null;
+let rerunRequested = false;
+
+export function runWorkerBatch(): Promise<ProcessingResult[]> {
+  if (activeBatch) {
+    rerunRequested = true;
+    return activeBatch;
+  }
+  activeBatch = (async () => {
+    const all: ProcessingResult[] = [];
+    try {
+      do {
+        rerunRequested = false;
+        all.push(...(await runWorkerBatchOnce()));
+      } while (rerunRequested);
+    } finally {
+      activeBatch = null;
+    }
+    return all;
+  })();
+  return activeBatch;
+}
+
+async function runWorkerBatchOnce(): Promise<ProcessingResult[]> {
   // Recover orphans that lost queue entry after restart
   await invoiceQueue.recoverOrphans().catch(()=>{});
   // Reclaim jobs abandoned mid-PROCESSING by a dead/restarted worker
