@@ -647,6 +647,93 @@ export async function ingestOdooInvoice(
 }
 
 /**
+ * Internal Odoo users who should get the Hub's message in their Odoo Inbox:
+ * the invoice's salesperson, whoever created it, and the user the Hub is
+ * connected as. Portal/public users (share=true) are excluded, and so is the
+ * customer, so nothing is ever emailed outside the client's own team.
+ */
+export async function resolveOdooInboxPartners(creds: OdooCredentials, moveId: number): Promise<number[]> {
+  const [move] = await callOdoo(creds.url, "object", "execute_kw", [
+    creds.database, creds.uid, creds.apiKey,
+    "account.move", "read",
+    [[moveId]],
+    { fields: ["invoice_user_id", "create_uid"] },
+  ]) || [];
+  const m2oId = (v: any) => (Array.isArray(v) ? Number(v[0]) : typeof v === "number" ? v : null);
+  const userIds = Array.from(new Set(
+    [m2oId(move?.invoice_user_id), m2oId(move?.create_uid), creds.uid].filter((v): v is number => !!v),
+  ));
+  if (!userIds.length) return [];
+  const users = await callOdoo(creds.url, "object", "execute_kw", [
+    creds.database, creds.uid, creds.apiKey,
+    "res.users", "read",
+    [userIds],
+    { fields: ["partner_id", "share", "active"] },
+  ]) || [];
+  return Array.from(new Set(
+    users
+      .filter((u: any) => !u.share && u.active !== false)
+      .map((u: any) => m2oId(u.partner_id))
+      .filter((v: number | null): v is number => !!v),
+  ));
+}
+
+/**
+ * Posts a message on an Odoo invoice and delivers it to the team's Odoo Inbox.
+ *
+ * It is posted as an internal note (mail.mt_note) that explicitly notifies the
+ * invoice's internal users, so it appears in Discuss > Inbox (or as an email,
+ * per each user's Odoo notification preference) — never to the customer, who
+ * may be a follower of the invoice. `mail_notify_author` makes sure the person
+ * whose account the Hub is connected with is notified too.
+ *
+ * If the instance rejects the notification options (older Odoo versions), the
+ * message is still posted to the chatter as a plain log entry.
+ */
+export async function postOdooInvoiceMessage(
+  creds: OdooCredentials,
+  moveId: number,
+  body: string,
+  attachmentIds: number[] = [],
+): Promise<{ inboxNotified: number }> {
+  const base: Record<string, any> = attachmentIds.length ? { body, attachment_ids: attachmentIds } : { body };
+  let partnerIds: number[] = [];
+  try {
+    partnerIds = await resolveOdooInboxPartners(creds, moveId);
+  } catch (e: any) {
+    console.warn(`Odoo inbox recipients lookup failed for move ${moveId}: ${e?.message}`);
+  }
+
+  if (partnerIds.length) {
+    try {
+      await callOdoo(creds.url, "object", "execute_kw", [
+        creds.database, creds.uid, creds.apiKey,
+        "account.move", "message_post",
+        [[moveId]],
+        {
+          ...base,
+          message_type: "comment",
+          subtype_xmlid: "mail.mt_note",
+          partner_ids: partnerIds,
+          context: { mail_notify_author: true },
+        },
+      ]);
+      return { inboxNotified: partnerIds.length };
+    } catch (e: any) {
+      console.warn(`Odoo inbox notification not accepted for move ${moveId}, posting to chatter only: ${e?.message}`);
+    }
+  }
+
+  await callOdoo(creds.url, "object", "execute_kw", [
+    creds.database, creds.uid, creds.apiKey,
+    "account.move", "message_post",
+    [[moveId]],
+    base,
+  ]);
+  return { inboxNotified: 0 };
+}
+
+/**
  * Writes a validation / ingest problem back to Odoo as a chatter note.
  *
  * This is deliberately separate from the compliance writeback: a failed invoice
@@ -663,12 +750,7 @@ export async function writebackProblemToOdoo(
   const body = problem;
   const where = { tenantId, OR: [{ odooInvoiceId }, { clientInvoiceId: odooInvoiceId }] };
   try {
-    await callOdoo(creds.url, "object", "execute_kw", [
-      creds.database, creds.uid, creds.apiKey,
-      "account.move", "message_post",
-      [[Number(odooInvoiceId)]],
-      { body },
-    ]);
+    await postOdooInvoiceMessage(creds, Number(odooInvoiceId), body);
   } catch (e) {
     await prisma.invoice
       .updateMany({ where, data: { ledgerWritebackStatus: "FAILED" } })
@@ -733,12 +815,8 @@ export async function writebackToOdoo(
     : `QR code: ${qrCodeUrl}`;
   const escapeHtml = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const body = `<p><b>CittaEFS Compliance Stamp</b><br/>IRN: ${escapeHtml(irn)}<br/>${escapeHtml(qrLine)}</p>`;
-  await callOdoo(creds.url, "object", "execute_kw", [
-    creds.database, creds.uid, creds.apiKey,
-    "account.move", "message_post",
-    [[Number(invoice.odooInvoiceId)]],
-    attachmentIds.length ? { body, attachment_ids: attachmentIds } : { body },
-  ]);
+  const { inboxNotified } = await postOdooInvoiceMessage(creds, Number(invoice.odooInvoiceId), body, attachmentIds);
+  if (inboxNotified) console.log(`Odoo Inbox: notified ${inboxNotified} user(s) for invoice ${clientInvoiceId}`);
 
   console.log(`Odoo Ledger Writeback completed successfully for invoice ${clientInvoiceId}`);
 

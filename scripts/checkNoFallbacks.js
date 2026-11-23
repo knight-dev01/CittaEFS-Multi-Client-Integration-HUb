@@ -35,6 +35,7 @@ const ALLOWLIST = [
   'src/test/unit/efsFeedbackEmail.test.ts',
   'src/test/unit/efsInvoiceNumber.test.ts',
   'src/test/unit/qboCreditMemo.test.ts',
+  'src/test/unit/odooInbox.test.ts',
 
   // Static reference data constants used for reference UI components
   'src/data/referenceData.ts',
