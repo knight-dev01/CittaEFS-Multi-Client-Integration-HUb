@@ -1628,10 +1628,20 @@ async function runAllTests() {
       emptyRejected ? `Caught real error: ${emptyErr}` : "Failed to throw error",
     );
 
-    // 6. Writeback via message_post (chatter) — Odoo has no guaranteed custom fields, unlike QBO's sparse CustomField update
+    // 6. Writeback via message_post (chatter) — Odoo has no guaranteed custom fields, unlike QBO's sparse CustomField update.
+    // The note goes to the team's Odoo Inbox: read the invoice's users, read their partners, then post an internal note to them.
+    let inboxPost: any = null;
     nock(testOdooUrl)
       .post("/jsonrpc")
-      .reply(200, (_uri, body: any) => ({ jsonrpc: "2.0", id: body.id, result: true }));
+      .times(3)
+      .reply(200, (_uri, body: any) => {
+        const [, , , model, method, , kwargs] = body?.params?.args || [];
+        let result: any = true;
+        if (model === "account.move" && method === "read") result = [{ id: 90001, invoice_user_id: [7, "Accountant"], create_uid: [7, "Accountant"] }];
+        else if (model === "res.users" && method === "read") result = [{ id: 7, partner_id: [42, "Accountant"], share: false, active: true }];
+        else if (model === "account.move" && method === "message_post") { inboxPost = kwargs; result = 1001; }
+        return { jsonrpc: "2.0", id: body.id, result };
+      });
 
     const writebackRes = await writebackToOdoo(
       "tenant_qbo",
@@ -1643,11 +1653,14 @@ async function runAllTests() {
 
     assert(
       "Odoo Integration",
-      "Odoo Ledger Writeback (Chatter message_post)",
+      "Odoo Ledger Writeback (Chatter message_post to Inbox)",
       "Integration",
-      Boolean(writebackRes && writebackRes.success),
-      "Posts IRN and QR Code URL as a chatter message on the source account.move record",
-      `Writeback Success for Odoo Invoice ${testMoveName}`,
+      Boolean(writebackRes && writebackRes.success) &&
+        Array.isArray(inboxPost?.partner_ids) && inboxPost.partner_ids.includes(42) &&
+        inboxPost?.subtype_xmlid === "mail.mt_note" &&
+        String(inboxPost?.body || "").includes("IRN-ODOO-2026-STAMPED"),
+      "Posts IRN and QR Code URL as an internal note notifying the invoice's internal users",
+      `Writeback ${writebackRes?.success ? "succeeded" : "failed"}; note sent to partners ${JSON.stringify(inboxPost?.partner_ids ?? [])}`,
     );
 
     // 7. Failed Odoo API Call Failure Recovery Test — real error propagation, no fake fallback data
