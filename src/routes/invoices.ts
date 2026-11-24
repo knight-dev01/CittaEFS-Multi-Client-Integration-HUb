@@ -41,6 +41,18 @@ router.get("/api/invoices", async (req: any, res) => {
     const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
     if (status && status !== "ALL") where.status = status;
     if (req.user && req.user.role !== "ADMIN" && !where.tenantId && req.user.tenantId) where.tenantId = req.user.tenantId;
+    // Dashboard view (used by /api/bootstrap): every invoice that is not yet
+    // stamped (pending, failed, rejected, blocked), plus the most recent
+    // stamped ones, so failures never drop out of the ledger behind newer rows.
+    if (req.query.view === "dashboard") {
+      const stamped = ["APPROVED", "SIGNED"];
+      const [unfinished, done] = await Promise.all([
+        prisma.invoice.findMany({ where: { ...where, status: { notIn: stamped } }, include: { lineItems: true }, orderBy: { createdAt: "desc" }, take: 2000 }),
+        prisma.invoice.findMany({ where: { ...where, status: { in: stamped } }, include: { lineItems: true }, orderBy: { createdAt: "desc" }, take: 300 }),
+      ]);
+      const rows = [...unfinished, ...done].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return res.json(rows.map(formatInvoice));
+    }
     const [total, rawInvoices] = await Promise.all([
       prisma.invoice.count({ where }),
       prisma.invoice.findMany({

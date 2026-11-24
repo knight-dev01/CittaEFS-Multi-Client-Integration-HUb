@@ -209,7 +209,12 @@ export interface MetricsTimeseriesPoint {
   date: string;
   qbo: number;
   odoo: number;
+  /** Approved or signed stamps. */
   total: number;
+  /** Rejected, failed, dead-lettered or cancelled. */
+  failed?: number;
+  /** Not stamped yet (queued, awaiting registration, etc.). */
+  pending?: number;
 }
 
 export interface ErpHealthRow {
@@ -224,8 +229,27 @@ export interface ErpHealthRow {
 
 export interface UptimeBucket {
   start: string;
+  end: string;
   probes: number;
   up: number;
+  avgLatencyMs: number | null;
+  maxLatencyMs: number | null;
+  error: string | null;
+}
+
+export interface UptimeIncident {
+  start: string;
+  end: string | null;
+  durationMs: number;
+  failedChecks: number;
+  error: string | null;
+}
+
+export interface UptimeCheck {
+  checkedAt: string;
+  ok: boolean;
+  latencyMs: number;
+  error: string | null;
 }
 
 export interface UptimeTarget {
@@ -235,12 +259,18 @@ export interface UptimeTarget {
   label: string;
   currentlyUp: boolean | null;
   lastCheckedAt: string | null;
+  lastLatencyMs: number | null;
   lastError: string | null;
   uptimePct: number | null;
   uptimePct7d: number | null;
   avgLatencyMs: number | null;
+  p95LatencyMs: number | null;
   probes: number;
+  failedProbes: number;
+  downtimeMs: number;
   buckets: UptimeBucket[];
+  incidents: UptimeIncident[];
+  recentChecks: UptimeCheck[];
 }
 
 export interface ConnectivityUptime {

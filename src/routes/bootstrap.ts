@@ -69,26 +69,36 @@ function callHandler(handler: any, req: any, timeoutMs = 15000): Promise<any> {
   });
 }
 
-const SOURCES: Array<[key: string, source: any, path: string]> = [
+// Optional query per source. invoices and validationErrors use their
+// "dashboard" view so unfinished work is never cut off by a newest-N page.
+const SOURCES: Array<[key: string, source: any, path: string, query?: Record<string, string>]> = [
   ["tenants", tenantsRouter, "/api/tenants"],
-  ["invoices", invoicesRouter, "/api/invoices"],
+  ["invoices", invoicesRouter, "/api/invoices", { view: "dashboard" }],
   ["customers", customersRouter, "/api/customers"],
   ["itemMappings", itemsRouter, "/api/items/mappings"],
   ["entityMappings", entityMappingsRouter, "/api/entity-mappings"],
-  ["validationErrors", validationRouter, "/api/validation-errors"],
+  ["validationErrors", validationRouter, "/api/validation-errors", { view: "dashboard" }],
   ["metrics", validationRouter, "/api/metrics"],
 ];
+
+// Same request (user, tenant, headers) with an extra query for one source.
+function withQuery(req: any, query?: Record<string, string>): any {
+  if (!query) return req;
+  const scoped = Object.create(req);
+  Object.defineProperty(scoped, "query", { value: { ...req.query, ...query }, enumerable: true });
+  return scoped;
+}
 
 router.get("/api/bootstrap", async (req: any, res) => {
   try {
     const entries = await Promise.all(
-      SOURCES.map(async ([key, source, path]) => {
+      SOURCES.map(async ([key, source, path, query]) => {
         const handler = findGetHandler(source, path);
         if (!handler) {
           console.error(`[API Error] /api/bootstrap: no GET handler found for ${path}`);
           return [key, null] as const;
         }
-        return [key, await callHandler(handler, req)] as const;
+        return [key, await callHandler(handler, withQuery(req, query))] as const;
       })
     );
     const payload: Record<string, any> = {};

@@ -37,6 +37,74 @@ function StatTile({ label, value, note }: { label: string; value: string; note?:
   );
 }
 
+function StampsChart({ days, max }: { days: MetricsTimeseriesPoint[]; max: number }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const day = hover !== null ? days[hover] : null;
+  const segments = (d: MetricsTimeseriesPoint) => [
+    { key: 'approved', value: d.total, className: 'bg-accent' },
+    { key: 'failed', value: d.failed ?? 0, className: 'bg-rose-600' },
+    { key: 'pending', value: d.pending ?? 0, className: 'bg-line-strong' },
+  ].filter(seg => seg.value > 0);
+
+  return (
+    <div className="relative">
+      <div className="flex">
+        <div className="flex h-36 w-8 flex-col justify-between pr-1.5 text-right text-[10px] text-ink-faint">
+          <span>{max}</span>
+          <span>{Math.round(max / 2)}</span>
+          <span>0</span>
+        </div>
+        <div className="relative flex h-36 flex-1 items-end gap-0.5 border-b border-line" onMouseLeave={() => setHover(null)}>
+          <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-line" />
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-line" />
+          {days.map((d, i) => {
+            const segs = segments(d);
+            const total = segs.reduce((sum, seg) => sum + seg.value, 0);
+            return (
+              <div
+                key={d.date}
+                className={`relative flex h-full flex-1 flex-col justify-end ${hover === i ? 'bg-panel-muted' : ''}`}
+                onMouseEnter={() => setHover(i)}
+              >
+                {total > 0 && (
+                  <div className="flex flex-col-reverse gap-[2px]" style={{ height: `${Math.max((total / max) * 100, 3)}%` }}>
+                    {segs.map((seg, n) => (
+                      <div
+                        key={seg.key}
+                        className={`${seg.className} ${n === segs.length - 1 ? 'rounded-t-[3px]' : ''}`}
+                        style={{ flexGrow: seg.value, minHeight: 2 }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-1.5 flex justify-between pl-8 text-xs text-ink-faint">
+        <span>{days[0]?.date}</span>
+        <span>{days[days.length - 1]?.date}</span>
+      </div>
+      {day && hover !== null && (
+        <div
+          className="pointer-events-none absolute top-0 z-10 w-48 rounded-md border border-line bg-panel px-3 py-2 text-xs shadow-lg"
+          style={{ left: `clamp(0px, calc(${((hover + 0.5) / days.length) * 100}% - 96px), calc(100% - 192px))` }}
+        >
+          <p className="font-medium text-ink">{day.date}</p>
+          <dl className="mt-1 grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
+            <dt className="text-ink-faint">Approved</dt><dd className="text-right text-ink">{day.total}</dd>
+            <dt className="pl-2 text-ink-faint">QuickBooks</dt><dd className="text-right text-ink-soft">{day.qbo}</dd>
+            <dt className="pl-2 text-ink-faint">Odoo</dt><dd className="text-right text-ink-soft">{day.odoo}</dd>
+            <dt className="text-ink-faint">Failed</dt><dd className="text-right text-rose-700">{day.failed ?? 0}</dd>
+            <dt className="text-ink-faint">Not stamped yet</dt><dd className="text-right text-ink">{day.pending ?? 0}</dd>
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OverviewTab() {
   const { activeTenant, isBgRefreshing } = useHub() as any;
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
@@ -67,14 +135,23 @@ export function OverviewTab() {
     const byDate = new Map((metrics?.timeseries ?? []).map(point => [point.date, point]));
     return Array.from({ length: 30 }, (_, index) => {
       const date = utcDayKey(29 - index);
-      return byDate.get(date) ?? { date, qbo: 0, odoo: 0, total: 0 };
+      return byDate.get(date) ?? { date, qbo: 0, odoo: 0, total: 0, failed: 0, pending: 0 };
     });
   }, [metrics?.timeseries]);
 
   const chartMax = useMemo(
-    () => Math.max(1, ...chartDays.map(day => day.total)),
+    () => Math.max(1, ...chartDays.map(day => day.total + (day.failed ?? 0) + (day.pending ?? 0))),
     [chartDays]
   );
+
+  const chartTotals = useMemo(() => chartDays.reduce(
+    (sum, day) => ({
+      approved: sum.approved + day.total,
+      failed: sum.failed + (day.failed ?? 0),
+      pending: sum.pending + (day.pending ?? 0),
+    }),
+    { approved: 0, failed: 0, pending: 0 },
+  ), [chartDays]);
 
   if (!activeTenant) {
     return <p className="py-16 text-center text-sm text-ink-soft">No workspace — connect an ERP to see metrics.</p>;
@@ -133,34 +210,23 @@ export function OverviewTab() {
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <Card className="xl:col-span-2">
               <CardHeader
-                title="Approved stamps per day"
-                meta="Last 30 days, UTC days"
+                title="Stamps per day"
+                meta="Approved and failed, last 30 days (UTC)"
                 action={<StatusBadge tone="neutral">{metrics.cittaGatewayStatus}</StatusBadge>}
               />
               <CardBody>
-                <div className="flex h-32 items-end gap-1">
-                  {chartDays.map(day => {
-                    const height = (day.total / chartMax) * 100;
-                    return (
-                      <div
-                        key={day.date}
-                        className="flex h-full flex-1 items-end"
-                        title={`${day.date}: ${day.total} approved (${day.qbo} QBO, ${day.odoo} Odoo)`}
-                      >
-                        {day.total > 0 ? (
-                          <div className="w-full rounded-sm bg-accent" style={{ height: `${Math.max(height, 4)}%` }} />
-                        ) : (
-                          <div className="h-px w-full bg-line-strong" />
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-soft">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-sm bg-accent" />Approved <span className="font-semibold text-ink">{chartTotals.approved.toLocaleString()}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-sm bg-rose-600" />Failed <span className="font-semibold text-ink">{chartTotals.failed.toLocaleString()}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-sm bg-line-strong" />Not stamped yet <span className="font-semibold text-ink">{chartTotals.pending.toLocaleString()}</span>
+                  </span>
                 </div>
-                <div className="mt-2 flex justify-between text-xs text-ink-faint">
-                  <span>{chartDays[0]?.date}</span>
-                  <span>max {chartMax}/day</span>
-                  <span>{chartDays[chartDays.length - 1]?.date}</span>
-                </div>
+                <StampsChart days={chartDays} max={chartMax} />
               </CardBody>
             </Card>
 

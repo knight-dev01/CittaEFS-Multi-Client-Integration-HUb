@@ -83,7 +83,7 @@ Every 60 seconds (`ERP_HEALTH_INTERVAL_MS`) the hub probes:
 * each live ERP connection: QuickBooks `companyinfo`, or an authenticated Odoo `res.company` read. Connections without a `CONNECTED` integration are skipped, not marked down.
 * the CittaEFS gateway: an authenticated read-only archive query for today.
 
-Each probe is stored in `ConnectivityProbe` (kept for 30 days). The Connections tab's **Test** button records a probe too. `GET /api/metrics/uptime?tenantId=&hours=24|168` returns uptime %, current state, average latency and a per-hour history for each target. The **Overview** tab shows this as a live card that refreshes when a probe round finishes.
+Each probe is stored in `ConnectivityProbe` (kept for 30 days). The Connections tab's **Test** button records a probe too. `GET /api/metrics/uptime?tenantId=&hours=1|24|168` returns, for each target, uptime %, downtime, failed checks, average and p95 response time, outages (start, duration, error), the last 20 checks, and a response-time history (by minute for 1h, 15 min for 24h, hour for 7d). The **Overview** tab shows this as a live response-time chart with failed checks marked, refreshed when a probe round finishes.
 
 Only auth-class failures move a connection to `NEEDS_REAUTH`. Timeouts and 5xx keep the status and record the error (`src/services/erpHealthService.ts`).
 
@@ -99,7 +99,7 @@ Rendered by `src/components/erp/ErpWorkspace.tsx`:
 
 | Tab | What it does |
 | :--- | :--- |
-| **Overview** | Invoices processed, stamp success rate, queue latency, open validation errors, **connectivity uptime** for each ERP and for CittaEFS, 30-day approved-stamp chart, per-ERP totals, sync lag per connection. |
+| **Overview** | Invoices processed, stamp success rate, queue latency, open validation errors, **connectivity uptime** for each ERP and for CittaEFS, 30-day stamps chart (approved, failed and not yet stamped per day), per-ERP totals, sync lag per connection. |
 | **Connections** | QuickBooks OAuth connect / sync / sandbox–production switch, Odoo connect form, per-connection **Test**, tax and product mapping, recent gateway runs. The planned ERPs (Xero, Zoho Books, Sage, Tally Prime, SAP B1, Custom) are shown as *Not yet integrated*. |
 | **Invoices** | Status, IRN, QR and writeback state, line-item drill-down, per-invoice and bulk **Retry** for `REJECTED`/`FAILED`, and the EFS bulk-upload export as CSV, Excel or JSON (`GET /api/invoices/export`). |
 | **Validation** | Suggested HS / service codes (one click to confirm), inline fixes for `MISSING_HS_CODE`, `INVALID_TIN_FORMAT` and `MISSING_B2B_TIN` re-queue the invoice. Other categories can only be dismissed. Gateway errors show a plain-English summary with the raw reply behind *Technical detail*. |

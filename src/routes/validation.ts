@@ -63,11 +63,24 @@ router.get("/api/code-intelligence/suggestions", async (req: any, res) => {
 // ==========================================
 // 6. VALIDATION ERRORS QUEUE API (DB Backed)
 // ==========================================
+const DASHBOARD_OPEN_CAP = 2000;
+const DASHBOARD_HANDLED_CAP = 300;
+
 router.get("/api/validation-errors", async (req: any, res) => {
   try {
     const queryTenantId = req.query.tenantId as string | undefined;
     const { skip, take, page, limit } = parsePagination(req);
     const where: any = { ...getScopedTenantWhere(req, queryTenantId) };
+    // Dashboard view (used by /api/bootstrap): every OPEN error, however old,
+    // plus the most recent handled ones. A plain newest-50 page let open errors
+    // fall off the Validation tab as soon as newer errors arrived.
+    if (req.query.view === "dashboard") {
+      const [open, handled] = await Promise.all([
+        prisma.validationError.findMany({ where: { ...where, status: "OPEN" }, orderBy: { createdAt: "desc" }, take: DASHBOARD_OPEN_CAP }),
+        prisma.validationError.findMany({ where: { ...where, status: { not: "OPEN" } }, orderBy: { createdAt: "desc" }, take: DASHBOARD_HANDLED_CAP }),
+      ]);
+      return res.json([...open, ...handled].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+    }
     const [total, errors] = await Promise.all([
       prisma.validationError.count({ where }),
       prisma.validationError.findMany({
@@ -274,12 +287,13 @@ router.post("/api/validation-errors/bulk-resolve", async (req: any, res) => {
 // ==========================================
 // 8. METRICS API (DB Backed)
 // ==========================================
-// GET /api/metrics/uptime?tenantId=&hours=24|168 — connectivity uptime of each
+// GET /api/metrics/uptime?tenantId=&hours=1|24|168 — connectivity uptime of each
 // source ERP connection and of the CittaEFS gateway, from ConnectivityProbe rows.
 router.get("/api/metrics/uptime", async (req: any, res) => {
   try {
     const scoped = getScopedTenantWhere(req, req.query.tenantId as string | undefined);
-    const hours = Number(req.query.hours) === 168 ? 168 : 24;
+    const requested = Number(req.query.hours);
+    const hours = requested === 168 ? 168 : requested === 1 ? 1 : 24;
     const targets = await getUptime(scoped.tenantId, hours);
     res.json({
       windowHours: hours,
@@ -292,6 +306,9 @@ router.get("/api/metrics/uptime", async (req: any, res) => {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
+
+// Invoices whose stamp attempt ended in failure (shown as "failed" per day).
+const FAILED_STAMP_STATUSES = new Set(["REJECTED", "FAILED", "DLQ", "CANCELLED"]);
 
 router.get("/api/metrics", async (req: any, res) => {
   try {
@@ -330,20 +347,24 @@ router.get("/api/metrics", async (req: any, res) => {
           prisma.invoice.count({ where: { ...invWhere, sourceErp: erp } }),
           prisma.invoice.count({ where: { ...invWhere, sourceErp: erp, status: { in: ["APPROVED","SIGNED"] } } }),
           prisma.invoice.count({ where: { ...invWhere, sourceErp: erp, status: "PENDING_NRS_STAMP" } }),
-          prisma.invoice.count({ where: { ...invWhere, sourceErp: erp, status: { in: ["REJECTED","FAILED"] } } }),
+          prisma.invoice.count({ where: { ...invWhere, sourceErp: erp, status: { in: [...FAILED_STAMP_STATUSES] } } }),
         ]);
         byErp.push({ sourceErp: erp, total: t, approved: a, pending: p, rejected: r, successRate: t ? Number(((a/t)*100).toFixed(1)) : 0 });
       }
-      // 30d daily timeseries per ERP (approved per day)
+      // 30d daily timeseries: approved per ERP, plus failed and still-pending stamps
       const since = new Date(); since.setDate(since.getDate()-30);
       const recentInvoices = await prisma.invoice.findMany({ where: { ...invWhere, createdAt: { gte: since } }, select: { sourceErp: true, status: true, createdAt: true } });
       const dayMap = new Map<string, any>();
       for (const inv of recentInvoices) {
         const day = inv.createdAt.toISOString().slice(0,10);
-        if (!dayMap.has(day)) dayMap.set(day, { date: day, qbo: 0, odoo: 0, total: 0 });
+        if (!dayMap.has(day)) dayMap.set(day, { date: day, qbo: 0, odoo: 0, total: 0, failed: 0, pending: 0 });
         const row = dayMap.get(day);
         if (inv.status==="APPROVED"||inv.status==="SIGNED") {
           row.total++; if (inv.sourceErp==="qbo") row.qbo++; else if (inv.sourceErp==="odoo") row.odoo++;
+        } else if (FAILED_STAMP_STATUSES.has(inv.status)) {
+          row.failed++;
+        } else {
+          row.pending++;
         }
       }
       timeseries = Array.from(dayMap.values()).sort((a,b)=>a.date.localeCompare(b.date));

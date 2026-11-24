@@ -15,8 +15,30 @@ export interface ProbeRow {
 
 export interface UptimeBucket {
   start: string;
+  end: string;
   probes: number;
   up: number;
+  /** Mean response time of the successful checks in the bucket. */
+  avgLatencyMs: number | null;
+  maxLatencyMs: number | null;
+  /** Most recent failure message in the bucket. */
+  error: string | null;
+}
+
+export interface UptimeIncident {
+  start: string;
+  /** First successful check after the outage; null while still down. */
+  end: string | null;
+  durationMs: number;
+  failedChecks: number;
+  error: string | null;
+}
+
+export interface UptimeCheck {
+  checkedAt: string;
+  ok: boolean;
+  latencyMs: number;
+  error: string | null;
 }
 
 export interface UptimeTarget {
@@ -26,16 +48,64 @@ export interface UptimeTarget {
   label: string;
   currentlyUp: boolean | null;
   lastCheckedAt: string | null;
+  lastLatencyMs: number | null;
   lastError: string | null;
   uptimePct: number | null;
   uptimePct7d: number | null;
   avgLatencyMs: number | null;
+  p95LatencyMs: number | null;
   probes: number;
+  failedProbes: number;
+  /** Total outage time inside the window. */
+  downtimeMs: number;
   buckets: UptimeBucket[];
+  /** Outages in the window, newest first (at most 10). */
+  incidents: UptimeIncident[];
+  /** Latest checks, newest first (at most 20). */
+  recentChecks: UptimeCheck[];
 }
 
 function pct(up: number, total: number): number | null {
   return total > 0 ? Number(((up / total) * 100).toFixed(2)) : null;
+}
+
+function percentile(values: number[], p: number): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
+  return sorted[Math.max(0, index)];
+}
+
+/** Runs of consecutive failed checks, oldest first. */
+function findIncidents(rows: ProbeRow[], now: Date): UptimeIncident[] {
+  const incidents: UptimeIncident[] = [];
+  let open: { start: Date; failed: number; error: string | null } | null = null;
+  for (const row of rows) {
+    if (!row.ok) {
+      if (!open) open = { start: row.checkedAt, failed: 0, error: null };
+      open.failed += 1;
+      open.error = row.error ?? open.error;
+    } else if (open) {
+      incidents.push({
+        start: open.start.toISOString(),
+        end: row.checkedAt.toISOString(),
+        durationMs: row.checkedAt.getTime() - open.start.getTime(),
+        failedChecks: open.failed,
+        error: open.error,
+      });
+      open = null;
+    }
+  }
+  if (open) {
+    incidents.push({
+      start: open.start.toISOString(),
+      end: null,
+      durationMs: Math.max(0, now.getTime() - open.start.getTime()),
+      failedChecks: open.failed,
+      error: open.error,
+    });
+  }
+  return incidents;
 }
 
 /**
@@ -66,18 +136,27 @@ export function summarizeUptime(
     const inWindow = group.filter(r => r.checkedAt.getTime() >= windowStart);
     const inWeek = group.filter(r => r.checkedAt.getTime() >= weekStart);
 
-    const buckets: UptimeBucket[] = Array.from({ length: bucketCount }, (_, i) => ({
-      start: new Date(windowStart + i * bucketMs).toISOString(),
-      probes: 0,
-      up: 0,
-    }));
+    const perBucket: ProbeRow[][] = Array.from({ length: bucketCount }, () => []);
     for (const r of inWindow) {
       const index = Math.min(bucketCount - 1, Math.floor((r.checkedAt.getTime() - windowStart) / bucketMs));
-      buckets[index].probes += 1;
-      if (r.ok) buckets[index].up += 1;
+      perBucket[index].push(r);
     }
+    const buckets: UptimeBucket[] = perBucket.map((items, i) => {
+      const ok = items.filter(r => r.ok);
+      const failed = items.filter(r => !r.ok);
+      return {
+        start: new Date(windowStart + i * bucketMs).toISOString(),
+        end: new Date(windowStart + (i + 1) * bucketMs).toISOString(),
+        probes: items.length,
+        up: ok.length,
+        avgLatencyMs: ok.length ? Math.round(ok.reduce((s, r) => s + r.latencyMs, 0) / ok.length) : null,
+        maxLatencyMs: ok.length ? Math.max(...ok.map(r => r.latencyMs)) : null,
+        error: failed.length ? failed[failed.length - 1].error : null,
+      };
+    });
 
     const okInWindow = inWindow.filter(r => r.ok);
+    const incidents = findIncidents(inWindow, now);
     targets.push({
       key,
       target: latest.target === "ERP" ? "ERP" : "CITTAEFS",
@@ -85,14 +164,25 @@ export function summarizeUptime(
       label: latest.label,
       currentlyUp: latest.ok,
       lastCheckedAt: latest.checkedAt.toISOString(),
+      lastLatencyMs: latest.ok ? latest.latencyMs : null,
       lastError: latest.ok ? null : latest.error,
       uptimePct: pct(okInWindow.length, inWindow.length),
       uptimePct7d: pct(inWeek.filter(r => r.ok).length, inWeek.length),
       avgLatencyMs: okInWindow.length
         ? Math.round(okInWindow.reduce((sum, r) => sum + r.latencyMs, 0) / okInWindow.length)
         : null,
+      p95LatencyMs: percentile(okInWindow.map(r => r.latencyMs), 95),
       probes: inWindow.length,
+      failedProbes: inWindow.length - okInWindow.length,
+      downtimeMs: incidents.reduce((sum, i) => sum + i.durationMs, 0),
       buckets,
+      incidents: incidents.reverse().slice(0, 10),
+      recentChecks: group.slice(-20).reverse().map(r => ({
+        checkedAt: r.checkedAt.toISOString(),
+        ok: r.ok,
+        latencyMs: r.latencyMs,
+        error: r.error,
+      })),
     });
   }
 
@@ -100,4 +190,11 @@ export function summarizeUptime(
   return targets.sort((a, b) =>
     a.target === b.target ? a.label.localeCompare(b.label) : a.target === "CITTAEFS" ? -1 : 1,
   );
+}
+
+/** Window length -> chart resolution: 1h by minute, 24h by 15 min, 7d by hour. */
+export function bucketCountFor(windowHours: number): number {
+  if (windowHours <= 1) return 60;
+  if (windowHours <= 24) return 96;
+  return 168;
 }

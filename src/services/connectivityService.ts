@@ -4,7 +4,7 @@
  * and uptime is the share of successful probes in a window.
  */
 import { prisma } from "../lib/prisma";
-import { summarizeUptime, type UptimeTarget } from "../lib/uptimeSummary";
+import { bucketCountFor, summarizeUptime, type UptimeTarget } from "../lib/uptimeSummary";
 
 export type { ProbeRow, UptimeBucket, UptimeTarget } from "../lib/uptimeSummary";
 
@@ -65,5 +65,5 @@ export async function getUptime(
   });
   const liveIds = new Set(liveErps.map(e => e.id));
   const visible = rows.filter(r => r.target !== "ERP" || (r.tenantErpId && liveIds.has(r.tenantErpId)));
-  return summarizeUptime(visible, { now, windowHours, bucketCount: windowHours <= 24 ? 24 : 28 });
+  return summarizeUptime(visible, { now, windowHours, bucketCount: bucketCountFor(windowHours) });
 }
