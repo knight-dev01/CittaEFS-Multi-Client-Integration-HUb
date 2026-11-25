@@ -8,13 +8,13 @@ describe('Gateway — pending until verified + writeback FAILED', () => {
     expect(normalizeCittaCode('8130')).toBe('8130');
   });
 
-  it('server.ts has 60s QBO, 60s Odoo, 300s NRS intervals', async () => {
+  it('server.ts has 60s QBO, 60s NRS archive intervals and the Odoo poll', async () => {
     const fs = await import('fs');
     const src = fs.readFileSync('server.ts', 'utf8');
     expect(src).toContain('runNrsReconciliationCron');
     expect(src).toContain('runQbReconciliationCron');
     expect(src).toContain('fetchOdooInvoicesSince');
-    expect(src).toContain('300000');
+    expect(src).toContain('setInterval(nrsReconcile, 60000)');
     expect(src).toContain('60000');
   });
 
