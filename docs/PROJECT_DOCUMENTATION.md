@@ -83,7 +83,7 @@ Key models in `prisma/schema.prisma`:
 - **Ingestion**: manual "Sync Now" poll (paginated, `STARTPOSITION`/`MAXRESULTS` 1000/page, or incremental via `MetaData.LastUpdatedTime`) or push via Intuit's CDC webhook (`/api/webhooks/qbo`, HMAC `intuit-signature` verified with `crypto.timingSafeEqual`).
 - Deduplicated on `DocNumber`.
 - HS/service code inference: 4-tier — existing line code → Item Dictionary lookup → keyword regex → generic fallback.
-- **Writeback**: a sparse update of two pre-created QBO Custom Fields (`DefinitionId 1 = IRN`, `2 = QR_CODE_URL`).
+- **Writeback**: the IRN in the invoice's PrivateNote, the QR as a PNG attachment, and any sales custom fields named `IRN` / `QR` (found by name).
 - Full endpoint/error reference: `docs/quickbooks-integration.md`.
 
 ### Odoo ERP (`src/services/odooService.ts`, `src/routes/odoo.ts`) — added in commit `96ea247`

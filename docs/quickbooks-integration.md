@@ -33,8 +33,8 @@ OAuth2, auto-refreshed      upsert master data     &queued
 access/refresh tokens       Postgres: Invoice,
                              Integration
       ▲                                                        │
-      └── sparse update: CustomField 1 = IRN, CustomField 2 ◀───┘
-                          = QR_CODE_URL
+      └── PrivateNote + QR attachment + custom ◀────────────────┘
+          fields named "IRN" / "QR" (if present)
 ```
 
 Unlike Odoo's stateless per-call auth, QuickBooks issues a short-lived **access token** plus a longer-lived **refresh token** at connect time. `getValidQboAccessToken()` checks expiry on every call and silently exchanges the refresh token for a new pair when fewer than 5 minutes remain — callers never see a raw expired-token error, only a `reauthorization` error if the refresh token itself has been revoked or expired.
@@ -54,7 +54,7 @@ What happens to one invoice, from being saved in QuickBooks to landing back ther
 5. **Master data upserted** — First sighting of a customer or SKU auto-creates a Customer / Item record so later invoices resolve VAT rate and code from the Item Dictionary instead of the raw guess.
 6. **Routed** — If the tenant's *auto-enqueue* setting is on, the invoice goes straight to the signing queue. Otherwise it lands in the Import tab's preview inbox as `PENDING_NRS_STAMP` for an operator to review.
 7. **Stamped by the Gateway** — CittaEFS returns an IRN and a QR code URL for the invoice.
-8. **Written back to QuickBooks** — `writebackToQbo()` re-fetches the invoice for its current `SyncToken`, then issues a **sparse update** setting two Custom Fields — `DefinitionId 1` (`IRN`) and `DefinitionId 2` (`QR_CODE_URL`) — and the Hub's copy is marked `ledgerWritebackStatus: SYNCED`.
+8. **Written back to QuickBooks** — `writebackToQbo()` re-fetches the invoice for its current `SyncToken`, appends the IRN to the invoice's `PrivateNote` (the Hub's copy is then marked `ledgerWritebackStatus: SYNCED`), attaches the QR code as a PNG, and fills any sales custom fields **named** `IRN` and `QR` (found by name via the invoice and company Preferences, so their order does not matter; values are capped at 30 characters, and the QR field gets a short verification link or "See QR attachment").
 
 > **Why a sparse update, and why those two fields specifically:** QuickBooks requires a `SyncToken` on every write to prevent clobbering concurrent edits, so the writeback always re-reads it first. Unlike Odoo (which has a universal message log), the IRN/QR values are written into **Custom Fields that must already exist** on the client's company — see the setup note under [Connecting QuickBooks](#connecting-quickbooks).
 
@@ -104,7 +104,9 @@ If any of these are missing, the connect flow fails immediately with a clear err
 
 ### What the client needs to do first
 
-**Enable two Custom Fields** on their QuickBooks company (Sales forms → Custom Fields): one named `IRN`, one named `QR_CODE_URL`, matching `DefinitionId` 1 and 2. Without these, invoices will sync and stamp normally, but the writeback step will fail — see [Troubleshooting](#troubleshooting).
+**Optional: add Custom Fields** on their QuickBooks company (⚙ → Account and settings → Sales → Custom fields) named `IRN` and/or `QR` (e.g. "QR Code"), switched on for invoices and credit memos. Any position works; the Hub finds them by name. Without them the writeback still succeeds: the IRN is always in the invoice's Memo (`PrivateNote`) and the QR is attached as an image.
+
+A field named `Status` or `Info` shows where the invoice is in the Hub: `Pending - hub review` (waiting for operator approval), `Pending - sending to NRS` (being sent, including retries), `Stamped by NRS`, or a short error such as `Error: HS/service code` (the full reason is in the Memo).
 
 ### Connecting — new client or existing tenant
 
@@ -150,7 +152,7 @@ An invoice with an unrecognized HS/service code never reaches either queue — i
 
 ### Confirming the writeback
 
-Once an invoice is stamped, open the corresponding invoice in QuickBooks and check its **IRN** and **QR_CODE_URL** custom fields — populated values confirm the round trip completed.
+Once an invoice is stamped, open the corresponding invoice in QuickBooks and check the IRN in its Memo / Note to self, the QR image under Attachments, and the **IRN** / **QR** custom fields if the company has them — these confirm the round trip completed.
 
 ## Roles & permissions
 
@@ -172,7 +174,8 @@ Enforced server-side on every QuickBooks endpoint, not just hidden in the UI.
 | "QBO OAuth token exchange failed" | Intuit rejected the authorization code — reused, expired, or the redirect URI doesn't exactly match the Intuit app config. | Restart the connect flow; verify `QBO_REDIRECT_URI` matches the Intuit app's registered redirect URI exactly. |
 | "QuickBooks connection needs reauthorization" (sync/refresh returns 401/400) | The refresh token was revoked in Intuit, or expired from prolonged inactivity. | Reconnect via the OAuth popup again. |
 | "Could not reach QuickBooks, please try again" | Transient network or API error during a sync call. | Retry; check Intuit status if it persists. |
-| "QBO Ledger Writeback sparse update failed" | The client's company is missing the `IRN` / `QR_CODE_URL` Custom Fields (Definition Id 1 / 2), or the `SyncToken` was stale from a concurrent edit. | Have the client add both Custom Fields under Sales form settings; retry the writeback. |
+| "QBO Ledger Writeback sparse update failed" | The `SyncToken` was stale from a concurrent edit, or the token lost access. | Retry the writeback; reconnect QuickBooks if it persists. |
+| IRN custom field stays empty | No sales custom field is named `IRN`, or it is switched off (log: `no sales custom field named "IRN" or "QR"`). | Name a custom field `IRN` and switch it on for invoices; the IRN is in the Memo meanwhile. |
 | "Invalid Product Code — must be valid HS Code or Service Code (found …)" | Neither the line's own code, the Item Dictionary mapping, nor the keyword guess resolved to a code CittaEFS recognizes. | Map the SKU to a valid code in the Item Dictionary, then retry the invoice. |
 | "No invoice data provided — … has no SalesItemLineDetail lines" | The invoice has no lines of the expected detail type (e.g. only discount/subtotal lines). | Check the invoice in QuickBooks has at least one real sales item line. |
 | "Invalid intuit-signature" on `/api/webhooks/qbo` | The webhook payload's HMAC doesn't match `QBO_WEBHOOK_VERIFIER` (falls back to `QBO_CLIENT_SECRET` if unset). | Confirm the verifier token configured in the Intuit app's webhook settings matches the server's env var. |

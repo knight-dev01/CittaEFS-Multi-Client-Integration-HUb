@@ -73,39 +73,52 @@ function useElementWidth<T extends HTMLElement>() {
   return { ref, width };
 }
 
-/** Response-time line over the window, with failed checks shaded red. */
-function LatencyChart({ buckets, windowHours, label }: { buckets: UptimeBucket[]; windowHours: number; label: string }) {
+/**
+ * Availability over the window as a continuous step area: the line sits at
+ * 100% while every check passes and drops when checks fail, with the lost
+ * share shaded red. Periods with no checks carry the last known level so the
+ * graph never breaks into scattered segments.
+ */
+function AvailabilityChart({ buckets, windowHours, label }: { buckets: UptimeBucket[]; windowHours: number; label: string }) {
   const { ref, width } = useElementWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const height = 132;
-  const pad = { top: 8, right: 8, bottom: 20, left: 48 };
+  const height = 150;
+  const pad = { top: 10, right: 8, bottom: 20, left: 40 };
   const plotW = Math.max(0, width - pad.left - pad.right);
   const plotH = height - pad.top - pad.bottom;
-
-  const yMax = useMemo(
-    () => niceCeil(Math.max(0, ...buckets.map(b => b.avgLatencyMs ?? 0)) * 1.1),
-    [buckets],
-  );
   const step = buckets.length ? plotW / buckets.length : 0;
-  const xMid = (i: number) => pad.left + step * (i + 0.5);
-  const y = (ms: number) => pad.top + plotH - (ms / yMax) * plotH;
+  const xAt = (i: number) => pad.left + step * i;
+  const xMid = (i: number) => xAt(i) + step / 2;
+  const y = (pct: number) => pad.top + plotH - (pct / 100) * plotH;
 
-  // Line segments break where a bucket has no successful checks.
-  const segments = useMemo(() => {
-    const out: string[] = [];
-    let current = '';
-    buckets.forEach((b, i) => {
-      if (b.avgLatencyMs === null) {
-        if (current) out.push(current);
-        current = '';
-        return;
-      }
-      current += `${current ? 'L' : 'M'}${xMid(i).toFixed(1)},${y(b.avgLatencyMs).toFixed(1)}`;
+  // Per-bucket availability; empty buckets repeat the previous known value.
+  const levels = useMemo(() => {
+    let last: number | null = null;
+    return buckets.map(b => {
+      if (b.probes > 0) last = (b.up / b.probes) * 100;
+      return last;
     });
-    if (current) out.push(current);
-    return out;
+  }, [buckets]);
+
+  const paths = useMemo(() => {
+    const first = levels.findIndex(v => v !== null);
+    if (first < 0 || !plotW) return { line: '', area: '', lost: '' };
+    let line = '';
+    let lost = '';
+    const top = y(100).toFixed(1);
+    for (let i = first; i < levels.length; i++) {
+      const v = levels[i] as number;
+      const x0 = xAt(i).toFixed(1);
+      const x1 = xAt(i + 1).toFixed(1);
+      const yv = y(v).toFixed(1);
+      line += `${i === first ? 'M' : 'L'}${x0},${yv}L${x1},${yv}`;
+      if (v < 100) lost += `M${x0},${top}L${x1},${top}L${x1},${yv}L${x0},${yv}Z`;
+    }
+    const base = y(0).toFixed(1);
+    const area = `${line}L${xAt(levels.length).toFixed(1)},${base}L${xAt(first).toFixed(1)},${base}Z`;
+    return { line, area, lost };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buckets, plotW, yMax]);
+  }, [levels, plotW]);
 
   const onMove = (e: React.MouseEvent<SVGRectElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
@@ -114,71 +127,46 @@ function LatencyChart({ buckets, windowHours, label }: { buckets: UptimeBucket[]
   };
 
   const hovered = hover !== null ? buckets[hover] : null;
+  const hoverLevel = hover !== null ? levels[hover] : null;
   const tooltipLeft = hover !== null ? Math.min(Math.max(xMid(hover) - 110, 0), Math.max(0, width - 220)) : 0;
-  const yTicks = [0, yMax / 2, yMax];
-  const xTicks = [0, Math.floor(buckets.length / 2), buckets.length - 1];
+  const n = buckets.length;
+  const xTicks = [0, Math.floor(n / 4), Math.floor(n / 2), Math.floor((n * 3) / 4), n - 1];
+  const lastTick = xTicks.length - 1;
 
   return (
     <div ref={ref} className="relative w-full select-none">
       {width > 0 && (
-        <svg width={width} height={height} role="img" aria-label={`${label} response time and failed checks`}>
-          {yTicks.map(t => (
+        <svg width={width} height={height} role="img" aria-label={`${label} availability over time`}>
+          {[0, 50, 100].map(t => (
             <g key={t}>
               <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} stroke="var(--color-line)" strokeWidth={1} />
-              <text x={pad.left - 6} y={y(t)} dy="0.32em" textAnchor="end" fontSize={10} fill="var(--color-ink-faint)">
-                {t >= 1000 ? `${(t / 1000).toFixed(t % 1000 ? 1 : 0)}s` : `${Math.round(t)}ms`}
-              </text>
+              <text x={pad.left - 6} y={y(t)} dy="0.32em" textAnchor="end" fontSize={10} fill="var(--color-ink-faint)">{t}%</text>
             </g>
           ))}
-          {buckets.map((b, i) => {
-            const failed = b.probes - b.up;
-            if (!failed) return null;
-            return (
-              <g key={b.start}>
-                <rect
-                  x={pad.left + step * i}
-                  y={pad.top}
-                  width={Math.max(step, 1.5)}
-                  height={plotH}
-                  fill={FAIL}
-                  opacity={b.up === 0 ? 0.22 : 0.1}
-                />
-                <rect x={pad.left + step * i} y={pad.top + plotH - 3} width={Math.max(step, 1.5)} height={3} fill={FAIL} />
-              </g>
-            );
-          })}
-          {segments.map((d, i) => (
-            <path key={i} d={d} fill="none" stroke={ACCENT} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-          ))}
-          {xTicks.map((i, n) => buckets[i] && (
+          {paths.area && <path d={paths.area} fill={ACCENT} opacity={0.14} />}
+          {paths.lost && <path d={paths.lost} fill={FAIL} opacity={0.3} />}
+          {paths.line && <path d={paths.line} fill="none" stroke={ACCENT} strokeWidth={2} strokeLinejoin="round" />}
+          {xTicks.map((i, k) => buckets[i] && (
             <text
-              key={i}
-              x={n === 0 ? pad.left : n === 2 ? width - pad.right : xMid(i)}
+              key={k}
+              x={k === 0 ? pad.left : k === lastTick ? width - pad.right : xMid(i)}
               y={height - 5}
-              textAnchor={n === 0 ? 'start' : n === 2 ? 'end' : 'middle'}
+              textAnchor={k === 0 ? 'start' : k === lastTick ? 'end' : 'middle'}
               fontSize={10}
               fill="var(--color-ink-faint)"
             >
-              {n === 2 ? 'now' : formatTime(buckets[i].start, windowHours)}
+              {k === lastTick ? 'now' : formatTime(buckets[i].start, windowHours)}
             </text>
           ))}
-          {hovered && hover !== null && (
+          {hover !== null && (
             <g pointerEvents="none">
               <line x1={xMid(hover)} x2={xMid(hover)} y1={pad.top} y2={pad.top + plotH} stroke="var(--color-ink-faint)" strokeWidth={1} strokeDasharray="3 3" />
-              {hovered.avgLatencyMs !== null && (
-                <circle cx={xMid(hover)} cy={y(hovered.avgLatencyMs)} r={4} fill={ACCENT} stroke="var(--color-panel)" strokeWidth={2} />
+              {hoverLevel !== null && (
+                <circle cx={xMid(hover)} cy={y(hoverLevel)} r={4} fill={hoverLevel < 100 ? FAIL : ACCENT} stroke="var(--color-panel)" strokeWidth={2} />
               )}
             </g>
           )}
-          <rect
-            x={pad.left}
-            y={pad.top}
-            width={plotW}
-            height={plotH}
-            fill="transparent"
-            onMouseMove={onMove}
-            onMouseLeave={() => setHover(null)}
-          />
+          <rect x={pad.left} y={pad.top} width={plotW} height={plotH} fill="transparent" onMouseMove={onMove} onMouseLeave={() => setHover(null)} />
         </svg>
       )}
       {hovered && (
@@ -193,12 +181,14 @@ function LatencyChart({ buckets, windowHours, label }: { buckets: UptimeBucket[]
             <p className="mt-1 text-ink-soft">No checks in this period</p>
           ) : (
             <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-              <dt className="text-ink-faint">Checks</dt>
-              <dd className="text-right text-ink">{hovered.up} of {hovered.probes} passed</dd>
+              <dt className="text-ink-faint">Status</dt>
+              <dd className={`text-right font-medium ${hovered.up === hovered.probes ? 'text-emerald-700' : hovered.up === 0 ? 'text-rose-700' : 'text-amber-700'}`}>
+                {hovered.up === hovered.probes ? 'Up' : hovered.up === 0 ? 'Down' : 'Partly down'}
+              </dd>
+              <dt className="text-ink-faint">Checks passed</dt>
+              <dd className="text-right text-ink">{hovered.up} of {hovered.probes}</dd>
               <dt className="text-ink-faint">Avg response</dt>
               <dd className="text-right text-ink">{formatMs(hovered.avgLatencyMs)}</dd>
-              <dt className="text-ink-faint">Slowest</dt>
-              <dd className="text-right text-ink">{formatMs(hovered.maxLatencyMs)}</dd>
             </dl>
           )}
           {hovered.error && <p className="mt-1.5 break-words text-rose-700">{hovered.error}</p>}
@@ -268,69 +258,15 @@ function TargetPanel({ target, windowHours, windowLabel, nowMs }: {
 
       <div className="mt-4">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-soft">
-          <span className="font-medium text-ink">Response time</span>
+          <span className="font-medium text-ink">Availability</span>
           <span className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: ACCENT }} />Avg response</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: FAIL, opacity: 0.4 }} />Failed checks</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: ACCENT }} />Up</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: FAIL, opacity: 0.4 }} />Down</span>
           </span>
         </div>
-        <LatencyChart buckets={target.buckets} windowHours={windowHours} label={target.label} />
+        <AvailabilityChart buckets={target.buckets} windowHours={windowHours} label={target.label} />
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <details className="rounded-md border border-line bg-panel-muted px-3 py-2 text-xs" open={target.incidents.length > 0}>
-          <summary className="cursor-pointer font-medium text-ink">
-            Outages ({target.incidents.length})
-          </summary>
-          {target.incidents.length === 0 ? (
-            <p className="mt-2 text-ink-soft">No outages in the last {windowLabel}.</p>
-          ) : (
-            <ul className="mt-2 space-y-2">
-              {target.incidents.map(incident => (
-                <li key={incident.start} className="border-t border-line pt-2 first:border-0 first:pt-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-ink">
-                      {new Date(incident.start).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      {' · '}{formatDuration(incident.durationMs)}
-                    </span>
-                    {incident.end === null
-                      ? <StatusBadge tone="fail">Ongoing</StatusBadge>
-                      : <span className="text-ink-faint">Recovered {formatTime(incident.end, 1)}</span>}
-                  </div>
-                  <p className="text-ink-faint">{incident.failedChecks} failed check{incident.failedChecks === 1 ? '' : 's'}</p>
-                  {incident.error && <p className="break-words text-rose-700">{incident.error}</p>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </details>
-
-        <details className="rounded-md border border-line bg-panel-muted px-3 py-2 text-xs">
-          <summary className="cursor-pointer font-medium text-ink">Recent checks ({target.recentChecks.length})</summary>
-          <table className="mt-2 w-full">
-            <thead>
-              <tr className="text-left text-ink-faint">
-                <th className="pb-1 font-normal">Time</th>
-                <th className="pb-1 font-normal">Result</th>
-                <th className="pb-1 text-right font-normal">Response</th>
-              </tr>
-            </thead>
-            <tbody>
-              {target.recentChecks.map(check => (
-                <tr key={check.checkedAt} className="border-t border-line align-top">
-                  <td className="py-1 pr-2 text-ink">{new Date(check.checkedAt).toLocaleTimeString()}</td>
-                  <td className="py-1 pr-2">
-                    {check.ok
-                      ? <span className="text-emerald-700">Passed</span>
-                      : <span className="break-words text-rose-700">Failed{check.error ? `: ${check.error}` : ''}</span>}
-                  </td>
-                  <td className="py-1 text-right text-ink">{check.ok ? formatMs(check.latencyMs) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      </div>
     </section>
   );
 }

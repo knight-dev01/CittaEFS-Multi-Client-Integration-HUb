@@ -13,6 +13,7 @@ import {
 } from "../connectors";
 import type { OAuthProvider } from "../connectors";
 import { findRememberedCode } from "../lib/codeMemory";
+import { findQboStampFields, qrFieldValue, qboErrorStatus, QBO_CUSTOM_FIELD_MAX, QBO_STATUS, type QboStampFieldIds } from "../lib/qboCustomFields";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: getDatabaseUrl() } },
@@ -830,6 +831,7 @@ export async function ingestQboInvoice(
     console.log(`Successfully ingested and enqueued QBO Invoice ${clientInvoiceId} (qboId ${qboId}) for tenant ${tenantId} — auto-enqueue ON`);
   } else {
     console.log(`QBO Invoice ${clientInvoiceId} (qboId ${qboId}) ingested to preview inbox for tenant ${tenantId} — awaiting operator approval (autoEnqueue OFF)`);
+    await setQboInvoiceStatus(tenantId, String(qboId), isCreditMemo ? "CreditMemo" : "Invoice", QBO_STATUS.review);
   }
   return dbInvoice;
 }
@@ -847,6 +849,79 @@ export async function fetchAndIngestSpecificQboInvoice(
   );
   const rawInvoice = await fetchSingleQboInvoice(tenantId, qboInvoiceId, entity);
   return ingestQboInvoice(tenantId, rawInvoice);
+}
+
+/**
+ * Finds the company's IRN / QR / Status custom fields by name. The invoice
+ * itself lists its active fields; company Preferences are read only when the
+ * invoice does not name all three.
+ */
+async function resolveQboStampFields(
+  liveInvoice: any,
+  baseUrl: string,
+  realmId: string,
+  accessToken: string,
+): Promise<QboStampFieldIds> {
+  let fields = findQboStampFields(liveInvoice?.CustomField, null);
+  if (fields.irn && fields.qr && fields.status) return fields;
+  try {
+    const prefRes = await fetch(`${baseUrl}/v3/company/${realmId}/preferences?minorversion=65`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    });
+    if (prefRes.ok) {
+      const prefs = ((await prefRes.json()) as any)?.Preferences;
+      fields = findQboStampFields(liveInvoice?.CustomField, prefs);
+    }
+  } catch (e: any) {
+    console.warn(`QBO preferences read skipped: ${e?.message}`);
+  }
+  return fields;
+}
+
+function statusCustomField(fields: QboStampFieldIds, text: string): any[] {
+  return fields.status
+    ? [{ DefinitionId: fields.status, Type: "StringType", StringValue: text.slice(0, QBO_CUSTOM_FIELD_MAX) }]
+    : [];
+}
+
+/**
+ * Shows where an invoice is in the hub (e.g. "Pending - sending to NRS") in
+ * the company's custom field named "Status" or "Info". Best-effort: never
+ * throws, and does nothing when the company has no such field.
+ */
+export async function setQboInvoiceStatus(
+  tenantId: string,
+  qboInvoiceId: string,
+  entity: QboTxnEntity,
+  text: string,
+): Promise<boolean> {
+  try {
+    const accessToken = await getValidQboAccessToken(tenantId);
+    const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
+    if (!integration) return false;
+    const realmId = integration.companyId;
+    const baseUrl = await getQboBaseUrl(tenantId);
+    const live = await fetchSingleQboInvoice(tenantId, qboInvoiceId, entity);
+    const fields = await resolveQboStampFields(live, baseUrl, realmId, accessToken);
+    const customField = statusCustomField(fields, text);
+    if (!customField.length) return false;
+    const current = (live.CustomField || []).find((f: any) => String(f.DefinitionId) === fields.status)?.StringValue;
+    if (current === customField[0].StringValue) return true;
+    const res = await fetch(`${baseUrl}/v3/company/${realmId}/${entity.toLowerCase()}?minorversion=65`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ Id: qboInvoiceId, SyncToken: live.SyncToken || "0", sparse: true, CustomField: customField }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.warn(`QBO status field not updated for ${entity} ${qboInvoiceId} (${res.status}): ${text.slice(0, 300)}`);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.warn(`QBO status field not updated for ${entity} ${qboInvoiceId}: ${e?.message}`);
+    return false;
+  }
 }
 
 /**
@@ -973,25 +1048,35 @@ ${qrLine}`;
     }
   }
 
-  // 3. Best-effort: also fill the IRN / QR custom fields when the company has
-  // them defined. Failure here never fails the writeback (the note above
-  // already carries the IRN).
+  // 3. Best-effort: also fill the company's IRN / QR custom fields, found by
+  // their names (e.g. "IRN", "QR Code") so the order they were created in does
+  // not matter. Failure here never fails the writeback (the note above already
+  // carries the IRN).
   try {
-    const newSyncToken = data?.[entity]?.SyncToken || syncToken; // attachments do not change the invoice SyncToken
-    const cfRes = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        Id: qboId,
-        SyncToken: newSyncToken,
-        sparse: true,
-        CustomField: [
-          { DefinitionId: "1", Name: "IRN", Type: "StringType", StringValue: irn.slice(0, 30) },
-        ],
-      }),
-    });
-    if (!cfRes.ok) {
-      console.warn(`QBO custom field writeback skipped for ${clientInvoiceId} (${cfRes.status}) - IRN is in PrivateNote.`);
+    const fields = await resolveQboStampFields(liveInvoice, baseUrl, realmId, accessToken);
+    const customFields: any[] = [];
+    if (fields.irn) {
+      customFields.push({ DefinitionId: fields.irn, Type: "StringType", StringValue: irn.slice(0, QBO_CUSTOM_FIELD_MAX) });
+    }
+    if (fields.qr) {
+      customFields.push({ DefinitionId: fields.qr, Type: "StringType", StringValue: qrFieldValue(qrCodeUrl).slice(0, QBO_CUSTOM_FIELD_MAX) });
+    }
+    customFields.push(...statusCustomField(fields, QBO_STATUS.stamped));
+    if (!customFields.length) {
+      console.warn(`QBO custom fields not written for ${clientInvoiceId}: no sales custom field named "IRN", "QR" or "Status" - IRN is in PrivateNote.`);
+    } else {
+      const newSyncToken = data?.[entity]?.SyncToken || syncToken; // attachments do not change the invoice SyncToken
+      const cfRes = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ Id: qboId, SyncToken: newSyncToken, sparse: true, CustomField: customFields }),
+      });
+      if (!cfRes.ok) {
+        const cfText = await cfRes.text().catch(() => "");
+        console.warn(`QBO custom field writeback skipped for ${clientInvoiceId} (${cfRes.status}): ${cfText.slice(0, 300)} - IRN is in PrivateNote.`);
+      } else {
+        console.log(`QBO custom fields written for ${clientInvoiceId}: IRN -> field ${fields.irn ?? "none"}, QR -> field ${fields.qr ?? "none"}, Status -> field ${fields.status ?? "none"}`);
+      }
     }
   } catch (e: any) {
     console.warn(`QBO custom field writeback skipped for ${clientInvoiceId}: ${e?.message}`);
@@ -1026,10 +1111,13 @@ export async function writebackProblemToQbo(
 
   let syncToken = "0";
   let existingNote = "";
+  let statusField: any[] = [];
   try {
     const rawInvoice = await fetchSingleQboInvoice(tenantId, qboInvoiceId, entity);
     syncToken = rawInvoice.SyncToken || "0";
     existingNote = rawInvoice.PrivateNote || "";
+    const fields = await resolveQboStampFields(rawInvoice, baseUrl, realmId, accessToken);
+    statusField = statusCustomField(fields, qboErrorStatus(problem));
   } catch (e: any) {
     console.warn(
       `Could not fetch latest QBO invoice ${qboInvoiceId} before problem writeback:`,
@@ -1058,6 +1146,7 @@ export async function writebackProblemToQbo(
       SyncToken: syncToken,
       sparse: true,
       PrivateNote: note,
+      ...(statusField.length ? { CustomField: statusField } : {}),
     }),
   });
 

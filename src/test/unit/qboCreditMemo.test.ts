@@ -135,9 +135,17 @@ describe('writebackToQbo for a credit memo', () => {
       return defaultHandler(model, method, args);
     });
     const read = nock(QBO).get('/v3/company/realm1/creditmemo/12').query(true)
-      .reply(200, { CreditMemo: { Id: '12', SyncToken: '3', PrivateNote: '' } });
+      .reply(200, { CreditMemo: { Id: '12', SyncToken: '3', PrivateNote: '', CustomField: [
+        { DefinitionId: '1', Name: 'Crew #', Type: 'StringType' },
+        { DefinitionId: '2', Name: 'IRN', Type: 'StringType' },
+        { DefinitionId: '3', Name: 'QR Code', Type: 'StringType' },
+      ] } });
     let posted: any = null;
-    const write = nock(QBO).post('/v3/company/realm1/creditmemo', (b: any) => { posted ??= b; return true; }).query(true).times(2)
+    let customFieldPost: any = null;
+    const write = nock(QBO).post('/v3/company/realm1/creditmemo', (b: any) => {
+      if (b.CustomField) customFieldPost = b; else posted ??= b;
+      return true;
+    }).query(true).times(2)
       .reply(200, { CreditMemo: { Id: '12', SyncToken: '4' } });
 
     await writebackToQbo('t1', 'CM-1005', 'IRN-CM-1', 'https://verify.example/IRN-CM-1');
@@ -146,5 +154,10 @@ describe('writebackToQbo for a credit memo', () => {
     expect(write.isDone()).toBe(true);
     expect(posted.Id).toBe('12');
     expect(posted.PrivateNote).toContain('IRN-CM-1');
+    // IRN and QR land in the fields named for them, not in field 1.
+    expect(customFieldPost.CustomField).toEqual([
+      { DefinitionId: '2', Type: 'StringType', StringValue: 'IRN-CM-1' },
+      { DefinitionId: '3', Type: 'StringType', StringValue: 'See QR attachment' },
+    ]);
   });
 });

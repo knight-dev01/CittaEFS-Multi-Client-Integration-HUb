@@ -45,6 +45,21 @@ async function writeProblemBackToSourceErp(
   );
 }
 
+async function markSourceInvoicePending(job: QueueJob<QueueablePayload>): Promise<void> {
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: job.data.dbInvoiceId },
+      select: { sourceErp: true, qboInvoiceId: true, invoiceType: true },
+    });
+    if (invoice?.sourceErp !== 'qbo' || !invoice.qboInvoiceId) return;
+    const { setQboInvoiceStatus, qboEntityForInvoiceType } = await import('../services/qboService');
+    const { QBO_STATUS } = await import('../lib/qboCustomFields');
+    await setQboInvoiceStatus(job.tenantId, invoice.qboInvoiceId, qboEntityForInvoiceType(invoice.invoiceType), QBO_STATUS.processing);
+  } catch (e: any) {
+    console.warn(`[Worker] Could not mark source invoice pending for job ${job.id}: ${e?.message}`);
+  }
+}
+
 export interface ProcessingResult {
   jobId: string;
   success: boolean;
@@ -67,6 +82,10 @@ export async function processInvoiceJob(
   job.attempts += 1;
   job.updatedAt = new Date().toISOString();
   await invoiceQueue.updateJob(job);
+
+  // First attempt of a (re)queued job: show "Pending" on the QuickBooks invoice
+  // while the hub sends it. Best-effort and silent without a Status/Info field.
+  if (job.attempts === 1) await markSourceInvoicePending(job);
 
   try {
     // 0. Re-normalize HS/Service code at send time against Item dictionary (Option B auto-map)

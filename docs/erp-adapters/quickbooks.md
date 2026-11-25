@@ -9,7 +9,7 @@ OAuth 2.0 Authorization Code Grant with auto-refresh. Tokens stored per tenant i
 REST JSON, `https://sandbox-quickbooks.api.intuit.com/v3` or production `https://quickbooks.api.intuit.com/v3`. CDC webhooks for real-time push.
 
 ## 3. Core Object Names
-`Customer` → `qbo.Customer` (`CustomerRef`). `Invoice` → `qbo.Invoice` (`DocNumber` is business key). `Item` → `qbo.Item` / `qbo.Line.ItemRef`. Writeback targets Invoice custom fields `IRN` and `QR_CODE_URL`.
+`Customer` → `qbo.Customer` (`CustomerRef`). `Invoice` → `qbo.Invoice` (`DocNumber` is business key). `Item` → `qbo.Item` / `qbo.Line.ItemRef`. Writeback goes to the invoice's PrivateNote, a QR attachment, and any custom fields named `IRN` / `QR`.
 
 ## 4. Hard Quirks
 - Rate limit 500 req/min per realm. Intuit returns `429` with `Retry-After` — must be honoured.
