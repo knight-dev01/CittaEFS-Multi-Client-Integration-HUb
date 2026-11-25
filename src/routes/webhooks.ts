@@ -9,6 +9,8 @@ import { cittaEfsClient } from "../services/cittaEfsClient";
 import { writeProblemBackToSourceErp } from "../lib/erpProblemWriteback";
 import { dispatchMerchantWebhook } from "../services/merchantWebhook";
 import { toEfsInvoiceNumber } from "../lib/efsInvoiceNumber";
+import { pickWebhookInvoice } from "../lib/efsArchive";
+import { hubInvoiceIdFrom } from "../lib/sourceErpTag";
 
 const router = Router();
 
@@ -37,23 +39,26 @@ async function handleCittaEfsWebhook(req: any, res: any) {
       return res.status(401).json({ success: false, error: "Invalid webhook signature" });
     }
 
-    if (webhookId) {
-      const existing = await prisma.webhookDelivery.findUnique({ where: { webhookId } });
-      if (existing) {
-        logger.info(`[Webhook] Duplicate delivery ignored`, { webhookId, event: webhookEvent }, { requestId: (req as any).requestId });
-        return res.json({ status: "ACCEPTED", eventProcessed: false, duplicate: true });
-      }
-      // Reserve the delivery idempotently before processing
-      await prisma.webhookDelivery.create({
-        data: {
-          webhookId,
-          eventType: webhookEvent || req.body?.event || req.body?.eventType,
-          tenantId: "pending",
-          invoiceNumber: req.body?.data?.invoiceNumber || req.body?.invoiceNumber,
-          irn: req.body?.data?.irn || req.body?.irn,
-          signature,
-        },
-      }).catch(() => {});
+    // CittaEFS's X-Webhook-Id identifies the webhook subscription in its
+    // payload (webhookMetadata.webhookId sits beside companyId and attempt), so
+    // it can repeat across events. Deduplicate on the delivery itself instead:
+    // subscription + event + invoice + IRN + status. The key is stored only
+    // after the event is processed, so a delivery that failed here is retried.
+    const body = req.body || {};
+    const bodyData = body.data || body;
+    const deliveryKey = generateSha256([
+      webhookId || body.webhookMetadata?.webhookId || "",
+      webhookEvent || body.event || body.eventType || bodyData.eventType || "",
+      bodyData.invoiceNumber || body.invoiceNumber || "",
+      bodyData.irn || body.irn || "",
+      bodyData.status || body.status || "",
+      bodyData.errorMessage || "",
+      bodyData.paymentStatus || "",
+    ].join("|"));
+    const seen = await prisma.webhookDelivery.findUnique({ where: { webhookId: deliveryKey } }).catch(() => null);
+    if (seen) {
+      logger.info(`[Webhook] Duplicate delivery ignored`, { webhookId, event: webhookEvent }, { requestId: (req as any).requestId });
+      return res.json({ status: "ACCEPTED", eventProcessed: false, duplicate: true });
     }
 
     logger.info(`[Webhook] CittaEFS event received`, { event: req.body?.event || req.body?.eventType, invoiceNumber: req.body?.data?.invoiceNumber || req.body?.invoiceNumber, irn: req.body?.data?.irn || req.body?.irn }, { requestId: (req as any).requestId });
@@ -67,7 +72,6 @@ async function handleCittaEfsWebhook(req: any, res: any) {
     const paymentStatus = data?.paymentStatus || data?.payment_status;
     const paymentReference = data?.paymentReference || data?.payment_reference;
     const errorMessage = data?.errorMessage || req.body?.errorMessage;
-    const transmittedAt = data?.transmittedAt || data?.signedAt;
 
     // Never query with an empty OR: an empty clause matches every invoice.
     const lookupClauses: any[] = [];
@@ -76,42 +80,62 @@ async function handleCittaEfsWebhook(req: any, res: any) {
     // EFS echoes the ERP's original number as sourceNbr / documentNumber.
     const sourceNbr = data?.sourceNbr || data?.documentNumber;
     if (sourceNbr) lookupClauses.push({ clientInvoiceId: String(sourceNbr) });
-    let inv = lookupClauses.length
-      ? await prisma.invoice.findFirst({ where: { OR: lookupClauses } })
-      : null;
+    // The worker tags every submission with the hub's invoice id (metadata).
+    const hubInvoiceId = hubInvoiceIdFrom(data);
+    if (hubInvoiceId) lookupClauses.push({ id: hubInvoiceId });
+    const candidates: any[] = lookupClauses.length
+      ? await prisma.invoice.findMany({ where: { OR: lookupClauses }, orderBy: { createdAt: "desc" }, take: 20 })
+      : [];
     // EFS's invoiceNumber is the A-Z/0-9 form of the ERP number ("INV-1001" was
     // sent as "INV1001"), so match on the same normalisation (expression-indexed).
-    if (!inv && invoiceNumber) {
+    if (invoiceNumber) {
       const rows = await prisma.$queryRaw<{ id: string }[]>`
         SELECT id FROM invoices
         WHERE UPPER(regexp_replace(client_invoice_id, '[^A-Za-z0-9]', '', 'g')) = ${toEfsInvoiceNumber(invoiceNumber)}
-        ORDER BY created_at DESC LIMIT 1`;
-      if (rows[0]) inv = await prisma.invoice.findUnique({ where: { id: rows[0].id } });
+        ORDER BY created_at DESC LIMIT 20`;
+      const missing = rows.map(r => r.id).filter(id => !candidates.some(c => c.id === id));
+      if (missing.length) candidates.push(...await prisma.invoice.findMany({ where: { id: { in: missing } } }));
     }
+    const inv = pickWebhookInvoice(candidates, { irn, invoiceNumber, sourceNbr, hubInvoiceId });
 
     if (inv) {
-      if (webhookId) {
-        await prisma.webhookDelivery.updateMany({
-          where: { webhookId },
-          data: { tenantId: inv.tenantId, invoiceNumber: invoiceNumber || null, irn: irn || null },
-        }).catch(() => {});
-      }
-
       const updateData: any = {};
+      const efsStatus = String(status || "").toUpperCase();
+      const eventName = String(event || webhookEvent || "").toLowerCase();
+      const stampedEvent =
+        eventName === "invoice.signed" || eventName === "invoice.transmitted" ||
+        efsStatus === "SIGNED" || efsStatus === "TRANSMITTED";
       const rejected =
-        event === "invoice.validation.failed" ||
-        status === "REJECTED" ||
-        Boolean(errorMessage);
+        !stampedEvent &&
+        (eventName === "invoice.validation.failed" ||
+          /REJECT|FAIL/.test(efsStatus) ||
+          Boolean(errorMessage));
 
-      if (event === "invoice.signed" || status === "SIGNED") { updateData.status = "APPROVED"; if (irn) updateData.irn = irn; if (qrCode) updateData.qrCodeUrl = `data:image/png;base64,${qrCode}`; if (transmittedAt) updateData.updatedAt = new Date(transmittedAt); }
-      else if (event === "invoice.transmitted" || status === "TRANSMITTED") { updateData.status = "APPROVED"; if (irn) updateData.irn = irn; if (qrCode) updateData.qrCodeUrl = `data:image/png;base64,${qrCode}`; }
-      else if (rejected) { updateData.status = "REJECTED"; }
-      else if (event === "invoice.payment.updated" || paymentStatus) {
+      if (stampedEvent) {
+        updateData.status = "APPROVED";
+        if (irn) updateData.irn = irn;
+        if (qrCode) updateData.qrCodeUrl = String(qrCode).startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`;
+      } else if (rejected) {
+        updateData.status = "REJECTED";
+      } else if (eventName === "invoice.payment.updated" || paymentStatus) {
         logger.info(`[Webhook] Payment update`, { invoiceNumber, irn, paymentStatus, paymentReference }, { requestId: (req as any).requestId });
       }
-      else if (status) { updateData.status = status; }
+      // Other EFS states (DRAFT, QUEUED, invoice.created) mean "still being
+      // processed": the hub's PENDING_NRS_STAMP already says that, and copying
+      // them would turn a stamped invoice back to pending if events arrive out
+      // of order.
       if (irn && !updateData.irn) updateData.irn = irn;
-      if (qrCode && !updateData.qrCodeUrl) updateData.qrCodeUrl = qrCode.startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`;
+      if (qrCode && !updateData.qrCodeUrl) updateData.qrCodeUrl = String(qrCode).startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`;
+      // A stamped invoice stays stamped; a later failure event is logged only.
+      if (inv.status === "APPROVED" && updateData.status === "REJECTED") delete updateData.status;
+      if (updateData.irn) {
+        // An IRN is unique: release it from any other row first (an earlier
+        // mismatch), since this delivery names the invoice it belongs to.
+        await prisma.invoice.updateMany({
+          where: { irn: updateData.irn, NOT: { id: inv.id } },
+          data: { irn: null, status: "PENDING_NRS_STAMP" },
+        }).catch(() => {});
+      }
       if (Object.keys(updateData).length) {
         await prisma.invoice.update({ where: { id: inv.id }, data: updateData });
       }
@@ -120,7 +144,7 @@ async function handleCittaEfsWebhook(req: any, res: any) {
       // gateway rejects the invoice. The writeback functions set
       // ledgerWritebackStatus to SYNCED/FAILED themselves; failures are logged
       // and never block the webhook response.
-      if (rejected) {
+      if (rejected && inv.status !== "APPROVED") {
         try {
           await writeProblemBackToSourceErp(
             {
@@ -159,13 +183,7 @@ async function handleCittaEfsWebhook(req: any, res: any) {
       // arrives here asynchronously. Complete the ERP writeback + merchant
       // callback on the first signed/transmitted event (the reconciliation
       // cron performs the same recovery if this webhook never arrives).
-      const stampedNow =
-        Boolean(irn) &&
-        inv.status !== "APPROVED" &&
-        (event === "invoice.signed" ||
-          event === "invoice.transmitted" ||
-          status === "SIGNED" ||
-          status === "TRANSMITTED");
+      const stampedNow = Boolean(irn) && stampedEvent && inv.status !== "APPROVED";
       if (stampedNow) {
         const qr =
           (qrCode &&
@@ -196,6 +214,22 @@ async function handleCittaEfsWebhook(req: any, res: any) {
         performedBy: "CittaEFS Gateway Webhook Listener",
         rawJson: req.body,
       });
+    }
+
+    await prisma.webhookDelivery.create({
+      data: {
+        webhookId: deliveryKey,
+        eventType: String(webhookEvent || event || "unknown"),
+        tenantId: inv?.tenantId || "unmatched",
+        invoiceNumber: invoiceNumber || null,
+        irn: irn || null,
+        signature,
+      },
+    }).catch(() => {});
+    if (!inv) {
+      logger.warn(`[Webhook] No hub invoice matches this CittaEFS event`, { event, invoiceNumber, sourceNbr: data?.sourceNbr, irn }, { requestId: (req as any).requestId });
+    } else {
+      broadcastEvent({ type: "update", method: "WEBHOOK", path: "/cittaefs/webhook" });
     }
 
     res.json({ status: "ACCEPTED", eventProcessed: true });

@@ -10,6 +10,7 @@ import { findRememberedCode } from "../lib/codeMemory";
 import { preflightInvoice } from '../lib/efsPreflight';
 import { loadEfsCatalog } from '../services/efsResources';
 import { safeAuditLogCreate } from '../lib/serverHelpers';
+import { withSourceTag } from '../lib/sourceErpTag';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
@@ -261,6 +262,25 @@ export async function processInvoiceJob(
       }
     }
 
+    // 0.7 Tag the source ERP in CittaEFS's metadata / custom fields (never the
+    // NRS-registered invoice number) so CittaEFS shows where it came from.
+    {
+      const source = await prisma.invoice.findUnique({
+        where: { id: job.data.dbInvoiceId },
+        select: { sourceErp: true, clientInvoiceId: true, documentNumber: true },
+      }).catch(() => null);
+      const tagged = withSourceTag(
+        { metadata: _d.metadata, customFields: _d.customFields },
+        {
+          hubInvoiceId: job.data.dbInvoiceId,
+          sourceErp: source?.sourceErp,
+          sourceInvoiceNumber: source?.documentNumber || source?.clientInvoiceId || job.data.clientInvoiceNumber,
+        },
+      );
+      _d.metadata = tagged.metadata;
+      _d.customFields = tagged.customFields;
+    }
+
     // 1. Dispatch payload to CittaEFS Gateway C# REST API — forward all gold fields (header, currency, IRNs, customFields)
     const response: CittaEfsResponse = await cittaEfsClient.signAndStampInvoice({
       tenantId: job.data.tenantId,
@@ -321,8 +341,10 @@ export async function processInvoiceJob(
       // webhooks or the archive reconciliation cron.
       job.status = 'COMPLETED';
       job.updatedAt = new Date().toISOString();
-      await prisma.invoice.update({
-        where: { id: job.data.dbInvoiceId },
+      // The signed/transmitted webhook can arrive before this HTTP response:
+      // never turn an invoice it already stamped back to pending.
+      await prisma.invoice.updateMany({
+        where: { id: job.data.dbInvoiceId, status: { notIn: ['APPROVED', 'SIGNED'] } },
         data: {
           status: 'PENDING_NRS_STAMP',
           rawPayloadHash: job.data.rawPayloadHash || null,

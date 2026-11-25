@@ -95,22 +95,42 @@ export async function runNrsReconciliationCron(tenantId?: string): Promise<Recon
       byTenant.set(p.tenantId, arr);
     }
     const { cittaEfsClient } = await import('../services/cittaEfsClient');
-    const { toEfsInvoiceNumber } = await import('../lib/efsInvoiceNumber');
+    const { unwrapArchive, indexArchive, findArchiveRecord, stampFromArchiveRecord } = await import('../lib/efsArchive');
+    const day = (d: Date) => d.toISOString().slice(0, 10);
     for (const [tid, invoices] of byTenant) {
       try {
-        const archive: any[] = await cittaEfsClient.getArchive(tid).catch(()=>[]);
-        const archiveByNumber = new Map(archive.map((a: any) => [String(a.invoiceNumber || a.clientInvoiceNumber), a]));
+        // Ask for the period these invoices were sent in (a day either side
+        // for time zones), not EFS's default range.
+        const oldest = Math.min(...invoices.flatMap(i => [new Date(i.createdAt).getTime(), new Date(i.issueDate).getTime()]).filter(Number.isFinite));
+        const fromDate = day(new Date(oldest - 24 * 3600 * 1000));
+        const toDate = day(new Date(Date.now() + 24 * 3600 * 1000));
+        const archive = unwrapArchive(await cittaEfsClient.getArchive(tid, fromDate, toDate));
+        const index = indexArchive(archive);
         for (const inv of invoices) {
-          const match = archiveByNumber.get(toEfsInvoiceNumber(inv.clientInvoiceId)) || archiveByNumber.get(String(inv.clientInvoiceId)) || archiveByNumber.get(String(inv.documentNumber || ''));
-          if (match && (match.irn || match.Irn)) {
-            const irn = match.irn || match.Irn;
-            const csid = match.csid || match.Csid || null;
-            const qr = match.qrCodeUrl || match.QrCodeUrl || match.qrUrl || `https://nrs.portal.gov/verify?irn=${irn}`;
-            await prisma.invoice.update({
-              where: { id: inv.id },
-              data: { status: 'APPROVED', irn, csid, qrCodeUrl: qr },
-            });
+          const record = findArchiveRecord(index, inv);
+          const stamp = stampFromArchiveRecord(record);
+          if (stamp) {
+            const { irn, csid } = stamp;
+            const qr = stamp.qrCodeUrl || `https://nrs.portal.gov/verify?irn=${irn}`;
+            try {
+              // An IRN is unique. If it already sits on a different invoice
+              // (an earlier mismatched webhook), the archive, matched on the
+              // invoice number, is authoritative: move it to this invoice.
+              const holder = await prisma.invoice.findFirst({ where: { irn, NOT: { id: inv.id } } });
+              if (holder) {
+                await prisma.invoice.update({ where: { id: holder.id }, data: { irn: null, csid: null, qrCodeUrl: null, status: 'PENDING_NRS_STAMP' } });
+                console.warn(`[NRS Reconcile] IRN ${irn} was on ${holder.clientInvoiceId}; the archive assigns it to ${inv.clientInvoiceId}. Moved.`);
+              }
+              await prisma.invoice.update({
+                where: { id: inv.id },
+                data: { status: 'APPROVED', irn, csid, qrCodeUrl: qr },
+              });
+            } catch (e: any) {
+              console.warn(`[NRS Reconcile] could not record the stamp for ${inv.clientInvoiceId}:`, e?.message);
+              continue;
+            }
             // Attempt writeback and surface result
+            console.log(`[NRS Reconcile] ${inv.clientInvoiceId} stamped by NRS (IRN ${irn}); writing back to the source ERP`);
             const result = await cittaEfsClient.executeClientLedgerWriteback(tid, inv.clientInvoiceId, irn, qr).catch(()=>({ synced: false }));
             if (!inv.sourceErp && result.synced) {
               await prisma.invoice.update({
@@ -133,7 +153,7 @@ export async function runNrsReconciliationCron(tenantId?: string): Promise<Recon
           }
         }
       } catch (e) {
-        console.warn(`[NRS Reconcile] tenant ${tid} archive fetch failed:`, (e as any)?.message);
+        console.warn(`[NRS Reconcile] tenant ${tid} archive check failed:`, (e as any)?.message);
       }
     }
     // Also recover via queue orphan logic

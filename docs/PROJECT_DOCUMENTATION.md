@@ -102,6 +102,7 @@ The old `CsvAdapter` and drag-drop ingestion path were deleted; invoices are ERP
 - `signAndStampInvoice()`: posts a DTO array to `POST {gateway}/api/integration/gen/invoices` (bulk endpoint, Bearer auth); response shape `{ successCount, failedCount, errors, items: [{ irn, qrCodeUrl, csid }] }`.
 - `executeClientLedgerWriteback()`: writes IRN/QR back to the source ERP and/or the CittaEFS gateway, depending on the tenant's `cittaWritebackTarget`.
 - `getArchive()`: used by the reconciliation cron to recover invoices stuck mid-flight.
+- **Source ERP tag.** Every submission carries `metadata.SourceSystem` ("QuickBooks Online", "Odoo", ...), `metadata.SourceInvoiceNumber` (the ERP's own number), `metadata.HubInvoiceId` and `customFields.SourceErp` (`QBO`, `ODOO`, ...), so CittaEFS shows where each invoice came from. The invoice number itself is never changed: it is registered with NRS and must match the customer's copy, so nothing needs stripping on writeback. CittaEFS echoes the metadata back, and the webhook and archive check match on `HubInvoiceId` first.
 
 ### Webhooks (`src/routes/webhooks.ts`)
 - `POST /api/webhooks/cittaefs` (alias `/pay2/einvoicehookweb`): verifies `x-webhook-signature` (HMAC-SHA256, hex or base64) against `CITTAEFS_WEBHOOK_SECRET`; rejects invalid/missing signatures in production, logs-and-continues in dev. Handles `invoice.signed`, `invoice.transmitted`, `validation.failed`, `payment.updated` events.
@@ -192,7 +193,7 @@ Two-tier queue design:
 - **`src/workers/invoiceWorker.ts`** — `processInvoiceJob()` re-normalizes HS/service codes at send time (a second, independent inference pass against the live Item Dictionary), calls `cittaEfsClient.signAndStampInvoice()`, and on success persists `APPROVED` status + IRN/QR and triggers ledger writeback. On failure: invalid product codes and missing gateway config short-circuit straight to the DLQ plus a `ValidationError` row; transient errors instead retry through an exponential backoff ladder (5s / 30s / 2m / 10m / 30m) before landing in the DLQ.
 - **`src/crons/reconciliation.ts`**:
   - `runQbReconciliationCron()` — re-pulls QBO invoices per connected `Integration` and ingests any missing from the DB.
-  - `runNrsReconciliationCron()` — polls the CittaEFS gateway's invoice archive per tenant to recover invoices stuck in `PENDING_NRS_STAMP`, flags invoices older than 30 minutes with no gateway trace as orphans, and triggers `invoiceQueue.recoverOrphans()`.
+  - `runNrsReconciliationCron()` — runs every minute (and 15s after start); polls the CittaEFS gateway's invoice archive per tenant, for the dates the pending invoices were sent, to recover invoices stuck in `PENDING_NRS_STAMP` whose webhook never arrived (matched by `HubInvoiceId`, then invoice number), flags invoices older than 30 minutes with no gateway trace as orphans, and triggers `invoiceQueue.recoverOrphans()`.
 
 ---
 

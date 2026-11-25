@@ -174,13 +174,22 @@ async function startServer() {
 
   setInterval(()=>{ runWorkerBatch().then(results=>{ if(results.length>0) broadcastEvent({ type:"update", method:"WORKER", path:"/queue/drain"});}).catch(err=>console.error("[Worker] Queue drain error:",err));},5000);
   // Continuous ERP sync + NRS archive verification (hub listens, not center of edits; pending until verified)
-  setInterval(async ()=>{
+  // NRS archive check: picks up stamps whose CittaEFS webhook never arrived.
+  // Only invoices still awaiting a stamp are looked up, so an idle hub makes
+  // no gateway calls. Runs once shortly after start, then every minute.
+  let nrsReconcileRunning = false;
+  const nrsReconcile = async ()=>{
+    if (nrsReconcileRunning) return;
+    nrsReconcileRunning = true;
     try {
       const { runNrsReconciliationCron } = await import("./src/crons/reconciliation");
       const res = await runNrsReconciliationCron();
       if (res.recoveredCount>0 || res.orphansFixedCount>0) broadcastEvent({ type:"update", method:"CRON", path:"/nrs/reconcile"});
     } catch(e:any){ console.warn("[Cron] NRS reconcile error:", e.message); }
-  }, 300000).unref(); // 5m NRS archive poll
+    finally { nrsReconcileRunning = false; }
+  };
+  setTimeout(nrsReconcile, 15000).unref();
+  setInterval(nrsReconcile, 60000).unref();
   setInterval(async ()=>{
     try {
       const { runQbReconciliationCron } = await import("./src/crons/reconciliation");
