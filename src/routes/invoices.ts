@@ -897,7 +897,7 @@ router.post("/api/invoices/retry-bulk", async (req: any, res) => {
     const where: any = { tenantId: targetTenantId };
     if (invoiceIds && Array.isArray(invoiceIds) && invoiceIds.length) where.id = { in: invoiceIds };
     else if (statusFilter) where.status = statusFilter;
-    else where.status = { in: ["REJECTED","FAILED","PENDING_NRS_STAMP","PENDING","QUEUED"] };
+    else where.status = { in: ["REJECTED","FAILED","NEEDS_EFS_REGISTRATION","PENDING_NRS_STAMP","PENDING","QUEUED"] };
     const pending = await prisma.invoice.findMany({ where, include: { lineItems: true }, take: 100 });
     const retryable = pending.filter((inv:any)=> !["APPROVED","SIGNED"].includes(inv.status));
     if (retryable.length===0) return res.json({ success:true, retried:0, message:"No retryable invoices found" });

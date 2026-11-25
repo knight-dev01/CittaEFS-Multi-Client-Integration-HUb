@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { qrLinkFor } from "../lib/qrLink";
 import { PrismaClient } from "@prisma/client";
 import { getDatabaseUrl } from "../config/dbConfig";
 import {
@@ -224,6 +225,46 @@ async function fetchOdooInvoiceLines(creds: OdooCredentials, invoiceIds: number[
     byInvoice[moveId].push(line);
   }
   return byInvoice;
+}
+
+/**
+ * The buyer's live details from Odoo (res.partner), for CittaEFS's inline
+ * customer. customerCode is the hub's "CUST<partner id>". The country comes
+ * from res.country's ISO code.
+ */
+export async function fetchOdooCustomerDetails(
+  tenantId: string,
+  customerCode: string,
+): Promise<import("../lib/inlineCustomer").CustomerDetails> {
+  const partnerId = Number(String(customerCode).replace(/^CUST/i, ""));
+  if (!Number.isInteger(partnerId) || partnerId <= 0) throw new Error(`Not an Odoo customer reference: ${customerCode}`);
+  const creds = await getValidOdooCredentials(tenantId);
+  const [partner] = (await callOdoo(creds.url, "object", "execute_kw", [
+    creds.database, creds.uid, creds.apiKey,
+    "res.partner", "read",
+    [[partnerId]],
+    { fields: ["name", "commercial_company_name", "email", "street", "street2", "city", "zip", "country_id"] },
+  ])) || [];
+  if (!partner) throw new Error(`Odoo customer ${partnerId} not found`);
+  let country: string | null = null;
+  const countryId = Array.isArray(partner.country_id) ? partner.country_id[0] : null;
+  if (countryId) {
+    const [row] = (await callOdoo(creds.url, "object", "execute_kw", [
+      creds.database, creds.uid, creds.apiKey,
+      "res.country", "read",
+      [[countryId]],
+      { fields: ["code"] },
+    ])) || [];
+    country = row?.code || partner.country_id[1] || null;
+  }
+  return {
+    name: partner.commercial_company_name || partner.name,
+    email: partner.email,
+    street: [partner.street, partner.street2].filter(Boolean).join(", "),
+    city: partner.city,
+    postalCode: partner.zip,
+    country,
+  };
 }
 
 /**
@@ -891,11 +932,16 @@ export async function writebackToOdoo(
     }
   }
 
-  const qrLine = isImage
-    ? (attachmentIds.length ? "QR code attached below." : "QR code available on the CittaEFS portal.")
-    : `QR code: ${qrCodeUrl}`;
-  const escapeHtml = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const body = `<p><b>CittaEFS Compliance Stamp</b><br/>IRN: ${escapeHtml(irn)}<br/>${escapeHtml(qrLine)}</p>`;
+  const escapeHtml = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  // The hub's QR page opens, prints and downloads the QR without a CittaEFS login.
+  const qrPage = qrLinkFor(invoice.id);
+  const link = (href: string, text: string) => `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`;
+  const qrHtml = qrPage
+    ? `QR code: ${link(qrPage, "open / download")}${attachmentIds.length ? " (also attached below)" : ""}`
+    : isImage
+      ? escapeHtml(attachmentIds.length ? "QR code attached below." : "QR code available on the CittaEFS portal.")
+      : `QR code: ${link(qrCodeUrl, qrCodeUrl)}`;
+  const body = `<p><b>CittaEFS Compliance Stamp</b><br/>IRN: ${escapeHtml(irn)}<br/>${qrHtml}</p>`;
   const { inboxNotified } = await postOdooInvoiceMessage(creds, Number(invoice.odooInvoiceId), body, attachmentIds);
   if (inboxNotified) console.log(`Odoo Inbox: notified ${inboxNotified} user(s) for invoice ${clientInvoiceId}`);
 

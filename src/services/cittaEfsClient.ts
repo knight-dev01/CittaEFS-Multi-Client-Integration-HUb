@@ -412,12 +412,15 @@ export class CittaEfsClient {
     const billingReferenceIrns = Array.isArray(_brArr) && _brArr.length ? _brArr : originalIrn ? [originalIrn] : [];
     const customFields = (payload as any).customFields || {};
     const metadata = (payload as any).metadata || {};
+    // CittaEFS takes customerCode OR an inline customer, never both.
+    const inlineCustomer = (payload as any).inlineCustomer;
+    const customerRef = inlineCustomer ? { customer: inlineCustomer } : { customerCode };
 
     const { normalizeCittaCode } = await import("../data/referenceData");
     const dtoArray = payload.lineItems.map((item, index) => ({
       invoiceNumber,
       issueDate,
-      customerCode,
+      ...customerRef,
       itemName: item.itemCode,
       itemDescription: item.description,
       quantity: item.quantity,

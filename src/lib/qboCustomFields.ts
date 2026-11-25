@@ -81,6 +81,7 @@ export const QBO_STATUS = {
 /** A short error label for the status field; the full reason is in the Memo. */
 export function qboErrorStatus(problem: string): string {
   const p = (problem || "").toLowerCase();
+  if (/customer details incomplete/.test(p)) return "Error: customer details";
   if (/\bhs\b|hs code|service code|product code/.test(p)) return "Error: HS/service code";
   if (/\btin\b/.test(p)) return "Error: customer TIN";
   if (/billing reference|original (invoice|irn)/.test(p)) return "Error: needs original IRN";

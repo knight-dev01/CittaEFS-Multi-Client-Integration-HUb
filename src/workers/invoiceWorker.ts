@@ -11,6 +11,7 @@ import { preflightInvoice } from '../lib/efsPreflight';
 import { loadEfsCatalog } from '../services/efsResources';
 import { safeAuditLogCreate } from '../lib/serverHelpers';
 import { withSourceTag } from '../lib/sourceErpTag';
+import { buildInlineCustomer, missingCustomerDetailsMessage, type CustomerDetails, type InlineCustomer } from '../lib/inlineCustomer';
 
 const prisma = new PrismaClient({ datasources: { db: { url: getDatabaseUrl() } } });
 
@@ -59,6 +60,38 @@ async function markSourceInvoicePending(job: QueueJob<QueueablePayload>): Promis
   } catch (e: any) {
     console.warn(`[Worker] Could not mark source invoice pending for job ${job.id}: ${e?.message}`);
   }
+}
+
+/**
+ * CittaEFS's inline customer for an unregistered B2B buyer, from the source
+ * ERP's live customer record. `missing` lists details to fill in in the ERP;
+ * neither field set means the source has no customer reader (registration
+ * hold applies). A failed ERP read throws, so the job retries with backoff.
+ */
+async function resolveInlineCustomer(
+  job: QueueJob<QueueablePayload>,
+  invoice: { sourceErp: string | null; customerTin: string | null; qboInvoiceId: string | null; invoiceType: string },
+): Promise<{ customer?: InlineCustomer; missing?: string[] }> {
+  let details: CustomerDetails;
+  try {
+    if (invoice.sourceErp === 'qbo') {
+      const { fetchQboCustomerDetails, qboEntityForInvoiceType } = await import('../services/qboService');
+      details = await fetchQboCustomerDetails(job.tenantId, job.data.customerCode, invoice.qboInvoiceId, qboEntityForInvoiceType(invoice.invoiceType));
+    } else if (invoice.sourceErp === 'odoo') {
+      const { fetchOdooCustomerDetails } = await import('../services/odooService');
+      details = await fetchOdooCustomerDetails(job.tenantId, job.data.customerCode);
+    } else {
+      return {};
+    }
+  } catch (e: any) {
+    throw new Error(`Could not read customer details from ${invoice.sourceErp === 'qbo' ? 'QuickBooks' : 'Odoo'}: ${e?.message || e}`);
+  }
+  const { customer, missing } = buildInlineCustomer({
+    ...details,
+    name: details.name || job.data.customerName,
+    tin: invoice.customerTin || job.data.customerTin,
+  });
+  return customer ? { customer } : { missing };
 }
 
 export interface ProcessingResult {
@@ -198,14 +231,20 @@ export async function processInvoiceJob(
       console.warn(`[Worker] Item registration tracking failed for job ${job.id} (non-blocking):`, e.message);
     }
 
-    // 0.5 Registration gate — CittaEFS rejects a B2B/B2G invoice whose buyer isn't
-    // already registered with it (confirmed: CittaHub_Section_E_Spec-5.xlsx, Interface
-    // sheet). B2C may carry an embedded, unregistered buyer, so it's exempt.
+    // 0.5 B2B/B2G buyer. A buyer registered in CittaEFS (mapping MAPPED) is
+    // sent by customerCode. Any other buyer from QuickBooks or Odoo is sent as
+    // CittaEFS's inline customer, read live from the ERP: the CittaEFS API
+    // guide ("Customer Options") says an inline customer "does not need to
+    // already exist as a customer record". Missing details hold the invoice
+    // and tell the ERP which ones. Other sources keep the registration hold
+    // (CittaHub_Section_E_Spec-5.xlsx, Interface sheet). B2C is exempt.
     // Item registration is deliberately NOT gated here — the spec's own answers
     // conflict (Interface sheet says items must be registered; the Item sheet's
     // dedicated B2C answer says "item is not registered for integration — full
     // item details are required"). Needs a confirmed answer before extending
     // this gate to items.
+    // Decided afresh each attempt: a buyer registered since the last try goes by code.
+    delete _d.inlineCustomer;
     if (job.data.invoiceKind === 'B2B' || job.data.invoiceKind === 'B2G') {
       const mapping = await prisma.entityMapping.findUnique({
         where: {
@@ -248,6 +287,31 @@ export async function processInvoiceJob(
             status: 'PENDING_REGISTRATION',
           },
         });
+        const inline = await resolveInlineCustomer(job, invoice);
+        if (inline.customer) {
+          _d.inlineCustomer = inline.customer;
+        } else if (inline.missing) {
+          const message = missingCustomerDetailsMessage(job.data.customerName, inline.missing);
+          await invoiceQueue.moveToDLQ(job, message);
+          await prisma.invoice.update({ where: { id: job.data.dbInvoiceId }, data: { status: 'REJECTED' } }).catch(() => {});
+          await writeProblemBackToSourceErp(job, message);
+          dispatchMerchantWebhook(job.tenantId, job.data.dbInvoiceId, 'invoice.rejected').catch(() => {});
+          await prisma.validationError.create({
+            data: {
+              tenantId: job.tenantId,
+              clientInvoiceNumber: job.data.clientInvoiceNumber,
+              errorCategory: 'CUSTOMER_DETAILS',
+              fieldAffected: inline.missing.join(', ').slice(0, 250),
+              errorMessage: message.slice(0, 4000),
+              rawPayloadSample: JSON.stringify(job.data).slice(0, 2000),
+              sourceErp: invoice.sourceErp,
+              status: 'OPEN',
+            },
+          }).catch(() => {});
+          return { jobId: job.id, success: false, error: message, movedToDLQ: true };
+        }
+      }
+      if ((!mapping || mapping.status !== 'MAPPED') && !_d.inlineCustomer) {
         await prisma.invoice.update({
           where: { id: job.data.dbInvoiceId },
           data: { status: 'NEEDS_EFS_REGISTRATION' },
@@ -302,6 +366,7 @@ export async function processInvoiceJob(
       ...( _d.currency ? { currency: _d.currency } : {}),
       ...( _d.customFields ? { customFields: _d.customFields } : {}),
       ...( _d.metadata ? { metadata: _d.metadata } : {}),
+      ...( _d.inlineCustomer ? { inlineCustomer: _d.inlineCustomer } : {}),
     } as any);
 
     if (response.success && response.irn) {

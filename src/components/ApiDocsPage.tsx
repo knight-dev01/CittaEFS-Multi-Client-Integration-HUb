@@ -208,7 +208,7 @@ export function ApiDocsPage() {
               rows={[
                 ['PENDING_NRS_STAMP', '—', 'Queued or awaiting the NRS stamp.'],
                 ['APPROVED / SIGNED', '—', 'Stamped. irn, csid and qrCodeUrl are set.'],
-                ['NEEDS_EFS_REGISTRATION', '—', 'The B2B buyer is not registered in CittaEFS yet. Sent automatically once registered.'],
+                ['NEEDS_EFS_REGISTRATION', '—', 'API / Excel invoices only: the B2B buyer is not registered in CittaEFS yet. Sent automatically once registered. QuickBooks and Odoo buyers are sent with their details inline instead.'],
                 ['REJECTED', '—', 'Held by the hub\'s pre-flight check or refused by CittaEFS. See Errors.'],
               ]}
             />

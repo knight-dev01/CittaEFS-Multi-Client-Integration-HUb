@@ -13,6 +13,7 @@ import {
 } from "../connectors";
 import type { OAuthProvider } from "../connectors";
 import { findRememberedCode } from "../lib/codeMemory";
+import { qrLinkFor } from "../lib/qrLink";
 import { findQboStampFields, qrFieldValue, qboErrorStatus, QBO_CUSTOM_FIELD_MAX, QBO_STATUS, type QboStampFieldIds } from "../lib/qboCustomFields";
 
 const prisma = new PrismaClient({
@@ -459,6 +460,43 @@ export async function fetchAllQboInvoicesPaginated(
   });
 
   return allInvoices;
+}
+
+/**
+ * The buyer's live details from QuickBooks, for CittaEFS's inline customer
+ * (a B2B buyer that is not registered in CittaEFS). The invoice's own billing
+ * email/address win over the customer record's, since that is what was billed.
+ * customerCode is the hub's "CUST<QBO customer Id>".
+ */
+export async function fetchQboCustomerDetails(
+  tenantId: string,
+  customerCode: string,
+  qboInvoiceId?: string | null,
+  entity: QboTxnEntity = "Invoice",
+): Promise<import("../lib/inlineCustomer").CustomerDetails> {
+  const customerId = String(customerCode).replace(/^CUST/i, "");
+  if (!/^\d+$/.test(customerId)) throw new Error(`Not a QuickBooks customer reference: ${customerCode}`);
+  const accessToken = await getValidQboAccessToken(tenantId);
+  const integration = await prisma.integration.findFirst({ where: { tenantId, sourceSystem: "QUICKBOOKS_ONLINE" } });
+  if (!integration) throw new Error(`Integration details not found for tenant ${tenantId}`);
+  const baseUrl = await getQboBaseUrl(tenantId);
+  const res = await qboFetchWithRetry(`${baseUrl}/v3/company/${integration.companyId}/customer/${customerId}?minorversion=65`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`QBO customer ${customerId} fetch failed (${res.status}): ${await res.text()}`);
+  const customer = ((await res.json()) as any).Customer || {};
+  const txn = qboInvoiceId ? await fetchSingleQboInvoice(tenantId, qboInvoiceId, entity).catch(() => null) : null;
+  const pickAddress = (a: any) => (a && (a.Line1 || a.City) ? a : null);
+  const address = pickAddress(txn?.BillAddr) || pickAddress(customer.BillAddr) || pickAddress(customer.ShipAddr) || {};
+  return {
+    name: customer.CompanyName || customer.DisplayName || customer.FullyQualifiedName,
+    email: txn?.BillEmail?.Address || customer.PrimaryEmailAddr?.Address,
+    street: [address.Line1, address.Line2].filter(Boolean).join(", "),
+    city: address.City,
+    postalCode: address.PostalCode,
+    country: address.Country || address.CountryCode,
+  };
 }
 
 /**
@@ -952,7 +990,7 @@ export async function writebackToQbo(
   // update a different invoice (or fail), so resolve the stored QBO Id first.
   // Exact hub number first: a DocNumber like "45" can equal another record's
   // QBO Id (Invoice and CreditMemo Ids are separate sequences).
-  const hubSelect = { clientInvoiceId: true, qboInvoiceId: true, invoiceType: true } as const;
+  const hubSelect = { id: true, clientInvoiceId: true, qboInvoiceId: true, invoiceType: true } as const;
   const hubInvoice =
     (await prisma.invoice.findFirst({ where: { tenantId, clientInvoiceId }, select: hubSelect })) ||
     (await prisma.invoice.findFirst({ where: { tenantId, qboInvoiceId: clientInvoiceId }, select: hubSelect }));
@@ -980,10 +1018,14 @@ export async function writebackToQbo(
   };
 
   // A base64 data URI would blow past PrivateNote's size limit and is
-  // unreadable to a human, so only real links are written into the note.
-  const qrLine = qrCodeUrl && !qrCodeUrl.startsWith("data:")
-    ? `Verify: ${qrCodeUrl}`
-    : "QR code: available on the CittaEFS portal";
+  // unreadable to a human, so the note carries a link: the hub's QR page
+  // (open, print, download; no CittaEFS login), else CittaEFS's own link.
+  const qrPage = qrLinkFor(hubInvoice?.id);
+  const qrLine = qrPage
+    ? `QR code: ${qrPage}`
+    : qrCodeUrl && !qrCodeUrl.startsWith("data:")
+      ? `Verify: ${qrCodeUrl}`
+      : "QR code: attached to this invoice";
   const stamp = `CittaEFS e-invoice stamped - IRN: ${irn}
 ${qrLine}`;
 
@@ -1026,7 +1068,8 @@ ${qrLine}`;
       form.append(
         "file_metadata_0",
         new Blob([JSON.stringify({
-          AttachableRef: [{ EntityRef: { type: entity, value: String(qboId) } }],
+          // IncludeOnSend: the QR goes out with the invoice when it is emailed from QuickBooks.
+          AttachableRef: [{ EntityRef: { type: entity, value: String(qboId) }, IncludeOnSend: true }],
           FileName: `CittaEFS-QR-${irn.replace(/[^A-Za-z0-9_-]/g, "")}.png`,
           ContentType: "image/png",
         })], { type: "application/json" }),
@@ -1059,7 +1102,7 @@ ${qrLine}`;
       customFields.push({ DefinitionId: fields.irn, Type: "StringType", StringValue: irn.slice(0, QBO_CUSTOM_FIELD_MAX) });
     }
     if (fields.qr) {
-      customFields.push({ DefinitionId: fields.qr, Type: "StringType", StringValue: qrFieldValue(qrCodeUrl).slice(0, QBO_CUSTOM_FIELD_MAX) });
+      customFields.push({ DefinitionId: fields.qr, Type: "StringType", StringValue: qrFieldValue(qrPage || qrCodeUrl).slice(0, QBO_CUSTOM_FIELD_MAX) });
     }
     customFields.push(...statusCustomField(fields, QBO_STATUS.stamped));
     if (!customFields.length) {

@@ -28,6 +28,7 @@ import systemRouter from "./src/routes/system";
 import entityMappingsRouter from "./src/routes/entityMappings";
 import gatewayRouter from "./src/routes/gateway";
 import auditLogsRouter from "./src/routes/auditLogs";
+import qrRouter from "./src/routes/qr";
 
 const { JWT_SECRET } = getAuthConfig();
 
@@ -152,6 +153,8 @@ async function startServer() {
   app.use(qboRouter);
   app.use(odooRouter);
   app.use(webhooksRouter);
+  // Public QR pages (/qr/<signed token>), linked from ERP writebacks.
+  app.use(qrRouter);
   app.use(entityMappingsRouter);
   // Gateway BEFORE systemRouter — system's JSON 404 catch-all (router.use "/api/*")
   // would otherwise shadow every /api/v1/* route the gateway registers.

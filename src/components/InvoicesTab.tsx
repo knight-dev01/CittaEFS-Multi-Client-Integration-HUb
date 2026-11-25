@@ -30,7 +30,9 @@ type QuickView = 'ALL' | 'PENDING' | 'APPROVED' | 'ATTENTION';
 
 const PENDING_STATUSES = ['PENDING_NRS_STAMP', 'PENDING', 'QUEUED'];
 const APPROVED_STATUSES = ['APPROVED', 'SIGNED'];
-const ATTENTION_STATUSES = ['REJECTED', 'FAILED'];
+// NEEDS_EFS_REGISTRATION: held for an unregistered B2B buyer. Retry sends
+// QuickBooks/Odoo buyers with their details inline.
+const ATTENTION_STATUSES = ['REJECTED', 'FAILED', 'NEEDS_EFS_REGISTRATION'];
 
 const BILLING_REFERENCE_TYPES = [
   'CREDIT_NOTE',

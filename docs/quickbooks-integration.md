@@ -204,3 +204,13 @@ curl -X POST https://hub.example.com/api/integrations/qbo/sync \
 ---
 
 Reflects the connector as implemented in `src/services/qboService.ts`, `src/routes/qbo.ts`, `src/routes/webhooks.ts`, and `src/adapters/connectorAdapters.ts` (`QuickBooksAdapter`).
+
+### B2B customers (with a TIN)
+
+A customer with a TIN does not need to be registered in CittaEFS first. When the invoice is sent, the hub reads the customer's email and address from QuickBooks (the invoice's billing email and address, else the customer record) and sends them with the invoice. CittaEFS needs the customer's **name, TIN, email, street, city, postal code and country**. If any is missing, the invoice is held, the Memo lists exactly what to add, and the Status/Info field shows `Error: customer details`. Fill them in on the customer in QuickBooks, then click **Retry** on the invoice in the hub (Invoices → Needs attention). The hub reads the details again when it resends.
+
+### Getting the QR code from QuickBooks
+
+When an invoice is stamped, the hub writes a link into the invoice's note (Memo / Note to self): `QR code: https://<hub>/qr/...`. Opening it shows the invoice number, issue date, IRN and the NRS QR code, with a **Download QR code (PNG)** button; it prints cleanly. No CittaEFS or hub login is needed: the link is signed, so it can't be guessed, and it shows no amounts or customer details. The QR image is also attached to the invoice and marked *include on send*, so it goes out when the invoice is emailed from QuickBooks.
+
+The link needs `JWT_SECRET` set on the server (it signs the links) and the hub's public address (`HUB_API_PUBLIC_URL`, or `RENDER_EXTERNAL_URL`, which Render sets automatically).

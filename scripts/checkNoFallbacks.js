@@ -37,6 +37,7 @@ const ALLOWLIST = [
   'src/test/unit/qboCreditMemo.test.ts',
   'src/test/unit/odooInbox.test.ts',
   'src/test/unit/odooWebhook.test.ts',
+  'src/test/unit/qrLink.test.ts',
 
   // Static reference data constants used for reference UI components
   'src/data/referenceData.ts',
